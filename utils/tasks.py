@@ -14,7 +14,7 @@ async def monitor_personality_imprint():
     while True:
         async with async_session() as db:
             print(f"🔍 TASKS DEBUG: Подключение к {engine.url}")
-            threshold = datetime.utcnow() - timedelta(minutes=5)
+            threshold = datetime.now() - timedelta(minutes=5)
             stmt = select(Session).where(Session.is_processed.is_(False), Session.updated_at < threshold).options(
                 selectinload(Session.user))
             result = await db.execute(stmt)
