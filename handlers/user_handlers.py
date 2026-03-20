@@ -9,7 +9,7 @@ from data.models import User, Session
 router = Router()
 
 
-@router.message(CommandStart)
+@router.message(CommandStart())
 async def cmd_start(message: types.Message, db_session: AsyncSession):
     print(f"🔍 Ищу юзера {message.from_user.id}...")
     user = await db_session.get(User, message.from_user.id)
