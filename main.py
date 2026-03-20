@@ -23,7 +23,7 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN.get_secret_value())
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.update.middleware(DbSessionMiddleware(session_pool=async_session))
+    dp.message.middleware(DbSessionMiddleware(session_pool=async_session))
     dp.include_router(router)
 
     asyncio.create_task(monitor_personality_imprint())

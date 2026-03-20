@@ -33,6 +33,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession):
     """
     Хендлер для сохранения всех входящих сообщений в raw_messages.
     """
+    print(f"📩 ПОЛУЧЕНО СООБЩЕНИЕ: {message.text}")
     if not message.text:
         return
 
