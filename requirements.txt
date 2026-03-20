@@ -1,0 +1,6 @@
+aiogram
+sqlalchemy
+asyncpg
+pydantic-settings
+google-generativeai
+aiohttp-socks

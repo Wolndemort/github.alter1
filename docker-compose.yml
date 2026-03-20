@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  db:
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    image: postgres:15
+    container_name: alter_db_container
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: lordwolndemort0195
+      POSTGRES_DB: alter_project_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+  bot:
+    build: .
+    container_name: alter_bot
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - /app/.venv/
+      - .:/app
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+
+volumes:
+  postgres_data:
