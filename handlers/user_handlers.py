@@ -11,23 +11,30 @@ router = Router()
 
 @router.message(CommandStart)
 async def cmd_start(message: types.Message, db_session: AsyncSession):
+    print(f"🔍 Ищу юзера {message.from_user.id}...")
     user = await db_session.get(User, message.from_user.id)
+
     if not user:
+        print("🆕 Юзер не найден, создаю...")
         user = User(
             id=message.from_user.id,
             username=message.from_user.username,
             first_name=message.from_user.first_name,
             memory={},
-            tech_stack={})
-
-        print(f"DEBUG: Создаю нового юзера {message.from_user.id}")
+            tech_stack={}
+        )
         db_session.add(user)
-        await db_session.commit()
-        print("DEBUG: Юзер успешно сохранен!")
-        await message.answer(f"Привет, {message.from_user.first_name}! "
-                             f"Я — ALTER. Твоя память теперь в безопасности. Начинай писать, я всё запомню.")
+        try:
+            await db_session.commit()
+            print("✅ Юзер успешно СОХРАНЕН в базу!")
+            await message.answer(f"Привет, {message.from_user.first_name}! Твоя память теперь в безопасности.")
+        except Exception as e:
+            await db_session.rollback()
+            print(f"❌ ОШИБКА ПРИ КОММИТЕ: {e}")
+            await message.answer("Ошибка при регистрации в базе данных.")
     else:
-        await message.answer(f"С возвращением, {user.first_name}! Я готов продолжить наш цифровой след.")
+        print(f"👋 Юзер {user.first_name} уже в базе.")
+        await message.answer(f"С возвращением, {user.first_name}!")
 
 
 @router.message()
