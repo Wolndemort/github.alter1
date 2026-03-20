@@ -20,8 +20,10 @@ async def cmd_start(message: types.Message, db_session: AsyncSession):
             memory={},
             tech_stack={})
 
+        print(f"DEBUG: Создаю нового юзера {message.from_user.id}")
         db_session.add(user)
         await db_session.commit()
+        print("DEBUG: Юзер успешно сохранен!")
         await message.answer(f"Привет, {message.from_user.first_name}! "
                              f"Я — ALTER. Твоя память теперь в безопасности. Начинай писать, я всё запомню.")
     else:
