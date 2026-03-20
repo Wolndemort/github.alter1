@@ -7,7 +7,7 @@ class Setting(BaseSettings):
 
     GEMINI_API_KEY: SecretStr
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:lordwolndemort0195@alter_db_container:5432/alter_project_db"
 
     SESSION_TIMEOUT: int = 1800
 
