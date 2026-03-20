@@ -8,6 +8,8 @@ from data.database import async_session, engine, Base  # Добавили engine
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from utils.tasks import monitor_personality_imprint
+
+
 async def main():
     logging.basicConfig(
         level=logging.INFO,
