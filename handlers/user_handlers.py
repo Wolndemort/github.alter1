@@ -62,7 +62,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession):
     new_msg = {
         "role": "user",
         "content": message.text,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.utcnow().isoformat()
     }
 
     updated_messages = list(session.raw_messages)
