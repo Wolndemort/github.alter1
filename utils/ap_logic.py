@@ -4,7 +4,9 @@ from config import config
 import re
 
 genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value())
-model = genai.GenerativeModel('gemini-1.5-flash')
+# 'gemini-1.5-pro' — самая мощная и стабильная, она точно есть в v1beta
+model = genai.GenerativeModel('gemini-1.5-pro')
+
 
 
 GOLDEN_PROMT = """
