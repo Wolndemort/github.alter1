@@ -1,9 +1,8 @@
-import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
-
+from utils.helpers import deep_merge
 from data.models import Session
 from data.database import async_session, engine
 from utils.ap_logic import summarize_session
@@ -31,21 +30,22 @@ async def monitor_personality_imprint():
                         new_facts = await summarize_session(session.raw_messages)
                         user = session.user
                         if new_facts and user:
-                            current_memory = dict(user.memory) or {}
-                            current_memory.update(new_facts)
-                            user.memory = current_memory
+                            # 1. Берем текущую память (копируем, чтобы SQLAlchemy видела изменения)
+                            current_memory = dict(user.memory) if user.memory else {}
+
+                            # 2. ПРИМЕНЯЕМ DEEP MERGE (вместо обычного update)
+                            updated_memory = deep_merge(current_memory, new_facts)
+
+                            user.memory = updated_memory
                             session.is_processed = True
+
                             flag_modified(user, "memory")
+
                             print(f"✅ ALTER: Слепок личности обновлен для {user.first_name}")
                         else:
-                            print(f"⚠️ ALTER: Gemini не нашел новых фактов в сессии {session.id}")
+                            print(f"⚠️ ALTER: Новых фактов не найдено в сессии {session.id}")
+
+                            session.is_processed = True
 
                     except Exception as e:
                         print(f"❌ Ошибка при обработке сессии {session.id}: {e}")
-                try:
-                    await db.commit()
-                    print(f"🚀 Все изменения успешно сохранены в базу")
-                except Exception as e:
-                    await db.rollback()
-                    print(f"❌ Ошибка при сохранении транзакции: {e}")
-        await asyncio.sleep(60)
