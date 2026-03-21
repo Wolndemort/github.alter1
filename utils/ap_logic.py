@@ -4,10 +4,13 @@ from config import config
 import re
 import os
 
-genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value())
-os.environ["GOOGLE_API_USE_MTLS_ENDPOINT"] = "never"
-model = genai.GenerativeModel('gemini-1.5-flash')
+proxy_url = "http://user381771:wpilyj@213.139.74.73:7043"
 
+
+os.environ['HTTP_PROXY'] = proxy_url
+os.environ['HTTPS_PROXY'] = proxy_url
+genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value(), transport='rest')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 
 GOLDEN_PROMT = """
