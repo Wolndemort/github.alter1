@@ -5,7 +5,7 @@ import logging
 
 
 client = AsyncOpenAI(
-    base_url="https://openrouter.ai",
+    base_url="https://openrouter.ai/v1",
     api_key=config.GEMINI_API_KEY.get_secret_value(),
 )
 
