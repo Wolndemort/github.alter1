@@ -9,7 +9,7 @@ import os
 
 #os.environ['HTTP_PROXY'] = proxy_url
 #os.environ['HTTPS_PROXY'] = proxy_url
-genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value(), transport='rest')
+genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value(), transport='rest', client_options={'api_version': 'v1'})
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 
