@@ -1,14 +1,13 @@
 import json
-from google import genai
+from openai import AsyncOpenAI
 from config import config
 import re
 
 
-client = genai.Client(
+client = AsyncOpenAI(
+    base_url="https://openrouter.ai",
     api_key=config.GEMINI_API_KEY.get_secret_value(),
-    http_options={'api_version': 'v1'}
 )
-
 
 
 GOLDEN_PROMT = """
@@ -30,21 +29,22 @@ GOLDEN_PROMT = """
 
 async def summarize_session(messages: list) -> dict:
     dialogue_text = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-    prompt = f"{GOLDEN_PROMT}\n\nДИАЛОГ ДЛЯ АНАЛИЗА:\n{dialogue_text}"
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt
+        response = await client.chat.completions.create(
+            model="google/gemini-2.0-flash-exp:free", # Можно менять на любую (gpt-4o, claude-3)
+            messages=[
+                {"role": "system", "content": GOLDEN_PROMT},
+                {"role": "user", "content": f"ДИАЛОГ ДЛЯ АНАЛИЗА:\n{dialogue_text}"}
+            ],
+            response_format={"type": "json_object"}
         )
 
-        text = response.text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        return {}
+        content = response.choices[0].message.content
+        return json.loads(content)
+
     except Exception as e:
-        print(f"❌ Ошибка Gemini: {e}")
+        logging.error(f"❌ OpenRouter Error: {e}")
         return {}
 
 
