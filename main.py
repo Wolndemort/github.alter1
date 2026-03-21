@@ -12,7 +12,7 @@ from middleware.db_middleware import DbSessionMiddleware
 from utils.tasks import monitor_personality_imprint
 
 
-genai.configure(api_key="AIzaSyC8OF_z7r_1cQJg_iGQRvGSlekJgYztJCQ")
+genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value())
 os.environ["GOOGLE_API_USE_MTLS_ENDPOINT"] = "never"
 model = genai.GenerativeModel('gemini-1.5-flash')
 
