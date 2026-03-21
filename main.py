@@ -1,14 +1,17 @@
 import asyncio
 import logging
+
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-
+import google.generativeai as genai
 from config import config
-from data.database import async_session, engine, Base  # Добавили engine и Base
+from data.database import async_session, engine, Base
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from utils.tasks import monitor_personality_imprint
 
+
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 async def main():
     logging.basicConfig(
