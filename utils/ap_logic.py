@@ -6,7 +6,6 @@ import re
 
 client = genai.Client(
     api_key=config.GEMINI_API_KEY.get_secret_value(),
-    http_options={'proxy': 'http://user381771:wpilyj@213.139.74.73:7043'}
 )
 
 
