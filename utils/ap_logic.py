@@ -10,7 +10,7 @@ import os
 #os.environ['HTTP_PROXY'] = proxy_url
 #os.environ['HTTPS_PROXY'] = proxy_url
 genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value(), transport='rest')
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 
 GOLDEN_PROMT = """

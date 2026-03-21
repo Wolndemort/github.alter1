@@ -31,7 +31,7 @@ services:
       - .:/app
     environment:
       HTTP_PROXY: "http://user381771:wpilyj@213.139.74.73:7043"
-      HTTPS_PROXY: "http://user381771:wpilyj@213.139.74.73:7043"
+      HTTPS_PROXY: "https://user381771:wpilyj@213.139.74.73:7043"
       DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
 
 volumes:
