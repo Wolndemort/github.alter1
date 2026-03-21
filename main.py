@@ -11,7 +11,9 @@ from middleware.db_middleware import DbSessionMiddleware
 from utils.tasks import monitor_personality_imprint
 
 
-model = genai.GenerativeModel('gemini-1.5-pro')
+genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value())
+model = genai.GenerativeModel('gemini-pro')
+
 
 
 async def main():
