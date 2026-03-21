@@ -6,8 +6,8 @@ import re
 
 client = genai.Client(
     api_key=config.GEMINI_API_KEY.get_secret_value(),
+    http_options={'api_version': 'v1'}
 )
-
 
 
 
@@ -34,7 +34,7 @@ async def summarize_session(messages: list) -> dict:
 
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt
         )
 
