@@ -32,7 +32,7 @@ async def summarize_session(messages: list) -> dict:
 
     try:
         response = await client.chat.completions.create(
-            model="google/gemini-2.0-flash-exp:free",  # Можно менять на любую (gpt-4o, claude-3)
+            model="google/gemini-2.0-flash-lite:free",  # Можно менять на любую (gpt-4o, claude-3)
             messages=[
                 {"role": "system", "content": GOLDEN_PROMT},
                 {"role": "user", "content": f"ДИАЛОГ ДЛЯ АНАЛИЗА:\n{dialogue_text}"}
