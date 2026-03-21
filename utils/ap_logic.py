@@ -2,11 +2,11 @@ import json
 import google.generativeai as genai
 from config import config
 import re
+import os
 
-genai.configure(api_key=config.GEMINI_API_KEY.get_secret_value())
-
-model = genai.GenerativeModel('gemini-pro')
-
+genai.configure(api_key="AIzaSyC8OF_z7r_1cQJg_iGQRvGSlekJgYztJCQ")
+os.environ["GOOGLE_API_USE_MTLS_ENDPOINT"] = "never"
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 
 
