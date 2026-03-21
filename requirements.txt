@@ -1,6 +1,7 @@
-aiogram
-sqlalchemy
+aiogram~=3.26.0
+sqlalchemy~=2.0.48
 asyncpg
 pydantic-settings
 google-generativeai
 aiohttp-socks
+pydantic~=2.12.5
