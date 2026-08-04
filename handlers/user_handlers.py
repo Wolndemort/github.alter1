@@ -160,6 +160,23 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
         append_session_message(session, "user", text)
         # Расшифровка используется только внутри ALTER и не отправляется пользователю.
         await message.bot.send_chat_action(message.chat.id, "typing")
+        lowered = text.lower()
+        music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
+        audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
+        if any(word in lowered for word in music_words) and any(word in lowered for word in audio_words):
+            results = await search_youtube(text)
+            if results:
+                downloaded = await download_audio(results[0]["url"])
+                if downloaded:
+                    audio_file, audio_title = downloaded
+                    try:
+                        from aiogram.types import FSInputFile
+                        await message.answer_audio(FSInputFile(str(audio_file)), title=audio_title[:64], performer=results[0].get("channel", ""))
+                    finally:
+                        remove_audio(audio_file)
+                    append_session_message(session, "assistant", f"Отправил аудио: {audio_title}")
+                    await db_session.commit()
+                    return
         reply = await generate_reply(
             recent_context(session.raw_messages), dict(user.memory or {})
         )
@@ -508,6 +525,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     await message.bot.send_chat_action(message.chat.id, "typing")
     search_results = []
     web_results = []
+    audio_sent = False
     music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
     if any(word in message.text.lower() for word in music_words):
         search_results = await search_youtube(message.text)
@@ -522,6 +540,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             try:
                 from aiogram.types import FSInputFile
                 await message.answer_audio(FSInputFile(str(audio_file)), title=audio_title[:64], performer=search_results[0].get("channel", ""))
+                audio_sent = True
             finally:
                 remove_audio(audio_file)
     web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
@@ -535,10 +554,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled
-    reply = await generate_reply(recent_context(updated_messages), memory_for_reply, search_results + web_results)
+    reply = await generate_reply(recent_context(updated_messages), memory_for_reply, ([] if audio_sent else search_results) + web_results)
     if web_results:
         reply += "\n\n🌐 Источники:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in web_results[:5])
-    if search_results:
+    if search_results and not audio_sent:
         reply += "\n\n🎵 Музыка и видео:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in search_results)
     marketplace_words = ("wildberries", "вб", "вайлдберриз", "ozon", "озон", "товар", "купить")
     if any(word in message.text.lower() for word in marketplace_words):
