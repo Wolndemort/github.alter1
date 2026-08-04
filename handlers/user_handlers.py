@@ -14,6 +14,7 @@ from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
 from utils.web_search import search_web
+from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, voice_keyboard, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
@@ -513,6 +514,16 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     search_words = ("ссылк", "ютуб", "youtube", "песн", "трек", "видео", "послуш")
     if any(word in message.text.lower() for word in search_words):
         search_results = await search_youtube(message.text)
+    audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
+    if any(word in message.text.lower() for word in audio_words) and search_results:
+        downloaded = await download_audio(search_results[0]["url"])
+        if downloaded:
+            audio_file, audio_title = downloaded
+            try:
+                from aiogram.types import FSInputFile
+                await message.answer_audio(FSInputFile(str(audio_file)), title=audio_title[:64], performer=search_results[0].get("channel", ""))
+            finally:
+                remove_audio(audio_file)
     web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
     if any(word in message.text.lower() for word in web_words):
         web_results = await search_web(message.text)
