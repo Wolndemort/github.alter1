@@ -1,0 +1,62 @@
+import asyncio
+from types import SimpleNamespace
+
+from utils import ap_logic, youtube_search
+from utils.tasks import process_session
+from data.models import Session, User
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+def test_openrouter_failure_returns_safe_reply(monkeypatch):
+    async def fail(**kwargs):
+        raise RuntimeError("provider down")
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", fail)
+    assert "не удалось получить" in run(ap_logic.generate_reply([])).lower()
+
+
+def test_youtube_non_200_returns_empty(monkeypatch):
+    class Response:
+        status = 503
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+    class Session:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, *args, **kwargs): return Response()
+    monkeypatch.setattr(youtube_search.config, "YOUTUBE_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
+    monkeypatch.setattr(youtube_search.aiohttp, "ClientSession", lambda: Session())
+    assert run(youtube_search.search_youtube("test")) == []
+
+
+def test_youtube_malformed_items_are_ignored(monkeypatch):
+    class Response:
+        status = 200
+        async def json(self): return {"items": [{"id": {}, "snippet": {}}]}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+    class Session:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, *args, **kwargs): return Response()
+    monkeypatch.setattr(youtube_search.config, "YOUTUBE_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
+    monkeypatch.setattr(youtube_search.aiohttp, "ClientSession", lambda: Session())
+    assert run(youtube_search.search_youtube("test")) == []
+
+
+def test_process_session_persists_memory_and_marks_processed(monkeypatch):
+    async def summarize(messages):
+        return {"important_events": {"title": "Демо", "event_type": "career"}}
+    monkeypatch.setattr("utils.tasks.summarize_session", summarize)
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    session = Session(raw_messages=[], user=user, is_processed=False)
+    added = []
+    class DB:
+        def add(self, item): added.append(item)
+        async def commit(self): pass
+    assert run(process_session(session, DB())) is True
+    assert session.is_processed is True
+    assert user.memory["important_events"]["title"] == "Демо"
+    assert added[0].title == "Демо"

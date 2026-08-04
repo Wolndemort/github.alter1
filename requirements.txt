@@ -1,7 +1,12 @@
 aiogram~=3.26.0
 sqlalchemy~=2.0.48
+alembic~=1.16.5
 asyncpg
 pydantic-settings
 aiohttp-socks
 pydantic~=2.12.5
 openai~=2.29.0
+pgvector~=0.4.1
+redis~=5.2.0
+pytest~=8.4.0
+pytest-asyncio~=1.1.0

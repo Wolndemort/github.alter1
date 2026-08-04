@@ -1,0 +1,62 @@
+name: Deploy ALTER
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: alter-production
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Compile Python sources
+        run: python -m compileall -q .
+
+      - name: Run tests
+        env:
+          BOT_TOKEN: '0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+          OPENROUTER_API_KEY: test-key
+          GEMINI_API_KEY: test-key
+          YOUTUBE_API_KEY: test-key
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/alter_project_db
+        run: pytest -q
+
+      - name: Validate Compose
+        run: docker compose config --quiet
+
+      - name: Build Docker image
+        run: docker build -t alter-ci .
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            set -e
+            cd /root/alter
+            git fetch origin master
+            git reset --hard origin/master
+            chmod +x cicd/deploy.sh
+            ./cicd/deploy.sh

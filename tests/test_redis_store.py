@@ -1,0 +1,46 @@
+import pytest
+
+from utils.redis_store import cache_get, cache_set, charge_request, state_get, state_set
+
+
+class FakeRedis:
+    def __init__(self):
+        self.values = {}
+        self.expirations = {}
+
+    async def get(self, key): return self.values.get(key)
+    async def set(self, key, value, ex=None):
+        self.values[key] = value
+        self.expirations[key] = ex
+    async def incr(self, key):
+        self.values[key] = int(self.values.get(key, 0)) + 1
+        return self.values[key]
+    async def expire(self, key, seconds): self.expirations[key] = seconds
+    async def decr(self, key):
+        self.values[key] -= 1
+        return self.values[key]
+    async def delete(self, key): self.values.pop(key, None)
+
+
+@pytest.mark.asyncio
+async def test_cache_roundtrip():
+    redis = FakeRedis()
+    await cache_set(redis, "x", "value", ttl=10)
+    assert await cache_get(redis, "x") == "value"
+    assert redis.expirations["alter:cache:x"] == 10
+
+
+@pytest.mark.asyncio
+async def test_billing_is_limited_and_does_not_overcharge():
+    redis = FakeRedis()
+    assert await charge_request(redis, 7, 2)
+    assert await charge_request(redis, 7, 2)
+    assert not await charge_request(redis, 7, 2)
+    assert redis.values["alter:billing:7"] == 2
+
+
+@pytest.mark.asyncio
+async def test_state_json_roundtrip():
+    redis = FakeRedis()
+    await state_set(redis, "session", 7, {"step": "waiting"}, ttl=30)
+    assert await state_get(redis, "session", 7) == {"step": "waiting"}

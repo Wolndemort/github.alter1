@@ -1,51 +1,189 @@
-from datetime import datetime, timedelta
+import asyncio
+import logging
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
-from utils.helpers import deep_merge
-from data.models import Session
-from data.database import async_session, engine
+from aiogram import Bot
+
+from config import config
+from data.database import async_session
+from data.models import ImportantEvent, Reminder, Session
+from data.models import User
+from utils.checkins import contextual_checkin
 from utils.ap_logic import summarize_session
+from utils.helpers import deep_merge
+
+
+def extract_important_events(facts: dict) -> list[dict]:
+    raw = facts.get("important_events", [])
+    if isinstance(raw, dict): raw = [raw]
+    if not isinstance(raw, list): return []
+    result = []
+    for item in raw:
+        if not isinstance(item, dict): continue
+        title = str(item.get("title") or item.get("event") or "").strip()
+        if not title: continue
+        try:
+            confidence = max(0.0, min(1.0, float(item.get("confidence", 0.8))))
+        except (TypeError, ValueError):
+            confidence = 0.8
+        result.append({
+            "event_type": str(item.get("event_type") or "general")[:32],
+            "title": title[:200],
+            "description": item.get("description"),
+            "importance": str(item.get("importance") or "normal")[:16],
+            "source": "session_summary",
+            "confidence": confidence,
+            "details": item,
+        })
+    return result
+
+
+def extract_followups(facts: dict) -> list[dict]:
+    """Turn model-detected future topics into concrete reminder payloads."""
+    raw = facts.get("open_loops", [])
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        if not isinstance(item, dict) or not item.get("follow_up_at"):
+            continue
+        title = str(item.get("follow_up_question") or item.get("title") or "").strip()
+        if not title:
+            continue
+        try:
+            remind_at = datetime.fromisoformat(str(item["follow_up_at"]).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if remind_at.tzinfo is None:
+            remind_at = remind_at.replace(tzinfo=timezone.utc)
+        result.append({"text": title[:500], "remind_at": remind_at})
+    return result
+
+
+async def save_unique_event(event: dict, user_id: int, db) -> None:
+    """Persist an event only once per user and title."""
+    if not hasattr(db, "execute"):
+        db.add(ImportantEvent(user_id=user_id, **event))
+        return
+    existing = await db.execute(select(ImportantEvent).where(
+        ImportantEvent.user_id == user_id,
+        ImportantEvent.title == event["title"],
+    ))
+    if existing.scalar_one_or_none() is None:
+        db.add(ImportantEvent(user_id=user_id, **event))
+
+
+async def process_session(session: Session, db) -> bool:
+    """Summarize one inactive session and persist its durable memory."""
+    facts = await summarize_session(session.raw_messages)
+    if not facts or not session.user:
+        return False
+    current = dict(session.user.memory or {})
+    session.user.memory = deep_merge(current, facts)
+    flag_modified(session.user, "memory")
+    for event in extract_important_events(facts):
+        await save_unique_event(event, session.user.id, db)
+    for followup in extract_followups(facts):
+        # Idempotency: a repeated session summary must not schedule duplicates.
+        existing = await db.execute(select(Reminder).where(
+            Reminder.user_id == session.user.id,
+            Reminder.kind == "followup",
+            Reminder.text == followup["text"],
+            Reminder.remind_at == followup["remind_at"],
+        ))
+        if existing.scalar_one_or_none() is None:
+            db.add(Reminder(user_id=session.user.id, kind="followup", **followup))
+    session.is_processed = True
+    await db.commit()
+    return True
 
 
 async def monitor_personality_imprint():
-    """Фоновая задача: ищет сессии, которые не обновлялись 20 минут"""
+    """Periodically turns inactive chat sessions into long-term memory."""
     while True:
-        async with async_session() as db:
-            print(f"🔍 TASKS DEBUG: Подключение к {engine.url}")
-            threshold = datetime.utcnow() - timedelta(minutes=5)
-            stmt = select(Session).where(Session.is_processed.is_(False), Session.updated_at < threshold).options(
-                selectinload(Session.user))
-            result = await db.execute(stmt)
-            session_to_process = result.scalars().all()
-            all_sessions = await db.execute(select(Session))
-            print(f"DEBUG: Всего сессий в базе: {len(all_sessions.scalars().all())}")
-            print(f"DEBUG: Используемый порог времени: {threshold}")
-            if not session_to_process:
-                pass
-            else:
-                for session in session_to_process:
+        try:
+            async with async_session() as db:
+                threshold = datetime.now(timezone.utc) - timedelta(seconds=config.SESSION_TIMEOUT)
+                result = await db.execute(
+                    select(Session)
+                    .where(Session.is_processed.is_(False), Session.updated_at < threshold)
+                    .options(selectinload(Session.user))
+                )
+                sessions = result.scalars().all()
+
+                for session in sessions:
                     try:
-                        print(f"🧠 ALTER: Начинаю анализ сессии {session.id} для юзера {session.user_id}...")
-                        new_facts = await summarize_session(session.raw_messages)
-                        user = session.user
-                        if new_facts and user:
-                            # 1. Берем текущую память (копируем, чтобы SQLAlchemy видела изменения)
-                            current_memory = dict(user.memory) if user.memory else {}
+                        if not await process_session(session, db):
+                            await db.rollback()
+                    except Exception:
+                        await db.rollback()
+                        logging.exception("Failed to process session %s", session.id)
+        except Exception:
+            logging.exception("Background memory monitor failed")
 
-                            # 2. ПРИМЕНЯЕМ DEEP MERGE (вместо обычного update)
-                            updated_memory = deep_merge(current_memory, new_facts)
+        await asyncio.sleep(30)
 
-                            user.memory = updated_memory
-                            session.is_processed = True
 
-                            flag_modified(user, "memory")
+async def monitor_reminders(bot: Bot):
+    """Send due one-time reminders."""
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(Reminder).where(
+                    ((Reminder.is_sent.is_(False)) & (Reminder.remind_at <= now)) |
+                    ((Reminder.is_sent.is_(True)) & (Reminder.follow_up_sent.is_(False)) & (Reminder.follow_up_at <= now))
+                ).with_for_update(skip_locked=True))
+                for reminder in result.scalars().all():
+                    try:
+                        if not reminder.is_sent:
+                            prefix = "Как прошло" if reminder.kind == "checkin" else "⏰ Напоминание"
+                            suffix = "?" if reminder.kind == "checkin" else ""
+                            await bot.send_message(reminder.user_id, f"{prefix}: {reminder.text}{suffix}")
+                            reminder.is_sent = True
+                        elif reminder.follow_up_at and not reminder.follow_up_sent and reminder.follow_up_at <= datetime.now(timezone.utc):
+                            await bot.send_message(reminder.user_id, f"Как прошло: {reminder.text}?")
+                            reminder.follow_up_sent = True
+                    except Exception:
+                        logging.exception("Failed to send reminder %s", reminder.id)
+                await db.commit()
+        except Exception:
+            logging.exception("Reminder monitor failed")
+        await asyncio.sleep(30)
 
-                            print(f"✅ ALTER: Слепок личности обновлен для {user.first_name}")
-                        else:
-                            print(f"⚠️ ALTER: Новых фактов не найдено в сессии {session.id}")
 
-                            session.is_processed = True
-
-                    except Exception as e:
-                        print(f"❌ Ошибка при обработке сессии {session.id}: {e}")
+async def monitor_checkins(bot: Bot):
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(User).where(User.checkins_enabled.is_(True)))
+                for user in result.scalars().all():
+                    memory = user.memory or {}
+                    if not memory.get("psycho_vibe") and not memory.get("important_events"):
+                        continue
+                    if user.last_checkin_at and user.last_checkin_at > now - timedelta(days=1):
+                        continue
+                    # Сначала возвращаемся к конкретным незавершённым темам и событиям,
+                    # а не к общему настроению: так не теряются обещанные follow-up.
+                    context = memory.get("open_loops") or memory.get("important_events") or memory.get("goals_habits") or memory.get("skills_career")
+                    if isinstance(context, dict):
+                        context = next((str(value) for value in context.values() if value), None)
+                    if isinstance(context, list) and context:
+                        item = context[-1]
+                        context = item.get("title") if isinstance(item, dict) else str(item)
+                    if not context and memory.get("important_events"):
+                        events = memory["important_events"]
+                        event = events[-1] if isinstance(events, list) else events
+                        context = event.get("title") if isinstance(event, dict) else str(event)
+                    await bot.send_message(user.id, contextual_checkin(user.first_name, context))
+                    user.last_checkin_at = now
+                await db.commit()
+        except Exception:
+            logging.exception("Gentle check-in monitor failed")
+        await asyncio.sleep(300)

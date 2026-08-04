@@ -1,0 +1,137 @@
+# ALTER
+
+Telegram-ассистент на aiogram с памятью, живым диалогом, голосовыми, фото, видео, музыкой, погодой, напоминаниями и check-in.
+
+## Возможности
+
+### Живое поведение
+
+ALTER не ограничивается ответом на последний вопрос. После завершения неактивной сессии он:
+
+- сохраняет явно сообщённые факты в долговременную память;
+- выделяет важные события и незавершённые темы (`open_loops`);
+- может позже мягко вернуться к такой теме;
+- иногда сам задаёт один уместный вопрос через check-in.
+
+Инициативность ограничена настройками check-in и не должна превращать диалог в анкету. Факты не выдумываются, а память можно посмотреть или очистить командами ниже.
+
+- текстовый диалог через OpenRouter;
+- краткосрочная история и долговременная JSONB-память;
+- голосовые: расшифровка используется внутри ALTER, текст расшифровки пользователю не отправляется;
+- анализ фото и коротких видео;
+- поиск музыки и видео через YouTube;
+- поиск товаров в Wildberries и Ozon;
+- погода через `/weather Москва` или фразу «погода в Москве»;
+- напоминания, follow-up и мягкие check-in;
+- PostgreSQL, Redis, Docker Compose и Alembic;
+- 49 локальных тестов.
+
+## Запуск
+
+1. Создайте `.env` по примеру переменных ниже.
+2. Запустите Docker Desktop.
+3. Выполните:
+
+```powershell
+docker compose up -d --build
+docker compose logs -f bot
+```
+
+После изменения миграций:
+
+```powershell
+docker compose run --rm --build migrations alembic upgrade head
+```
+
+## Проверки
+
+```powershell
+.\venv\Scripts\python.exe -m compileall -q .
+.\venv\Scripts\python.exe -m pytest -q
+docker compose config --quiet
+```
+
+## Резервная копия базы — обязательно
+
+Перед крупными изменениями и после первого запуска создайте копию:
+
+```powershell
+.\scripts\backup-db.ps1
+```
+
+Файл появится в `backups/`. Эта папка исключена из Git.
+
+### Ежедневный backup в Windows
+
+Откройте «Планировщик заданий» → «Создать простую задачу»:
+
+- имя: `ALTER database backup`;
+- расписание: ежедневно, например 04:00;
+- действие: запуск программы `powershell.exe`;
+- аргументы: `-ExecutionPolicy Bypass -File "C:\Users\79615\PycharmProjects\Alter\scripts\backup-db.ps1"`;
+- рабочая папка: `C:\Users\79615\PycharmProjects\Alter`.
+
+Docker Desktop и контейнер PostgreSQL должны быть запущены. Старые копии периодически переносите на другой диск или в облако.
+
+### Ежедневный backup на Linux/VPS
+
+```cron
+0 4 * * * cd /opt/alter && /usr/bin/pwsh -File ./scripts/backup-db.ps1 >> /var/log/alter-backup.log 2>&1
+```
+
+## Переменные `.env`
+
+```env
+BOT_TOKEN=...
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=google/gemini-2.5-flash
+OPENROUTER_FALLBACK_MODEL=openai/gpt-4o-mini
+OPENROUTER_FALLBACK_MODEL_2=anthropic/claude-3.5-haiku
+YOUTUBE_API_KEY=...
+TRANSCRIPTION_MODEL=openai/whisper-1
+TTS_MODEL=openai/gpt-audio-mini
+TTS_VOICE=alloy
+DATABASE_URL=...
+SESSION_TIMEOUT=300
+DAILY_REQUEST_LIMIT=100
+```
+
+Текущая рабочая связка: Gemini 2.5 Flash как основная модель, затем GPT-4o-mini и Claude 3.5 Haiku как fallback через OpenRouter. После изменения моделей достаточно пересоздать контейнер bot:
+
+```powershell
+docker compose up -d --no-deps --force-recreate bot
+```
+
+Пересборка с `--build` нужна только после изменений кода или Dockerfile.
+
+Никогда не публикуйте `.env`, токен Telegram или API-ключи. Если ключ попал в чат или Git, его нужно заменить.
+
+## Команды
+
+- `/help` — справка;
+- `/weather Москва` — погода;
+- `/memory` — показать память;
+- `/forget skills_career` — удалить категорию памяти;
+- `/clear_memory` — очистить долговременную память;
+- `/new_session` — начать новый разговор;
+- `/remind 2026-08-04 10:00 текст` — создать напоминание;
+- `/reminders` — список напоминаний;
+- `/cancel_reminder ID` — отменить напоминание;
+- `/checkins_on`, `/checkins_off` — включить или выключить check-in.
+- `/memory` — также позволяет проверить сохранённые важные события и незавершённые темы.
+
+## Структура
+
+- `main.py` — запуск бота и фоновых задач;
+- `handlers/` — Telegram-команды и сообщения;
+- `middleware/` — база данных и лимиты;
+- `utils/ap_logic.py` — ответы AI и память;
+- `utils/media_logic.py` — анализ изображений;
+- `utils/media.py` — кадры и аудио из видео через ffmpeg;
+- `utils/voice.py` — speech-to-text;
+- `utils/weather.py` — погода;
+- `utils/youtube_search.py` — музыка и YouTube;
+- `data/models.py` — модели PostgreSQL;
+- `alembic/` — миграции;
+- `scripts/backup-db.ps1` — резервная копия;
+- `tests/` — тесты.

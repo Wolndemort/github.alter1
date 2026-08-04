@@ -1,12 +1,20 @@
-version: '3.8'
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: alter_redis_container
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   db:
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: alter_db_container
     restart: always
     environment:
@@ -28,11 +36,29 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+      migrations:
+        condition: service_completed_successfully
     volumes:
       - /app/.venv/
       - .:/app
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+      REDIS_URL: "redis://redis:6379/0"
+
+  migrations:
+    build: .
+    container_name: alter_migrations
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
 
 volumes:
   postgres_data:
+  redis_data:
