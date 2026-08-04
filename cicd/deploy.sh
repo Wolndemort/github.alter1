@@ -10,4 +10,6 @@ docker compose up -d --build bot
 test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = healthy
 test "$(docker inspect -f '{{.State.Status}}' alter_redis_container)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
+sleep 5
+test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
 docker compose ps

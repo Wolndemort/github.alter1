@@ -7,6 +7,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     healthcheck:
@@ -25,6 +30,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    logging: *default-logging
 
 
   bot:
@@ -46,6 +52,7 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
       REDIS_URL: "redis://redis:6379/0"
+    logging: *default-logging
 
   migrations:
     build: .
@@ -58,6 +65,7 @@ services:
     command: alembic upgrade head
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+    logging: *default-logging
 
 volumes:
   postgres_data:

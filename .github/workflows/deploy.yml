@@ -28,6 +28,17 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q .
 
+      - name: Create CI-only environment
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          BOT_TOKEN=0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          GEMINI_API_KEY=test-key
+          OPENROUTER_API_KEY=test-key
+          YOUTUBE_API_KEY=test-key
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/alter_project_db
+          EOF
+
       - name: Run tests
         env:
           BOT_TOKEN: '0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
@@ -60,3 +71,6 @@ jobs:
             git reset --hard origin/master
             chmod +x cicd/deploy.sh
             ./cicd/deploy.sh
+            test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
+            test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = healthy
+            docker compose logs --tail=50 bot
