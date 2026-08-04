@@ -82,6 +82,7 @@ Docker Desktop и контейнер PostgreSQL должны быть запущ
 ```bash
 chmod +x scripts/backup-db.sh
 ./scripts/backup-db.sh
+ls -lh backups/
 ```
 
 Добавьте ежедневный запуск в cron:
@@ -91,6 +92,18 @@ chmod +x scripts/backup-db.sh
 ```
 
 Файл считается успешным только после проверки `pg_restore --list`. Рекомендуется регулярно копировать папку `backups/` на другой диск или в облако: backup на том же сервере не защищает от потери VPS.
+
+После ручного запуска в `backups/` должен появиться файл `alter-YYYYMMDD-HHMMSS.dump` ненулевого размера. Если папка пустая, запустите диагностику:
+
+```bash
+cd /root/alter
+bash -x ./scripts/backup-db.sh
+docker compose exec -T db pg_dump --version
+docker compose ps
+tail -n 100 /var/log/alter-backup.log
+```
+
+Не считайте cron настроенным, пока ручной запуск не создал проверенный `.dump`. После настройки проверьте расписание командой `crontab -l`.
 
 ## Переменные `.env`
 

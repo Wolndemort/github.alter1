@@ -23,10 +23,12 @@ docker compose exec -T db pg_dump \
   -U "${POSTGRES_USER:-postgres}" \
   -d "${POSTGRES_DB:-alter_project_db}" \
   --format=custom \
-  --no-owner \
-  --file=- > "$TARGET"
+  --no-owner > "$TARGET"
 
-test -s "$TARGET"
+if [[ ! -s "$TARGET" ]]; then
+  echo "Backup is empty: $TARGET" >&2
+  exit 1
+fi
 docker compose exec -T db pg_restore --list < "$TARGET" >/dev/null
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'alter-*.dump' -mtime "+$RETENTION_DAYS" -delete
 trap - ERR
