@@ -24,7 +24,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: lordwolndemort0195
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: alter_project_db
     ports:
       - "5432:5432"
@@ -50,7 +50,7 @@ services:
       - /app/.venv/
       - .:/app
     environment:
-      DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+      DATABASE_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/alter_project_db"
       REDIS_URL: "redis://redis:6379/0"
     logging: *default-logging
 
@@ -64,7 +64,7 @@ services:
         condition: service_healthy
     command: alembic upgrade head
     environment:
-      DATABASE_URL: "postgresql+asyncpg://postgres:lordwolndemort0195@db:5432/alter_project_db"
+      DATABASE_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/alter_project_db"
     logging: *default-logging
 
 volumes:
