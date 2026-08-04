@@ -42,7 +42,12 @@ async def summarize_session(messages):
 
 async def generate_reply(messages, memory=None, search_results=None):
     try:
-        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}"
+        sources = ""
+        if search_results:
+            sources = "\nАктуальные результаты поиска (используй их, не выдумывай факты):\n" + "\n".join(
+                f"- {item.get('title')}: {item.get('content', '')[:1200]} ({item.get('url')})" for item in search_results
+            )
+        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         response = await chat_with_fallback([{"role": "system", "content": system}, *messages])
         return response.choices[0].message.content or "Не смог сформулировать ответ."
     except Exception: return "Не удалось получить ответ от AI."

@@ -13,6 +13,7 @@ from utils.media_logic import generate_media_reply
 from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
+from utils.web_search import search_web
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, voice_keyboard, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
@@ -505,12 +506,16 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     print(f"🛠 DEBUG: Сохраняю сообщение в сессию {session.id if session.id else 'NEW'}")
     await message.bot.send_chat_action(message.chat.id, "typing")
     search_results = []
+    web_results = []
     music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
     if any(word in message.text.lower() for word in music_words):
         search_results = await search_youtube(message.text)
     search_words = ("ссылк", "ютуб", "youtube", "песн", "трек", "видео", "послуш")
     if any(word in message.text.lower() for word in search_words):
         search_results = await search_youtube(message.text)
+    web_words = ("найди", "найти", "кто такой", "кто такая", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет")
+    if any(word in message.text.lower() for word in web_words):
+        web_results = await search_web(message.text)
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
     events = [{"title": event.title, "event_type": event.event_type, "importance": event.importance, "description": event.description} for event in events_result.scalars()]
     memory_for_reply = dict(user.memory or {})
@@ -519,7 +524,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled
-    reply = await generate_reply(recent_context(updated_messages), memory_for_reply, search_results)
+    reply = await generate_reply(recent_context(updated_messages), memory_for_reply, search_results + web_results)
+    if web_results:
+        reply += "\n\n🌐 Источники:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in web_results[:5])
     if search_results:
         reply += "\n\n🎵 Музыка и видео:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in search_results)
     marketplace_words = ("wildberries", "вб", "вайлдберриз", "ozon", "озон", "товар", "купить")

@@ -12,6 +12,7 @@ class Setting(BaseSettings):
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
     YOUTUBE_API_KEY: SecretStr | None = None
+    TAVILY_API_KEY: SecretStr | None = None
     TRANSCRIPTION_MODEL: str = "openai/whisper-1"
     TTS_MODEL: str = "openai/gpt-audio-mini"
     TTS_VOICE: str = "alloy"
