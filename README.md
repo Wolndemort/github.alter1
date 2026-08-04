@@ -77,9 +77,20 @@ Docker Desktop и контейнер PostgreSQL должны быть запущ
 
 ### Ежедневный backup на Linux/VPS
 
-```cron
-0 4 * * * cd /opt/alter && /usr/bin/pwsh -File ./scripts/backup-db.ps1 >> /var/log/alter-backup.log 2>&1
+Скрипт для VPS создаёт проверенный custom-дамп PostgreSQL вместе с pgvector и удаляет копии старше 14 дней:
+
+```bash
+chmod +x scripts/backup-db.sh
+./scripts/backup-db.sh
 ```
+
+Добавьте ежедневный запуск в cron:
+
+```cron
+0 4 * * * cd /root/alter && /bin/bash ./scripts/backup-db.sh >> /var/log/alter-backup.log 2>&1
+```
+
+Файл считается успешным только после проверки `pg_restore --list`. Рекомендуется регулярно копировать папку `backups/` на другой диск или в облако: backup на том же сервере не защищает от потери VPS.
 
 ## Переменные `.env`
 
@@ -185,4 +196,5 @@ docker compose logs -f --tail=100 bot
 - `data/models.py` — модели PostgreSQL;
 - `alembic/` — миграции;
 - `scripts/backup-db.ps1` — резервная копия;
+- `scripts/backup-db.sh` — автоматический проверенный backup PostgreSQL для Linux/VPS;
 - `tests/` — тесты.
