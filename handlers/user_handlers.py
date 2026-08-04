@@ -513,7 +513,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     search_words = ("ссылк", "ютуб", "youtube", "песн", "трек", "видео", "послуш")
     if any(word in message.text.lower() for word in search_words):
         search_results = await search_youtube(message.text)
-    web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "что известно о", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет")
+    web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
     if any(word in message.text.lower() for word in web_words):
         web_results = await search_web(message.text)
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
