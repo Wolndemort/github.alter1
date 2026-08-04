@@ -13,7 +13,7 @@ async def download_audio(url: str) -> tuple[Path, str] | None:
         "outtmpl": str(output),
         "noplaylist": True,
         "max_filesize": 50 * 1024 * 1024,
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "128"}],
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}],
         "quiet": True,
         "no_warnings": True,
     }
