@@ -552,10 +552,10 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
 def legal_keyboard() -> InlineKeyboardMarkup:
     base = config.LEGAL_BASE_URL.rstrip("/")
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📄 Политика конфиденциальности", url=f"{base}/privacy")],
-        [InlineKeyboardButton(text="🛡 Согласие на обработку данных", url=f"{base}/consent")],
-        [InlineKeyboardButton(text="📜 Публичная оферта", url=f"{base}/offer")],
-        [InlineKeyboardButton(text="💳 Оплата и возврат", url=f"{base}/refund")],
+        [InlineKeyboardButton(text="📄 Политика конфиденциальности", url=f"{base}/legal/privacy.html")],
+        [InlineKeyboardButton(text="🛡 Согласие на обработку данных", url=f"{base}/legal/consent.html")],
+        [InlineKeyboardButton(text="📜 Публичная оферта", url=f"{base}/legal/offer.html")],
+        [InlineKeyboardButton(text="💳 Оплата и возврат", url=f"{base}/legal/refund.html")],
         [InlineKeyboardButton(text="✅ Принять и продолжить", callback_data="accept_legal")],
     ])
 
