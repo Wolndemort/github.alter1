@@ -22,9 +22,9 @@ def test_main_keyboard_has_no_duplicate_buttons_and_expected_layout():
     keyboard = memory_keyboard().keyboard
     labels = [button.text for row in keyboard for button in row]
     assert len(labels) == len(set(labels))
-    assert len(keyboard) == 3
+    assert len(keyboard) == 4
     assert all(len(row) == 2 for row in keyboard[:-1])
-    assert len(keyboard[-1]) == 1
+    assert len(keyboard[-1]) == 2
 
 
 def test_settings_keyboard_contains_behavior_controls():
@@ -42,7 +42,8 @@ def test_every_main_button_has_a_router_handler():
 
     callbacks = {handler.callback.__name__ for handler in router.message.handlers}
     assert {"button_memory", "button_new_session", "button_reminders", "button_checkins",
-            "button_settings", "button_settings_back", "button_voice", "button_voice_on", "button_voice_off", "button_help"} <= callbacks
+            "button_settings", "button_settings_back", "button_voice", "button_voice_on", "button_voice_off", "button_help",
+            "button_buy_subscription", "button_cabinet", "button_support", "button_cabinet_back"} <= callbacks
 
 
 def test_settings_commands_have_router_handlers():

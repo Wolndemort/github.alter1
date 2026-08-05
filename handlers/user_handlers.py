@@ -17,7 +17,7 @@ from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather
 from utils.marketplace_links import format_marketplace_links
-from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
+from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
@@ -100,6 +100,42 @@ async def button_reminders(message: types.Message, db_session: AsyncSession):
 @router.message(F.text == "💭 Check-in")
 async def button_checkins(message: types.Message, db_session: AsyncSession):
     await message.answer("Выбери режим: /checkins_on или /checkins_off", reply_markup=settings_keyboard())
+
+
+@router.message(F.text == BUY_SUBSCRIPTION_BUTTON)
+async def button_buy_subscription(message: types.Message, db_session: AsyncSession):
+    await cmd_buy(message, db_session)
+
+
+@router.message(F.text == CABINET_BUTTON)
+async def button_cabinet(message: types.Message, db_session: AsyncSession):
+    user = await db_session.get(User, message.from_user.id)
+    if is_owner(message.from_user.id):
+        status = "Владелец ALTER — доступ открыт без подписки."
+    elif has_active_subscription(user):
+        expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        status = f"Подписка активна до {expires}."
+    else:
+        status = "Подписка не активна."
+    await message.answer(
+        f"👤 Кабинет ALTER\n\n{status}\n\nСтоимость доступа: {price()} ₽ / {config.SUBSCRIPTION_DAYS} дней\n\nКоманды: /status и /buy",
+        reply_markup=cabinet_keyboard(),
+    )
+
+
+@router.message(F.text == SUPPORT_BUTTON)
+async def button_support(message: types.Message):
+    await message.answer(
+        "Если что-то не работает или есть предложение — напиши в поддержку.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Написать Адаму", url=f"tg://user?id={config.SUPPORT_TELEGRAM_ID}")],
+        ]),
+    )
+
+
+@router.message(F.text == BACK_BUTTON)
+async def button_cabinet_back(message: types.Message):
+    await message.answer("Главное меню", reply_markup=memory_keyboard())
 
 
 @router.message(F.text == SETTINGS_BUTTON)

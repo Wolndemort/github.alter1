@@ -16,6 +16,8 @@ class Setting(BaseSettings):
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
     OWNER_TELEGRAM_IDS: str = "1271717628"
+    SUPPORT_USERNAME: str = "Adam_Omarov"
+    SUPPORT_TELEGRAM_ID: int = 1271717628
     YUKASSA_SHOP_ID: str | None = None
     YUKASSA_SECRET_KEY: SecretStr | None = None
     YUKASSA_RECEIPT_EMAIL: str | None = None
