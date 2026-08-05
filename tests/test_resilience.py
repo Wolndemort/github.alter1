@@ -80,6 +80,22 @@ def test_web_search_handles_api_error(monkeypatch):
     assert run(web_search.search_web("test")) == []
 
 
+def test_web_search_handles_network_exception(monkeypatch):
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def post(self, *args, **kwargs):
+            raise OSError("network down")
+
+    monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
+    monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
+    assert run(web_search.search_web("test")) == []
+
+
 def test_generate_reply_includes_search_context(monkeypatch):
     captured = {}
     async def fake_create(**kwargs):

@@ -171,3 +171,24 @@ def test_handler_returns_safe_reply_when_ai_is_unavailable(monkeypatch):
 
     assert len(answers) == 1
     assert "не удалось получить ответ" in answers[0].lower()
+
+
+def test_text_reply_survives_tts_failure(monkeypatch):
+    user = User(id=44, first_name="Test", memory={}, tech_stack={})
+    user.tech_stack = {"voice_replies": True}
+    answers = []
+
+    class Message:
+        async def answer(self, text):
+            answers.append(("text", text))
+
+        async def answer_voice(self, voice):
+            answers.append(("voice", voice))
+
+    async def tts_failure(text):
+        raise RuntimeError("tts down")
+
+    monkeypatch.setattr(user_handlers, "synthesize_speech", tts_failure)
+    asyncio.run(user_handlers.answer_reply(Message(), "Текст ответа", user))
+
+    assert answers == [("text", "Текст ответа")]

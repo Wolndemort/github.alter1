@@ -40,7 +40,11 @@ async def answer_reply(message: types.Message, reply: str, user: User, force_voi
     """Send text and, when enabled, a voice copy. TTS failure never hides the text."""
     await message.answer(reply)
     if force_voice or voice_enabled(user):
-        audio = await synthesize_speech(reply)
+        try:
+            audio = await synthesize_speech(reply)
+        except Exception:
+            logging.exception("Optional voice reply failed")
+            audio = None
         if audio:
             await message.answer_voice(BufferedInputFile(audio, filename="alter.ogg"))
 

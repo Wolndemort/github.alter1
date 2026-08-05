@@ -69,3 +69,15 @@ def test_recall_returns_empty_when_embedding_provider_fails(monkeypatch):
 
     monkeypatch.setattr(vector_memory, "embed", fail)
     assert run(vector_memory.recall(object(), 1, "question")) == []
+
+
+def test_remember_ignores_embedding_provider_failure(monkeypatch):
+    async def fail(_):
+        raise RuntimeError("embedding provider unavailable")
+
+    class DB:
+        def add(self, _):
+            raise AssertionError("failed embedding must not add a chunk")
+
+    monkeypatch.setattr(vector_memory, "embed", fail)
+    run(vector_memory.remember(DB(), 1, "A sufficiently long memory fragment"))
