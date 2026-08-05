@@ -56,6 +56,8 @@ class Setting(BaseSettings):
     # Temporarily move models that return transient provider errors to the end
     # of the fallback route instead of retrying them on every new message.
     AI_MODEL_COOLDOWN_SECONDS: int = 60
+    AI_DEEP_REVIEW_ENABLED: bool = True
+    AI_DEEP_REVIEW_MAX_TOKENS: int = 900
     TOOL_MAX_ROUNDS: int = 2
 
     model_config = SettingsConfigDict(

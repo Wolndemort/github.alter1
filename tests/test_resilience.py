@@ -117,7 +117,7 @@ def test_generate_reply_includes_search_context(monkeypatch):
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", fake_create)
     assert run(ap_logic.generate_reply([], search_results=[{"title": "Source", "url": "https://example.com", "content": "Important fact"}])) == "ok"
-    assert "Important fact" in captured["messages"][0]["content"]
+    assert any("Important fact" in message.get("content", "") for message in captured["messages"])
 
 
 def test_process_session_persists_memory_and_marks_processed(monkeypatch):

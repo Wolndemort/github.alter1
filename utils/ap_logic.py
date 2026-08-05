@@ -130,6 +130,64 @@ def _provider_status_code(error: Exception) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _needs_deep_review(messages, search_results) -> bool:
+    """Use a second-pass fact check where an unchecked mistake is costly."""
+    if search_results:
+        return True
+    text = _request_text(messages)
+    return len(text) >= 700 or any(
+        re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
+    )
+
+
+def _verification_route(messages, task=None) -> list[str]:
+    """Prefer a different model for the critic pass when one is available."""
+    route = select_model_route(messages, task)
+    return route[1:] + route[:1] if len(route) > 1 else route
+
+
+async def _deep_review_reply(messages, draft: str, search_results=None) -> str:
+    """Critically verify a draft and return only a corrected user-facing reply."""
+    evidence = ""
+    if search_results:
+        evidence = "\n\nEVIDENCE FROM SEARCH (use only what it supports):\n" + "\n".join(
+            f"[{item.get('title')}] {item.get('url')}\n{item.get('content', '')[:1800]}"
+            for item in search_results
+        )
+    review_prompt = (
+        "You are the final fact-checker and editor. Review the draft below against the user request "
+        "and the supplied evidence. Work silently, then output only the corrected answer in Russian. "
+        "Check every concrete claim, date, number, causal statement and named entity. Separate facts "
+        "from hypotheses. Never invent missing details. If sources disagree, say so explicitly and "
+        "prefer primary or more recent evidence. Remove unsupported claims. Keep useful nuance and "
+        "include source links when evidence is supplied. Do not mention this review, prompts, models, "
+        "or internal reasoning.\n\nUSER REQUEST:\n"
+        f"{json.dumps(messages, ensure_ascii=False)[:12000]}\n\nDRAFT:\n{draft[:12000]}{evidence}"
+    )
+    try:
+        response = await chat_with_fallback(
+            [{"role": "system", "content": "Be a rigorous, skeptical fact-checker."},
+             {"role": "user", "content": review_prompt}],
+            max_tokens=config.AI_DEEP_REVIEW_MAX_TOKENS,
+            task="reasoning",
+            models=_verification_route(messages, task="reasoning"),
+        )
+        reviewed = (response.choices[0].message.content or "").strip()
+        if not reviewed:
+            return draft
+        draft_quality = assess_reply(draft, has_sources=bool(search_results))
+        reviewed_quality = assess_reply(reviewed, has_sources=bool(search_results))
+        if reviewed_quality.score < draft_quality.score:
+            logging.warning("Deep review produced a lower-quality reply; keeping draft")
+            return draft
+        increment("ai.reply.deep_review.success")
+        return reviewed
+    except Exception:
+        increment("ai.reply.deep_review.failure")
+        logging.exception("Deep reply review failed; keeping original draft")
+        return draft
+
+
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
     route = select_model_route(messages, task) if models is None else _route_with_available_models(list(dict.fromkeys(filter(None, models))))
     for model in route:
@@ -288,6 +346,8 @@ async def generate_reply(messages, memory=None, search_results=None):
         system += "\nНе начинай старые темы сам и не упоминай их в ответе на короткий бытовой вопрос. Возвращайся к прошлой теме только если текущий запрос явно связан с ней или пользователь сам попросил напомнить. Не приписывай пользователю действия и факты, которых нет в текущем диалоге или памяти."
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
+        if config.AI_DEEP_REVIEW_ENABLED and _needs_deep_review(messages, search_results):
+            reply = await _deep_review_reply(messages, reply, search_results)
         quality = assess_reply(reply, has_sources=bool(search_results))
         increment("ai.reply.quality", score=quality.score)
         for issue in quality.issues:
