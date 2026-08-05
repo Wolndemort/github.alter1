@@ -128,6 +128,24 @@ chmod +x /root/alter/scripts/backup-db-to-s3.sh
 
 Скрипт сначала создаёт и проверяет PostgreSQL custom dump, затем загружает его в Yandex Object Storage и проверяет объект через `head-object`. Секреты не добавляйте в Git.
 
+Локальные копии на VPS хранятся в `/root/alter/backups/` 14 дней. Облачные копии в `s3://<bucket>/postgres/` хранятся минимум 90 дней; `scripts/backup-db-to-s3.sh` удаляет только объекты старше `CLOUD_RETENTION_DAYS`.
+
+Проверка облачного backup:
+
+```bash
+aws s3 ls s3://alter-postgres-backups-79615/postgres/ \
+  --endpoint-url https://storage.yandexcloud.net
+tail -n 100 /var/log/alter-backup.log
+```
+
+На VPS должна быть только одна cron-запись:
+
+```cron
+0 4 * * * cd /root/alter && /bin/bash ./scripts/backup-db-to-s3.sh >> /var/log/alter-backup.log 2>&1
+```
+
+Восстановление всегда сначала проверяйте на отдельной тестовой базе; не восстанавливайте dump поверх рабочей базы без отдельного backup.
+
 ## Переменные `.env`
 
 ```env
@@ -215,6 +233,10 @@ docker compose logs -f --tail=100 bot
 - `/reminders` — список напоминаний;
 - `/cancel_reminder ID` — отменить напоминание;
 - `/checkins_on`, `/checkins_off` — включить или выключить check-in.
+- `/settings` — показать настройки поведения ALTER;
+- `/checkin_every 24` — частота обычных check-in в часах;
+- `/health_followup 4` — задержка проверки самочувствия;
+- `/quiet_hours 23 8` — тихие часы для фоновых сообщений.
 - `/memory` — также позволяет проверить сохранённые важные события и незавершённые темы.
 
 ## Структура

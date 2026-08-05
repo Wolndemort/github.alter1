@@ -253,9 +253,16 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                     append_session_message(session, "assistant", f"Отправил аудио: {audio_title}")
                     await db_session.commit()
                     return
+        web_results = []
+        if should_search_web(text) and not is_youtube_request(text):
+            web_results = await search_web(text)
         reply = await generate_reply(
-            recent_context(session.raw_messages), dict(user.memory or {})
+            recent_context(session.raw_messages), dict(user.memory or {}), web_results
         )
+        if web_results:
+            reply += "\n\n🌐 Источники:\n" + "\n".join(
+                f"• {item['title']} — {item['url']}" for item in web_results[:5]
+            )
         # Respect the user's voice setting for replies to voice messages too.
         await answer_reply(message, reply, user)
         append_session_message(session, "assistant", reply)
@@ -558,6 +565,8 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             await db_session.commit()
             await message.answer(f"Хорошо, напомню {remind_at.strftime('%d.%m в %H:%M')}: {pending['text']}")
             return
+        await message.answer(f"Я жду время для напоминания про «{pending['text']}». Например: 18:30 или через 2 часа.")
+        return
 
     parsed_reminder = parse_reminder(message.text)
     if parsed_reminder:
@@ -577,7 +586,8 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         await message.answer(f"Хорошо. Во сколько напомнить про «{reminder_text}»?")
         return
 
-    if any(word in message.text.lower() for word in ("завтра", "сегодня", "пойду", "иду", "буду")):
+    plan_words = ("завтра иду", "завтра пойду", "завтра буду", "сегодня иду", "сегодня пойду", "сегодня буду")
+    if any(phrase in message.text.lower() for phrase in plan_words):
         db_session.add(Reminder(
             user_id=user.id,
             kind="checkin",
