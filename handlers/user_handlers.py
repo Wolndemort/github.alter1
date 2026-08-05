@@ -117,8 +117,12 @@ async def button_cabinet(message: types.Message, db_session: AsyncSession):
         status = f"Подписка активна до {expires}."
     else:
         status = "Подписка не активна."
+    name = (user.first_name if user else None) or message.from_user.first_name or "друг"
     await message.answer(
-        f"👤 Кабинет ALTER\n\n{status}\n\nСтоимость доступа: {price()} ₽ / {config.SUBSCRIPTION_DAYS} дней\n\nКоманды: /status и /buy",
+        f"👋 Привет, {name}!\n\n"
+        f"👤 Это твой кабинет ALTER\n\n{status}\n\n"
+        f"Стоимость доступа: {price()} ₽ / {config.SUBSCRIPTION_DAYS} дней\n\n"
+        "ALTER рядом и не забудет напомнить о важных вещах.",
         reply_markup=cabinet_keyboard(bool(user and user.auto_renew), bool(user and user.payment_method_id)),
     )
 

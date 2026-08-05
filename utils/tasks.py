@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import config
 from data.database import async_session
@@ -16,7 +17,7 @@ from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.helpers import merge_memory
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
-from utils.billing import charge_recurring_payment
+from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -288,3 +289,65 @@ async def monitor_subscription_renewals(bot: Bot):
         except Exception:
             logging.exception("Subscription renewal monitor failed")
         await asyncio.sleep(max(300, config.SUBSCRIPTION_RENEWAL_CHECK_SECONDS))
+
+
+def subscription_expiry_reminder(days_left: int, first_name: str, auto_renew: bool) -> str:
+    """Build a warm, explicit subscription reminder without sounding alarmist."""
+    name = first_name or "друг"
+    if days_left == 1:
+        timing = "завтра"
+    elif days_left in {2, 3, 4}:
+        timing = f"через {days_left} дня"
+    else:
+        timing = f"через {days_left} дней"
+    auto_note = (
+        "Автопродление уже включено — ALTER сам постарается продлить доступ."
+        if auto_renew else
+        "Можно включить автопродление в кабинете, чтобы не следить за датой вручную."
+    )
+    return (
+        f"👋 {name}, напоминаю мягко: подписка ALTER закончится {timing}.\n\n"
+        f"{auto_note}\n"
+        "Если ничего не менять, ALTER не забудет тебя — просто напомнит продлить доступ."
+    )
+
+
+async def monitor_subscription_expiry_reminders(bot: Bot):
+    """Send exactly one reminder per expiry date at 5, 3 and 1 day before expiry."""
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(User).where(User.subscription_expires_at > now))
+                bot_user = await bot.get_me()
+                for user in result.scalars().all():
+                    if not user.subscription_expires_at or not has_active_subscription(user):
+                        continue
+                    seconds_left = (user.subscription_expires_at - now).total_seconds()
+                    days_left = int((seconds_left + 86399) // 86400)
+                    if days_left not in {5, 3, 1}:
+                        continue
+                    expiry_key = user.subscription_expires_at.isoformat()
+                    marker = f"{expiry_key}:{days_left}"
+                    reminders = dict(user.subscription_reminders or {})
+                    if reminders.get(marker):
+                        continue
+                    try:
+                        payment_url = await create_payment(db, user, bot_user.username or "", "bank_card")
+                        await bot.send_message(
+                            user.id,
+                            subscription_expiry_reminder(days_left, user.first_name, bool(user.auto_renew)),
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="💳 Продлить подписку", url=payment_url)],
+                            ]),
+                        )
+                    except Exception:
+                        await db.rollback()
+                        logging.exception("Subscription expiry reminder failed for user %s", user.id)
+                        continue
+                    reminders[marker] = now.isoformat()
+                    user.subscription_reminders = dict(list(reminders.items())[-30:])
+                    await db.commit()
+        except Exception:
+            logging.exception("Subscription expiry reminder monitor failed")
+        await asyncio.sleep(3600)

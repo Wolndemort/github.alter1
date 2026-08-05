@@ -11,7 +11,7 @@ from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis
 from utils.runtime import check_dependencies
-from utils.tasks import monitor_checkins, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals
+from utils.tasks import monitor_checkins, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 
 
 async def main():
@@ -32,6 +32,7 @@ async def main():
     asyncio.create_task(monitor_reminders(bot))
     asyncio.create_task(monitor_checkins(bot))
     asyncio.create_task(monitor_subscription_renewals(bot))
+    asyncio.create_task(monitor_subscription_expiry_reminders(bot))
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         logging.info("ALTER is running")
