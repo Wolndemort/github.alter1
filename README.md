@@ -197,11 +197,15 @@ OPENROUTER_FREE_VISION_MODEL=google/gemini-2.0-flash-exp:free
 OPENROUTER_FALLBACK_MODEL=openai/gpt-4o-mini
 OPENROUTER_FALLBACK_MODEL_2=anthropic/claude-3.5-haiku
 OWNER_TELEGRAM_IDS=1271717628
+SUPPORT_USERNAME=Adam_Omarov
+SUPPORT_TELEGRAM_ID=1271717628
+LEGAL_BASE_URL=https://alterai.ru
 YUKASSA_SHOP_ID=...
 YUKASSA_SECRET_KEY=...
 YUKASSA_RECEIPT_EMAIL=...
 SUBSCRIPTION_PRICE_RUB=490.00
 SUBSCRIPTION_DAYS=30
+SUBSCRIPTION_RENEWAL_CHECK_SECONDS=3600
 YOUTUBE_API_KEY=...
 TAVILY_API_KEY=...
 TRANSCRIPTION_MODEL=openai/whisper-1
@@ -269,6 +273,16 @@ docker compose logs -f --tail=100 bot
 
 Никогда не публикуйте `.env`, токен Telegram или API-ключи. Если ключ попал в чат или Git, его нужно заменить.
 
+## Подписка, биллинг и юридические документы
+
+ALTER использует YooKassa для доступа на 30 дней. Поддерживаются оплата банковской картой и СБП. После оплаты бот проверяет платёж через API YooKassa и активирует подписку только после проверки статуса, суммы, валюты и metadata платежа.
+
+Первая оплата картой может сохранить платёжный метод для автопродления. Автопродление выключено по умолчанию и включается пользователем в кабинете. СБП является разовой оплатой и не используется для автосписаний. Фоновая задача проверяет продления каждый час, а отдельный планировщик отправляет напоминания за 5, 3 и 1 день до окончания подписки. Повторные уведомления защищены маркерами в PostgreSQL.
+
+Новые пользователи при первом `/start` видят и принимают четыре документа: `legal/privacy.html`, `legal/consent.html`, `legal/offer.html` и `legal/refund.html`. До принятия согласия middleware не пропускает обычные сообщения и оплату. Страницы нужно опубликовать на домене из `LEGAL_BASE_URL` до публичного запуска.
+
+Текущая схема оплаты не требует webhook: после возврата в Telegram и через `/status` бот проверяет платёж. Webhook и веб-админка остаются отдельным следующим этапом.
+
 ## Команды
 
 - `/help` — справка;
@@ -281,6 +295,8 @@ docker compose logs -f --tail=100 bot
 - `/reminders` — список напоминаний;
 - `/cancel_reminder ID` — отменить напоминание;
 - `/checkins_on`, `/checkins_off` — включить или выключить check-in.
+- `/buy` — открыть оплату подписки картой или через СБП;
+- `/status` — проверить подписку и обновить статус последнего платежа;
 - `/settings` — показать настройки поведения ALTER;
 - `/checkin_every 24` — частота обычных check-in в часах;
 - `/health_followup 4` — задержка проверки самочувствия;
@@ -294,6 +310,8 @@ docker compose logs -f --tail=100 bot
 - `middleware/` — база данных и лимиты;
 - `utils/ap_logic.py` — ответы AI и память;
 - `utils/metrics.py` — счётчики, тайминги и диагностические события;
+- `utils/billing.py` — YooKassa, подписки, СБП и автопродление;
+- `utils/tasks.py` — фоновые задачи памяти, напоминаний, продлений и уведомлений об окончании подписки;
 - `utils/runtime.py` — offline-safe preflight Redis/PostgreSQL;
 - `utils/quality.py` — автоматическая проверка качества ответа;
 - `utils/media_logic.py` — анализ изображений;
@@ -304,6 +322,7 @@ docker compose logs -f --tail=100 bot
 - `utils/audio_search.py` — скачивание и отправка аудио через `yt-dlp` и `ffmpeg`;
 - `data/models.py` — модели PostgreSQL;
 - `alembic/` — миграции;
+- `legal/` — политика конфиденциальности, согласие, оферта и правила возврата;
 - `scripts/backup-db.ps1` — резервная копия;
 - `scripts/backup-db.sh` — автоматический проверенный backup PostgreSQL для Linux/VPS;
 - `tests/` — тесты.
@@ -330,6 +349,8 @@ py -m pytest -q tests/test_smart_eval.py
 
 ## Итог текущей итерации
 
+После добавления биллинга и legal consent полный локальный suite: `144 passed`; `compileall` проходит.
+
 ALTER сейчас состоит не только из chat-вызова. В рабочем потоке есть память, семантический planner/executor, разрешённые инструменты, fallback-модели, проверка результата инструментов, quality gate, метрики, preflight зависимостей и offline smoke/eval-тесты.
 
-Текущий локальный baseline: `121 passed`, `compileall` проходит. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.
+Текущий локальный baseline: `143 passed`, `compileall` проходит. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.

@@ -50,3 +50,15 @@ def test_legal_documents_are_present_and_reference_alter():
         text = (root / name).read_text(encoding="utf-8")
         assert "ALTER" in text
         assert "заполнить" not in text.lower()
+
+
+def test_legal_start_flow_and_callback_middleware_are_wired():
+    root = Path(__file__).parents[1]
+    handlers = (root / "handlers" / "user_handlers.py").read_text(encoding="utf-8")
+    main = (root / "main.py").read_text(encoding="utf-8")
+    guard = (root / "middleware" / "guard_middleware.py").read_text(encoding="utf-8")
+    assert 'callback_data="accept_legal"' in handlers
+    assert "legal_consent_text" in handlers
+    assert "legal_accepted_at" in handlers
+    assert "dispatcher.callback_query.middleware" in main
+    assert "_legal_exempt" in guard
