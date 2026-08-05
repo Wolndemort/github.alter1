@@ -5,11 +5,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 
 from config import config
-from data.database import async_session
+from data.database import async_session, engine
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis
+from utils.runtime import check_dependencies
 from utils.tasks import monitor_checkins, monitor_personality_imprint, monitor_reminders
 
 
@@ -18,6 +19,11 @@ async def main():
     logging.info("ALTER: starting database and background tasks")
     bot = Bot(token=config.BOT_TOKEN.get_secret_value())
     redis = create_redis()
+    if not await check_dependencies(redis, engine):
+        logging.error("ALTER остановлен до polling: запусти зависимости или проверь .env")
+        await close_redis(redis)
+        await bot.session.close()
+        return
     dispatcher = Dispatcher(storage=RedisStorage(redis=redis))
     dispatcher.message.middleware(DbSessionMiddleware(session_pool=async_session))
     dispatcher.message.middleware(GuardMiddleware(redis))
