@@ -450,6 +450,19 @@ def append_session_message(session: Session, role: str, content: str, media: dic
     session.raw_messages = messages
 
 
+def refers_to_previous_media(text: str) -> bool:
+    """Return whether a text message explicitly asks about the last media turn."""
+    value = (text or "").casefold().replace("ё", "е")
+    markers = (
+        "на фото", "по фото", "с фото", "на картинке", "по картинке",
+        "на изображении", "по изображению", "на скрине", "по скрину",
+        "что видно", "что изображено", "этот предмет", "этот товар",
+        "какой цвет", "какой размер", "какая модель", "подойдет ли",
+        "подойдет", "подойдет ли", "на нем", "на ней", "на нём",
+    )
+    return any(marker in value for marker in markers)
+
+
 async def restore_session_media(bot, media_ref: dict) -> list[tuple[str, bytes]]:
     """Restore the latest Telegram media turn for a visual follow-up."""
     file_id = media_ref.get("file_id")
@@ -889,7 +902,12 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         ),
         None,
     )
-    restored_media = await restore_session_media(message.bot, previous_media) if previous_media else []
+    # The visual summary is already stored in the conversation history.
+    # Resend the binary image only for an explicit visual follow-up; otherwise
+    # every later text message is incorrectly routed through the vision model.
+    restored_media = []
+    if previous_media and refers_to_previous_media(message.text):
+        restored_media = await restore_session_media(message.bot, previous_media)
     if restored_media:
         reply = await generate_media_reply(
             message.text,
