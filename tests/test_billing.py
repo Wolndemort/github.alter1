@@ -262,12 +262,13 @@ def test_guard_blocks_unpaid_non_exempt_message():
 
     run(GuardMiddleware(Redis())(handler, Event(), {"db_session": Db(user)}))
     assert not seen
-    assert answers and "/buy" in answers[0]
+    assert answers and "/start" in answers[0]
 
 
 def test_guard_allows_billing_command_and_owner(monkeypatch):
     monkeypatch.setattr(config, "OWNER_TELEGRAM_IDS", "1271717628")
     user = User(id=88, first_name="Test", memory={}, tech_stack={})
+    user.legal_accepted_at = datetime.now(timezone.utc)
     seen = []
 
     async def handler(event, data):

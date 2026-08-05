@@ -18,6 +18,7 @@ class Setting(BaseSettings):
     OWNER_TELEGRAM_IDS: str = "1271717628"
     SUPPORT_USERNAME: str = "Adam_Omarov"
     SUPPORT_TELEGRAM_ID: int = 1271717628
+    LEGAL_BASE_URL: str = "https://alterai.ru"
     YUKASSA_SHOP_ID: str | None = None
     YUKASSA_SECRET_KEY: SecretStr | None = None
     YUKASSA_RECEIPT_EMAIL: str | None = None

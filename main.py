@@ -26,6 +26,7 @@ async def main():
         return
     dispatcher = Dispatcher(storage=RedisStorage(redis=redis))
     dispatcher.message.middleware(DbSessionMiddleware(session_pool=async_session))
+    dispatcher.callback_query.middleware(DbSessionMiddleware(session_pool=async_session))
     dispatcher.message.middleware(GuardMiddleware(redis))
     dispatcher.include_router(router)
     asyncio.create_task(monitor_personality_imprint())

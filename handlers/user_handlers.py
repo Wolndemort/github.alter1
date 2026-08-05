@@ -527,6 +527,52 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
         await message.answer("Активной подписки нет. Используй /buy, чтобы получить доступ на 30 дней.")
 
 
+def legal_keyboard() -> InlineKeyboardMarkup:
+    base = config.LEGAL_BASE_URL.rstrip("/")
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📄 Политика конфиденциальности", url=f"{base}/privacy")],
+        [InlineKeyboardButton(text="🛡 Согласие на обработку данных", url=f"{base}/consent")],
+        [InlineKeyboardButton(text="📜 Публичная оферта", url=f"{base}/offer")],
+        [InlineKeyboardButton(text="💳 Оплата и возврат", url=f"{base}/refund")],
+        [InlineKeyboardButton(text="✅ Принять и продолжить", callback_data="accept_legal")],
+    ])
+
+
+def legal_consent_text(name: str) -> str:
+    return (
+        f"👋 Привет, {name}!\n\n"
+        "Перед началом работы с ALTER ознакомься с политикой конфиденциальности и публичной офертой.\n\n"
+        "Нажимая «Принять и продолжить», ты подтверждаешь, что ознакомился с документами, "
+        "согласен на обработку персональных данных для работы сервиса и принимаешь условия оферты.\n\n"
+        "ALTER обрабатывает Telegram-профиль, сообщения, память, голос и медиа только для выполнения функций, "
+        "которые ты используешь."
+    )
+
+
+@router.callback_query(F.data == "accept_legal")
+async def accept_legal(callback: types.CallbackQuery, db_session: AsyncSession):
+    user = await db_session.get(User, callback.from_user.id)
+    if user is None:
+        user = User(
+            id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name or "Пользователь",
+            memory={}, tech_stack={},
+        )
+        db_session.add(user)
+    user.legal_accepted_at = datetime.now(timezone.utc)
+    await db_session.commit()
+    await callback.answer("Условия приняты")
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.message.answer(
+        f"✅ Спасибо, {user.first_name or 'друг'}! Добро пожаловать в ALTER.",
+        reply_markup=memory_keyboard(),
+    )
+
+
 @router.message(CommandStart())
 async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, command: CommandObject | None = None):
     user = await get_or_create_user(message, db_session)
@@ -541,6 +587,13 @@ async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, co
             await message.answer(f"Оплата получена. Доступ ALTER открыт на {config.SUBSCRIPTION_DAYS} дней.\nПроверить срок: /status")
         else:
             await message.answer("Платёж ещё обрабатывается. Через минуту нажми /status или снова открой ссылку из оплаты.")
+        return
+    if user.legal_accepted_at is None:
+        await db_session.commit()
+        await message.answer(
+            legal_consent_text(user.first_name or message.from_user.first_name or "друг"),
+            reply_markup=legal_keyboard(),
+        )
         return
     await db_session.commit()
     name = message.from_user.first_name or "друг"

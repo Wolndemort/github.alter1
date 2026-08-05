@@ -18,6 +18,12 @@ def _billing_exempt(event: TelegramObject) -> bool:
     return command in {"/start", "/buy", "/status", "/help"}
 
 
+def _legal_exempt(event: TelegramObject) -> bool:
+    text = getattr(event, "text", None) or ""
+    command = text.split(maxsplit=1)[0].split("@", 1)[0].casefold() if text.startswith("/") else ""
+    return command == "/start"
+
+
 class GuardMiddleware(BaseMiddleware):
     def __init__(self, redis, *, spam_limit: int | None = None, spam_window: int | None = None):
         super().__init__()
@@ -39,8 +45,14 @@ class GuardMiddleware(BaseMiddleware):
                 logging.exception("Redis spam check failed; allowing request")
                 data["spam_allowed"] = True
             db_session = data.get("db_session")
-            if db_session is not None and not is_owner(user.id):
+            if db_session is not None:
                 db_user = await db_session.get(User, user.id)
+                if (db_user is None or not db_user.legal_accepted_at) and not _legal_exempt(event):
+                    answer = getattr(event, "answer", None)
+                    if answer:
+                        await answer("Сначала открой /start, ознакомься с документами и нажми «Принять и продолжить».")
+                    return None
+            if db_session is not None and not is_owner(user.id):
                 subscription_allowed = has_active_subscription(db_user)
                 data["subscription_allowed"] = subscription_allowed
                 if not subscription_allowed and not _billing_exempt(event):
