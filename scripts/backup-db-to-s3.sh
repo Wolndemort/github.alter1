@@ -17,9 +17,10 @@ fi
 S3_ENDPOINT="${S3_ENDPOINT:-https://storage.yandexcloud.net}"
 S3_REGION="${S3_REGION:-ru-central1}"
 S3_PREFIX="${S3_PREFIX:-postgres}"
+CLOUD_RETENTION_DAYS="${CLOUD_RETENTION_DAYS:-90}"
 
 cd "$PROJECT_DIR"
-./scripts/backup-db.sh
+bash ./scripts/backup-db.sh
 LATEST="$(find "${BACKUP_DIR:-$PROJECT_DIR/backups}" -maxdepth 1 -type f -name 'alter-*.dump' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
 if [[ -z "$LATEST" || ! -s "$LATEST" ]]; then
   echo "No verified database dump found" >&2
@@ -36,4 +37,19 @@ aws s3api head-object \
   --key "$KEY" \
   --endpoint-url "$S3_ENDPOINT" \
   --region "$S3_REGION" >/dev/null
+
+# Keep the off-site copy for at least 90 days by default.
+CUTOFF="$(date -u -d "-${CLOUD_RETENTION_DAYS} days" +%s)"
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/" --recursive \
+  --endpoint-url "$S3_ENDPOINT" \
+  --region "$S3_REGION" | while read -r object_date object_time object_size object_key; do
+    [[ -z "${object_key:-}" ]] && continue
+    object_epoch="$(date -u -d "$object_date $object_time" +%s)"
+    if (( object_epoch < CUTOFF )); then
+        aws s3 rm "s3://$S3_BUCKET/$object_key" \
+          --endpoint-url "$S3_ENDPOINT" \
+          --region "$S3_REGION" \
+          --no-progress
+    fi
+done
 echo "Backup uploaded and verified: s3://$S3_BUCKET/$KEY"

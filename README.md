@@ -114,6 +114,8 @@ S3_BUCKET=имя-бакета
 AWS_ACCESS_KEY_ID=идентификатор_static_access_key
 AWS_SECRET_ACCESS_KEY=секрет_static_access_key
 S3_PREFIX=postgres
+# Optional; defaults to 90 days.
+CLOUD_RETENTION_DAYS=90
 ```
 
 Проверьте вручную:
