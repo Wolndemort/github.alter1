@@ -22,6 +22,8 @@ from utils.reminders import parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
+from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, youtube_query
+from sqlalchemy.orm.attributes import flag_modified
 from config import config
 import logging
 
@@ -164,7 +166,7 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
         music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
         audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
         if any(word in lowered for word in music_words) and any(word in lowered for word in audio_words):
-            results = await search_youtube(text)
+            results = await search_youtube(youtube_query(text))
             if results:
                 downloaded = await download_audio(results[0]["url"])
                 if downloaded:
@@ -296,27 +298,6 @@ async def cmd_start_welcome(message: types.Message, db_session: AsyncSession):
         "❓ Все возможности — /help"
     )
     await message.answer(text, reply_markup=memory_keyboard(), parse_mode="HTML")
-
-
-@router.message(CommandStart())
-async def cmd_start(message: types.Message, db_session: AsyncSession):
-    print(f"🔍 Ищу юзера {message.from_user.id}...")
-    user = await get_or_create_user(message, db_session)
-    await db_session.commit()
-
-    if not user:
-        print("🆕 Юзер не найден, создаю...")
-        try:
-            await db_session.commit()
-            print("✅ Юзер успешно СОХРАНЕН в базу!")
-            await message.answer(f"Привет, {message.from_user.first_name}! Твоя память теперь в безопасности.", reply_markup=memory_keyboard())
-        except Exception as e:
-            await db_session.rollback()
-            print(f"❌ ОШИБКА ПРИ КОММИТЕ: {e}")
-            await message.answer("Ошибка при регистрации в базе данных.")
-    else:
-        print(f"👋 Юзер {user.first_name} уже в базе.")
-        await message.answer(f"С возвращением, {user.first_name}!", reply_markup=memory_keyboard())
 
 
 @router.message(Command("memory"))
@@ -472,6 +453,18 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         return
 
     user = await get_or_create_user(message, db_session)
+    explicit_fact = explicit_memory_fact(message.text)
+    if explicit_fact:
+        memory = dict(user.memory or {})
+        category = "identity" if any(word in explicit_fact.casefold() for word in ("машин", "авто", "автомобил", "bmw", "mercedes", "лада")) else "preferences"
+        values = dict(memory.get(category) or {})
+        facts = list(values.get("explicit_facts") or [])
+        if explicit_fact not in facts:
+            facts.append(explicit_fact)
+        values["explicit_facts"] = facts[-20:]
+        memory[category] = values
+        user.memory = memory
+        flag_modified(user, "memory")
     if False:  # billing is handled by RedisBillingMiddleware
         await message.answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
         return
@@ -526,12 +519,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     search_results = []
     web_results = []
     audio_sent = False
+    youtube_requested = is_youtube_request(message.text)
     music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
     if any(word in message.text.lower() for word in music_words):
-        search_results = await search_youtube(message.text)
-    search_words = ("ссылк", "ютуб", "youtube", "песн", "трек", "видео", "послуш")
-    if any(word in message.text.lower() for word in search_words):
-        search_results = await search_youtube(message.text)
+        search_results = await search_youtube(youtube_query(message.text))
     audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
     if any(word in message.text.lower() for word in audio_words) and search_results:
         downloaded = await download_audio(search_results[0]["url"])
@@ -544,8 +535,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             finally:
                 remove_audio(audio_file)
     web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
-    if any(word in message.text.lower() for word in web_words):
+    if any(word in message.text.lower() for word in web_words) and not youtube_requested:
         web_results = await search_web(message.text)
+    if youtube_requested and not search_results:
+        search_results = await search_youtube(youtube_query(message.text))
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
     events = [{"title": event.title, "event_type": event.event_type, "importance": event.importance, "description": event.description} for event in events_result.scalars()]
     memory_for_reply = dict(user.memory or {})
