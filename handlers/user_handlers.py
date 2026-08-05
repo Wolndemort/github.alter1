@@ -891,7 +891,12 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     memory_for_reply = dict(user.memory or {})
     if events:
         memory_for_reply["important_events"] = events
-    recalled = await recall(db_session, user.id, message.text)
+    # Short social messages such as "как сам?" are not reliable semantic
+    # queries. Recalling old vector memories for them makes the bot inject
+    # unrelated topics into an otherwise normal reply.
+    recalled = []
+    if len(message.text.strip()) >= 20:
+        recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled
     previous_media = next(
