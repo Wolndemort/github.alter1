@@ -7,6 +7,7 @@ from aiogram.filters.command import CommandObject
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from data.models import ImportantEvent, Reminder, User, Session
 from utils.ap_logic import generate_reply
 from utils.media_logic import generate_media_reply
@@ -22,6 +23,7 @@ from utils.reminders import parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
+from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
@@ -253,7 +255,7 @@ def format_memory(memory: dict) -> str:
 async def get_active_session(user_id: int, db_session: AsyncSession) -> Session | None:
     result = await db_session.execute(select(Session).where(
         Session.user_id == user_id, Session.is_processed.is_(False)
-    ).order_by(Session.started_at.desc()))
+    ).options(selectinload(Session.user)).order_by(Session.started_at.desc()))
     return result.scalar_one_or_none()
 
 
@@ -344,7 +346,7 @@ async def cmd_new_session(message: types.Message, db_session: AsyncSession):
     user = await get_or_create_user(message, db_session)
     session = await get_active_session(user.id, db_session)
     if session:
-        session.is_processed = True
+        await process_session(session, db_session)
     await db_session.commit()
     await message.answer("Новый разговор начат.", reply_markup=memory_keyboard())
 
@@ -535,7 +537,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             finally:
                 remove_audio(audio_file)
     web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
-    if any(word in message.text.lower() for word in web_words) and not youtube_requested:
+    if (is_web_request(message.text) or any(word in message.text.lower() for word in web_words)) and not youtube_requested:
         web_results = await search_web(message.text)
     if youtube_requested and not search_results:
         search_results = await search_youtube(youtube_query(message.text))
