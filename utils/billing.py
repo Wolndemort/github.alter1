@@ -43,7 +43,7 @@ def configured() -> bool:
     return bool(config.YUKASSA_SHOP_ID and config.YUKASSA_SECRET_KEY)
 
 
-async def create_payment(session: AsyncSession, user: User, bot_username: str) -> str:
+async def create_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card") -> str:
     if not configured():
         raise RuntimeError("YooKassa is not configured")
     key = f"alter-{user.id}-{uuid.uuid4().hex}"
@@ -51,6 +51,7 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str) -
     payment = Payment(user_id=user.id, idempotence_key=key, amount_rub=str(amount), status="pending")
     session.add(payment)
     await session.flush()
+    payment_method_type = payment_method_type if payment_method_type in {"bank_card", "sbp"} else "bank_card"
     payload = {
         "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
         "capture": True,
@@ -60,8 +61,11 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str) -
         },
         "metadata": {"user_id": str(user.id), "payment_key": key},
         "description": f"ALTER — доступ на {config.SUBSCRIPTION_DAYS} дней",
-        "save_payment_method": True,
     }
+    if payment_method_type == "sbp":
+        payload["payment_method_data"] = {"type": "sbp"}
+    else:
+        payload["save_payment_method"] = True
     if config.YUKASSA_RECEIPT_EMAIL:
         payload["receipt"] = {
             "customer": {"email": config.YUKASSA_RECEIPT_EMAIL},

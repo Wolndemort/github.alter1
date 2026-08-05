@@ -480,11 +480,14 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
         return
     try:
         me = await message.bot.get_me()
-        url = await create_payment(db_session, await get_or_create_user(message, db_session), me.username or "")
+        user = await get_or_create_user(message, db_session)
+        card_url = await create_payment(db_session, user, me.username or "", "bank_card")
+        sbp_url = await create_payment(db_session, user, me.username or "", "sbp")
         await message.answer(
             f"Подписка ALTER на {config.SUBSCRIPTION_DAYS} дней — {price()} ₽.\n\nНажми кнопку для оплаты:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Оплатить подписку", url=url)],
+                [InlineKeyboardButton(text="💳 Оплатить картой", url=card_url)],
+                [InlineKeyboardButton(text="💠 Оплатить через СБП", url=sbp_url)],
             ]),
         )
     except Exception:
@@ -498,13 +501,14 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
     if is_owner(message.from_user.id):
         await message.answer("Ты владелец ALTER — доступ без подписки.")
     elif user and not has_active_subscription(user):
-        pending = (await db_session.execute(
+        pending_payments = (await db_session.execute(
             select(Payment).where(Payment.user_id == user.id, Payment.status == "pending")
             .order_by(Payment.created_at.desc())
-        )).scalars().first()
-        if pending:
+        )).scalars().all()
+        for pending in pending_payments:
             try:
-                await check_and_activate(db_session, pending.idempotence_key)
+                if await check_and_activate(db_session, pending.idempotence_key):
+                    break
             except Exception:
                 logging.exception("Failed to refresh pending YooKassa payment")
         if has_active_subscription(user):
