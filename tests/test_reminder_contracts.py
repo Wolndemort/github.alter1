@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 
 from data.models import Reminder, User
+from utils import checkins
 from utils.checkins import QUESTIONS, contextual_checkin, random_checkin
 from utils.reminders import parse_reminder, parse_time_answer
 
@@ -36,6 +37,19 @@ def test_contextual_checkin_uses_name_and_explicit_context():
     result = contextual_checkin("Адам", "проект ALTER")
     assert result.startswith("Адам, ")
     assert "проект ALTER" in result
+
+
+def test_model_checkin_uses_context(monkeypatch):
+    async def fake_chat(messages, max_tokens=None):
+        assert "проект ALTER" in messages[1]["content"]
+        assert "не используй шаблонные" in messages[0]["content"].casefold()
+        class Response:
+            choices = [type("Choice", (), {"message": type("Message", (), {"content": "Удалось сегодня продвинуться с проектом ALTER?"})()})()]
+        return Response()
+
+    monkeypatch.setattr(checkins, "chat_with_fallback", fake_chat)
+    result = __import__("asyncio").run(checkins.generate_contextual_checkin("Адам", "проект ALTER"))
+    assert result == "Удалось сегодня продвинуться с проектом ALTER?"
 
 
 def test_reminder_parser_supports_day_and_relative_time():

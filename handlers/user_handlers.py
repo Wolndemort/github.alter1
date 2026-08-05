@@ -282,7 +282,6 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
             session = Session(user_id=user.id, raw_messages=[])
             db_session.add(session)
             await db_session.flush()
-        context = recent_context(session.raw_messages)
         if message.photo:
             buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
             media = [("image/jpeg", buffer.getvalue())]
@@ -306,15 +305,25 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                 if transcript:
                     prompt += f"\n\nРасшифровка речи в видео:\n{transcript}"
         await message.bot.send_chat_action(message.chat.id, "typing")
+        web_results = []
+        if should_search_web(prompt) and not is_youtube_request(prompt):
+            web_results = await search_web(prompt)
+        kind = "Фото" if message.photo else "Видео"
+        append_session_message(session, "user", f"[{kind}] {prompt}")
         reply = await generate_media_reply(
             prompt,
             media,
-            conversation_context=context,
+            # The current media turn is supplied separately with the image/
+            # video; keep only previous turns in the conversational history.
+            conversation_context=recent_context(session.raw_messages[:-1]),
             memory=dict(user.memory or {}),
+            search_results=web_results,
         )
+        if web_results:
+            reply += "\n\n🌐 Источники:\n" + "\n".join(
+                f"• {item['title']} — {item['url']}" for item in web_results[:5]
+            )
         await message.answer(reply)
-        kind = "Фото" if message.photo else "Видео"
-        append_session_message(session, "user", f"[{kind}] {prompt}")
         append_session_message(session, "assistant", reply)
         await db_session.commit()
     except Exception:

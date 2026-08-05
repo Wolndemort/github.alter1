@@ -1,4 +1,15 @@
-from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, youtube_query
+from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, should_search_web, youtube_query
+
+
+def test_ordinary_messages_do_not_trigger_web_search():
+    assert not should_search_web("Расскажи, как у тебя дела сегодня")
+    assert not should_search_web("Я сегодня устал после работы")
+
+
+def test_explicit_current_question_triggers_web_search():
+    assert should_search_web("Какая сегодня погода в Москве?")
+    assert should_search_web("Знаешь ли ты последние новости о SpaceX?")
+    assert should_search_web("Подскажи актуальную цену iPhone")
 
 
 def test_youtube_link_request_is_detected():

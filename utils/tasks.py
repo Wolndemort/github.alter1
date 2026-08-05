@@ -12,7 +12,7 @@ from config import config
 from data.database import async_session
 from data.models import ImportantEvent, Reminder, Session
 from data.models import User
-from utils.checkins import contextual_checkin
+from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.helpers import deep_merge
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
@@ -178,16 +178,33 @@ async def monitor_reminders(bot: Bot):
                         if user and is_quiet_time(user, now):
                             continue
                         if not reminder.is_sent:
-                            if reminder.kind == "checkin":
-                                prefix, suffix = "Как прошло", "?"
-                            elif reminder.kind == "health_checkin":
-                                prefix, suffix = "🩺", ""
+                            if reminder.kind in {"checkin", "health_checkin"}:
+                                session_result = await db.execute(select(Session).where(
+                                    Session.user_id == reminder.user_id,
+                                ).order_by(Session.updated_at.desc()).limit(1))
+                                session = session_result.scalar_one_or_none()
+                                question = await generate_contextual_checkin(
+                                    user.first_name,
+                                    reminder.text,
+                                    session.raw_messages if session else [],
+                                    user.memory or {},
+                                )
+                                await bot.send_message(reminder.user_id, question)
                             else:
-                                prefix, suffix = "⏰ Напоминание", ""
-                            await bot.send_message(reminder.user_id, f"{prefix}: {reminder.text}{suffix}")
+                                await bot.send_message(reminder.user_id, f"⏰ Напоминание: {reminder.text}")
                             reminder.is_sent = True
                         elif reminder.follow_up_at and not reminder.follow_up_sent and reminder.follow_up_at <= datetime.now(timezone.utc):
-                            await bot.send_message(reminder.user_id, f"Как прошло: {reminder.text}?")
+                            session_result = await db.execute(select(Session).where(
+                                Session.user_id == reminder.user_id,
+                            ).order_by(Session.updated_at.desc()).limit(1))
+                            session = session_result.scalar_one_or_none()
+                            question = await generate_contextual_checkin(
+                                user.first_name,
+                                reminder.text,
+                                session.raw_messages if session else [],
+                                user.memory or {},
+                            )
+                            await bot.send_message(reminder.user_id, question)
                             reminder.follow_up_sent = True
                     except Exception:
                         logging.exception("Failed to send reminder %s", reminder.id)
@@ -227,7 +244,17 @@ async def monitor_checkins(bot: Bot):
                         events = memory["important_events"]
                         event = events[-1] if isinstance(events, list) else events
                         context = event.get("title") if isinstance(event, dict) else str(event)
-                    await bot.send_message(user.id, contextual_checkin(user.first_name, context))
+                    session_result = await db.execute(select(Session).where(
+                        Session.user_id == user.id,
+                    ).order_by(Session.updated_at.desc()).limit(1))
+                    session = session_result.scalar_one_or_none()
+                    question = await generate_contextual_checkin(
+                        user.first_name,
+                        context,
+                        session.raw_messages if session else [],
+                        memory,
+                    )
+                    await bot.send_message(user.id, question)
                     user.last_checkin_at = now
                 await db.commit()
         except Exception:

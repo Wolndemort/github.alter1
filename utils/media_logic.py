@@ -11,8 +11,15 @@ async def generate_media_reply(
     media: list[tuple[str, bytes]],
     conversation_context: list | None = None,
     memory: dict | None = None,
+    search_results: list[dict] | None = None,
 ) -> str:
     content = [{"type": "text", "text": prompt or "Проанализируй этот материал и ответь по-русски."}]
+    if search_results:
+        sources = "\nАктуальные результаты поиска — используй их только если они относятся к вопросу пользователя:\n" + "\n".join(
+            f"- {item.get('title')}: {item.get('content', '')[:1200]} ({item.get('url')})"
+            for item in search_results
+        )
+        content[0]["text"] += sources
     for media_type, data in media:
         encoded = base64.b64encode(data).decode("ascii")
         content.append({"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{encoded}"}})

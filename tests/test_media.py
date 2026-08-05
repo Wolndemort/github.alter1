@@ -45,6 +45,23 @@ def test_media_reply_preserves_conversation_context(monkeypatch):
     assert "нишевые ароматы" in messages[0]["content"]
 
 
+def test_media_reply_includes_search_context(monkeypatch):
+    captured = {}
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Нашёл."))])
+
+    monkeypatch.setattr(media_logic.client.chat.completions, "create", create)
+    run(media_logic.generate_media_reply(
+        "Подскажи, что это за товар",
+        [("image/jpeg", b"fake-image")],
+        search_results=[{"title": "Карточка товара", "content": "Описание", "url": "https://example.com/item"}],
+    ))
+    assert "Карточка товара" in captured["messages"][-1]["content"][0]["text"]
+    assert "https://example.com/item" in captured["messages"][-1]["content"][0]["text"]
+
+
 def test_media_reply_returns_safe_error(monkeypatch):
     async def fail(**kwargs):
         raise RuntimeError("vision unavailable")
