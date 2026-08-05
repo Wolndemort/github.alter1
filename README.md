@@ -88,7 +88,7 @@ ls -lh backups/
 Добавьте ежедневный запуск в cron:
 
 ```cron
-0 4 * * * cd /root/alter && /bin/bash ./scripts/backup-db.sh >> /var/log/alter-backup.log 2>&1
+0 4 * * * cd /root/alter && /bin/bash ./scripts/backup-db-to-s3.sh >> /var/log/alter-backup.log 2>&1
 ```
 
 Файл считается успешным только после проверки `pg_restore --list`. Рекомендуется регулярно копировать папку `backups/` на другой диск или в облако: backup на том же сервере не защищает от потери VPS.
@@ -104,6 +104,27 @@ tail -n 100 /var/log/alter-backup.log
 ```
 
 Не считайте cron настроенным, пока ручной запуск не создал проверенный `.dump`. После настройки проверьте расписание командой `crontab -l`.
+
+### Yandex Object Storage
+
+После привязки платёжного аккаунта создайте бакет в Object Storage. На VPS установите AWS CLI и создайте `/root/alter/.backup.env` с правами `600`:
+
+```env
+S3_BUCKET=имя-бакета
+AWS_ACCESS_KEY_ID=идентификатор_static_access_key
+AWS_SECRET_ACCESS_KEY=секрет_static_access_key
+S3_PREFIX=postgres
+```
+
+Проверьте вручную:
+
+```bash
+chmod 600 /root/alter/.backup.env
+chmod +x /root/alter/scripts/backup-db-to-s3.sh
+/root/alter/scripts/backup-db-to-s3.sh
+```
+
+Скрипт сначала создаёт и проверяет PostgreSQL custom dump, затем загружает его в Yandex Object Storage и проверяет объект через `head-object`. Секреты не добавляйте в Git.
 
 ## Переменные `.env`
 
