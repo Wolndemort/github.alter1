@@ -33,6 +33,7 @@ class Setting(BaseSettings):
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
     AI_TIMEOUT_SECONDS: int = 45
+    TOOL_MAX_ROUNDS: int = 6
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -81,7 +81,7 @@ def test_plain_message_offline_handler_flow(monkeypatch):
         async def answer(self, text):
             answers.append(text)
 
-    async def fake_reply(messages, memory, search_results):
+    async def fake_reply(messages, memory, search_results=None):
         assert messages[-1]["content"] == Message.text
         assert memory == {}
         return "Ответ из offline smoke-теста"

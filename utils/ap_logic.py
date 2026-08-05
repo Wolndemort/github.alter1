@@ -115,6 +115,31 @@ async def execute_tool(name: str, arguments: dict) -> list | str:
     return "Неизвестный инструмент."
 
 
+async def plan_audio_request(text: str) -> dict:
+    """Classify an audio request by meaning, without trigger-word lists."""
+    prompt = (
+        "Определи намерение пользователя. Верни только JSON вида "
+        '{"download_audio": true|false, "query": "..."}. '
+        "download_audio=true только если человек просит найти и отправить, включить или скачать "
+        "аудио; обычный разговор о музыке — false. query — предмет поиска. "
+        f"Текст: {text}"
+    )
+    try:
+        response = await chat_with_fallback(
+            [{"role": "system", "content": "Ты классификатор намерений без догадок."}, {"role": "user", "content": prompt}],
+            max_tokens=100,
+            task="planning",
+        )
+        value = json.loads((response.choices[0].message.content or "{}").strip("` ").removeprefix("json").strip())
+        if not isinstance(value, dict):
+            return {}
+        return {"download_audio": bool(value.get("download_audio")), "query": str(value.get("query") or text).strip()}
+    except Exception:
+        increment("ai.audio_plan.failure")
+        logging.exception("Audio intent planning failed")
+        return {}
+
+
 def _tool_call_payload(call) -> dict:
     """Convert an SDK tool call to the exact message shape expected by OpenAI."""
     if hasattr(call, "model_dump"):
@@ -133,7 +158,8 @@ def _tool_call_payload(call) -> dict:
 async def chat_with_tools(messages, max_tokens=None, task=None):
     """Let the model call allowed tools, then continue with their results."""
     working = list(messages)
-    for _ in range(2):
+    max_rounds = max(1, min(config.TOOL_MAX_ROUNDS, 12))
+    for _ in range(max_rounds):
         response = await chat_with_fallback(
             working,
             max_tokens=max_tokens,
@@ -161,7 +187,9 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
                 arguments = {}
             try:
                 result = await execute_tool(function.name, arguments)
+                increment("ai.tool.success", tool=function.name)
             except Exception:
+                increment("ai.tool.failure", tool=function.name)
                 logging.exception("Tool failed: %s", function.name)
                 result = "Инструмент временно недоступен."
             working.append({
@@ -169,6 +197,7 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
                 "tool_call_id": getattr(call, "id", ""),
                 "content": json.dumps(result, ensure_ascii=False)[:12000],
             })
+    increment("ai.tool.round_limit", limit=max_rounds)
     return await chat_with_fallback(working, max_tokens=max_tokens, task=task)
 
 async def summarize_session(messages):
@@ -185,7 +214,7 @@ async def generate_reply(messages, memory=None, search_results=None):
             sources = "\nАктуальные результаты поиска (используй их, не выдумывай факты; сравнивай несколько источников, отмечай противоречия и не считай один сниппет доказательством):\n" + "\n".join(
                 f"- {item.get('title')}: {item.get('content', '')[:1200]} ({item.get('url')})" for item in search_results
             )
-        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
+        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Сначала пойми смысл запроса, затем реши, нужен ли инструмент; не ориентируйся на конкретные ключевые фразы. Для актуальных фактов, погоды и поиска используй инструменты, а после их выполнения проверь результат и ответь по нему. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         increment("ai.reply.success")
         return response.choices[0].message.content or "Не смог сформулировать ответ."

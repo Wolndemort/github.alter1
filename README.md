@@ -75,6 +75,7 @@ ALTER пишет метрики в обычный лог приложения. �
 - `memory.vector.recall_success`, `memory.vector.recall_failure`, `memory.vector.save_failure` — векторная память;
 - `voice.transcription.success` / `voice.transcription.failure` — Whisper;
 - `voice.tts.success`, `voice.tts.empty`, `voice.tts.failure` — голосовой ответ;
+- `ai.tool.success`, `ai.tool.failure`, `ai.tool.round_limit` — planner/executor;
 - `metric=<name> duration=...` — длительность операций.
 
 На сервере смотреть поток:
@@ -302,7 +303,7 @@ docker compose logs -f --tail=100 bot
 1. Надёжность: fallback-модели, безопасные инструменты, preflight и offline smoke-тесты.
 2. Память: разделять факты, события, незавершённые дела и семантически похожий контекст; всегда уважать исправления и команды удаления.
 3. Маршрутизация: быстрый режим для простых сообщений, reasoning-модель для планов, сравнений, кода и дебага.
-4. Инструменты: поиск, погода и YouTube вызываются только по намерению, результат проверяется и объясняется со ссылками.
+4. Инструменты: поиск, погода и YouTube выбираются planner’ом по смыслу запроса, а не по захардкоженным фразам; результат проверяется и объясняется со ссылками.
 5. Контекст: ограничивать prompt, не повторять память дословно, сохранять нить диалога между текстом, голосом и медиа.
 6. Проактивность: возвращаться к `open_loops` аккуратно, с quiet hours, лимитами и без ощущения анкеты.
 7. Наблюдаемость и качество: метрики, сценарные eval-тесты и регулярная проверка реальными диалогами.
@@ -312,3 +313,5 @@ Eval-сценарии находятся в `tests/test_smart_eval.py`. Они �
 ```powershell
 py -m pytest -q tests/test_smart_eval.py
 ```
+
+Обычный текстовый и медиа-поиск проходит через `generate_reply`/`generate_media_reply` и planner/executor tool loop. Regex-интенты больше не решают, искать ли web-факты или погоду. Audio action тоже проходит через semantic-планировщик; число раундов задаётся `TOOL_MAX_ROUNDS` (по умолчанию 6, максимум 12).

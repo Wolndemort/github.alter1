@@ -3,7 +3,7 @@ import json
 import logging
 
 from config import config
-from utils.ap_logic import chat_with_fallback, client
+from utils.ap_logic import chat_with_fallback, chat_with_tools, client
 from utils.prompts import MEDIA_SYSTEM_PROMPT
 
 
@@ -36,20 +36,7 @@ async def generate_media_reply(
             if turn.get("role") in {"user", "assistant"} and turn.get("content"):
                 messages.append({"role": turn["role"], "content": str(turn["content"])})
         messages.append({"role": "user", "content": content})
-        models = [config.OPENROUTER_MODEL]
-        if config.OPENROUTER_FALLBACK_MODEL and config.OPENROUTER_FALLBACK_MODEL not in models:
-            models.append(config.OPENROUTER_FALLBACK_MODEL)
-        if config.OPENROUTER_FALLBACK_MODEL_2 and config.OPENROUTER_FALLBACK_MODEL_2 not in models:
-            models.append(config.OPENROUTER_FALLBACK_MODEL_2)
-        response = None
-        for model in models:
-            try:
-                response = await client.chat.completions.create(model=model, messages=messages, max_tokens=config.MAX_MEDIA_OUTPUT_TOKENS)
-                break
-            except Exception:
-                logging.exception("Media model failed: %s", model)
-        if response is None:
-            raise RuntimeError("all media models failed")
+        response = await chat_with_tools(messages, max_tokens=config.MAX_MEDIA_OUTPUT_TOKENS)
         return response.choices[0].message.content or "Не смог разобрать материал."
     except Exception:
         logging.exception("Media analysis error")

@@ -68,3 +68,21 @@ def test_model_eval_does_not_route_long_assistant_history_to_reasoning():
 
 def test_tool_eval_rejects_unknown_tool_without_external_call():
     assert run(ap_logic.execute_tool("delete_database", {})) == "Неизвестный инструмент."
+
+
+def test_audio_eval_uses_semantic_plan_for_explicit_action(monkeypatch):
+    async def create(**kwargs):
+        return response('{"download_audio": true, "query": "Nirvana Come As You Are"}')
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    result = run(ap_logic.plan_audio_request("Поставь мне Come As You Are группы Nirvana"))
+    assert result == {"download_audio": True, "query": "Nirvana Come As You Are"}
+
+
+def test_audio_eval_does_not_download_for_music_discussion(monkeypatch):
+    async def create(**kwargs):
+        return response('{"download_audio": false, "query": ""}')
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    result = run(ap_logic.plan_audio_request("Почему у Nirvana такой узнаваемый звук?"))
+    assert result["download_audio"] is False

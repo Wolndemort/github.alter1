@@ -9,14 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from data.models import ImportantEvent, Reminder, User, Session
-from utils.ap_logic import generate_reply
+from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
 from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
-from utils.web_search import search_web
 from utils.audio_search import download_audio, remove_audio
-from utils.weather import get_weather, is_weather_request, parse_weather_city
+from utils.weather import get_weather
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
@@ -24,7 +23,7 @@ from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
-from utils.intent import explicit_memory_fact, is_youtube_request, should_search_web, youtube_query
+from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 import logging
@@ -240,11 +239,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
         append_session_message(session, "user", text)
         # Расшифровка используется только внутри ALTER и не отправляется пользователю.
         await message.bot.send_chat_action(message.chat.id, "typing")
-        lowered = text.lower()
-        music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
-        audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
-        if any(word in lowered for word in music_words) and any(word in lowered for word in audio_words):
-            results = await search_youtube(youtube_query(text))
+        audio_plan = await plan_audio_request(text)
+        if audio_plan.get("download_audio"):
+            results = await search_youtube(audio_plan.get("query") or text)
             if results:
                 downloaded = await download_audio(results[0]["url"])
                 if downloaded:
@@ -257,16 +254,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                     append_session_message(session, "assistant", f"Отправил аудио: {audio_title}")
                     await db_session.commit()
                     return
-        web_results = []
-        if should_search_web(text) and not is_youtube_request(text):
-            web_results = await search_web(text)
         reply = await generate_reply(
-            recent_context(session.raw_messages), dict(user.memory or {}), web_results
+            recent_context(session.raw_messages), dict(user.memory or {})
         )
-        if web_results:
-            reply += "\n\n🌐 Источники:\n" + "\n".join(
-                f"• {item['title']} — {item['url']}" for item in web_results[:5]
-            )
         # Respect the user's voice setting for replies to voice messages too.
         await answer_reply(message, reply, user)
         append_session_message(session, "assistant", reply)
@@ -309,9 +299,8 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                 if transcript:
                     prompt += f"\n\nРасшифровка речи в видео:\n{transcript}"
         await message.bot.send_chat_action(message.chat.id, "typing")
+        # Media analysis also uses the semantic tool loop; no phrase matching.
         web_results = []
-        if should_search_web(prompt) and not is_youtube_request(prompt):
-            web_results = await search_web(prompt)
         kind = "Фото" if message.photo else "Видео"
         reply = await generate_media_reply(
             prompt,
@@ -560,13 +549,6 @@ async def cmd_cancel_reminder(message: types.Message, command: CommandObject, db
     await message.answer(f"Напоминание #{reminder_id} отменено.")
 
 
-@router.message(lambda message: message.text and is_weather_request(message.text) and not message.text.startswith("/weather"))
-async def natural_weather(message: types.Message):
-    city = parse_weather_city(message.text)
-    result = await get_weather(city)
-    await message.answer(result or "Не удалось получить погоду. Попробуй указать город.")
-
-
 @router.message(Command("weather"))
 async def cmd_weather(message: types.Message):
     city = message.text.partition(" ")[2].strip() or "Москва"
@@ -666,28 +648,8 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     updated_messages = list(session.raw_messages)
     print(f"🛠 DEBUG: Сохраняю сообщение в сессию {session.id if session.id else 'NEW'}")
     await message.bot.send_chat_action(message.chat.id, "typing")
-    search_results = []
-    web_results = []
-    audio_sent = False
-    youtube_requested = is_youtube_request(message.text)
-    music_words = ("музык", "песн", "трек", "альбом", "исполнитель", "ютуб", "youtube", "послуш")
-    if any(word in message.text.lower() for word in music_words):
-        search_results = await search_youtube(youtube_query(message.text))
-    audio_words = ("включи", "пришли песню", "отправь песню", "скачай песню", "скинь песню", "аудио")
-    if any(word in message.text.lower() for word in audio_words) and search_results:
-        downloaded = await download_audio(search_results[0]["url"])
-        if downloaded:
-            audio_file, audio_title = downloaded
-            try:
-                from aiogram.types import FSInputFile
-                await message.answer_audio(FSInputFile(str(audio_file)), title=audio_title[:64], performer=search_results[0].get("channel", ""))
-                audio_sent = True
-            finally:
-                remove_audio(audio_file)
-    if should_search_web(message.text) and not youtube_requested:
-        web_results = await search_web(message.text)
-    if youtube_requested and not search_results:
-        search_results = await search_youtube(youtube_query(message.text))
+    # Search and weather are semantic tools in generate_reply. The text handler
+    # must not decide by matching a fixed list of user phrases.
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
     events = [{"title": event.title, "event_type": event.event_type, "importance": event.importance, "description": event.description} for event in events_result.scalars()]
     memory_for_reply = dict(user.memory or {})
@@ -711,14 +673,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             restored_media,
             conversation_context=recent_context(updated_messages[:-1]),
             memory=memory_for_reply,
-            search_results=web_results,
+                search_results=[],
         )
     else:
-        reply = await generate_reply(recent_context(updated_messages), memory_for_reply, ([] if audio_sent else search_results) + web_results)
-    if web_results:
-        reply += "\n\n🌐 Источники:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in web_results[:5])
-    if search_results and not audio_sent:
-        reply += "\n\n🎵 Музыка и видео:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in search_results)
+        reply = await generate_reply(recent_context(updated_messages), memory_for_reply)
     marketplace_words = ("wildberries", "вб", "вайлдберриз", "ozon", "озон", "товар", "купить")
     if any(word in message.text.lower() for word in marketplace_words):
         reply += "\n\n🛒 Поиск товара:\n" + format_marketplace_links(message.text)
