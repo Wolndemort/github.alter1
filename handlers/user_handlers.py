@@ -24,7 +24,7 @@ from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
-from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, youtube_query
+from utils.intent import explicit_memory_fact, is_youtube_request, should_search_web, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 import logging
@@ -536,8 +536,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                 audio_sent = True
             finally:
                 remove_audio(audio_file)
-    web_words = ("найди", "найти", "кто такой", "кто такая", "знаешь ли", "расскажи о", "расскажи про", "расскажи мне про", "что известно о", "что известно про", "новост", "сегодня", "сейчас", "цена", "стоимость", "погода", "как выбрать", "посоветуй", "интернет", "биография", "информация о")
-    if (is_web_request(message.text) or any(word in message.text.lower() for word in web_words)) and not youtube_requested:
+    if should_search_web(message.text) and not youtube_requested:
         web_results = await search_web(message.text)
     if youtube_requested and not search_results:
         search_results = await search_youtube(youtube_query(message.text))
