@@ -47,7 +47,7 @@ class Setting(BaseSettings):
     DAILY_REQUEST_LIMIT: int = 100
     SPAM_REQUEST_LIMIT: int = 5
     SPAM_WINDOW_SECONDS: int = 60
-    MAX_OUTPUT_TOKENS: int = 350
+    MAX_OUTPUT_TOKENS: int = 600
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
     AI_TIMEOUT_SECONDS: int = 45
