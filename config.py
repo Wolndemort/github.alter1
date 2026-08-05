@@ -53,6 +53,9 @@ class Setting(BaseSettings):
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 20
+    # Temporarily move models that return transient provider errors to the end
+    # of the fallback route instead of retrying them on every new message.
+    AI_MODEL_COOLDOWN_SECONDS: int = 60
     TOOL_MAX_ROUNDS: int = 2
 
     model_config = SettingsConfigDict(

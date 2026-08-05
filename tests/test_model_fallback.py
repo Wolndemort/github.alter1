@@ -25,6 +25,40 @@ def test_chat_fallback_uses_second_model(monkeypatch):
     assert len(calls) == 2
 
 
+def test_rate_limited_model_moves_to_tail_for_next_request(monkeypatch):
+    ap_logic._MODEL_COOLDOWN_UNTIL.clear()
+    monkeypatch.setattr(ap_logic.config, "AI_MODEL_COOLDOWN_SECONDS", 60)
+    calls = []
+
+    class RateLimited(Exception):
+        status_code = 429
+
+    async def create(**kwargs):
+        calls.append(kwargs["model"])
+        if len(calls) == 1:
+            raise RateLimited("upstream rate limit")
+        return SimpleNamespace(choices=[])
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    try:
+        run(ap_logic.chat_with_fallback([{"role": "user", "content": "first"}], models=[
+            ap_logic.config.OPENROUTER_FREE_MODEL,
+            ap_logic.config.OPENROUTER_FREE_MODEL_2,
+        ]))
+        run(ap_logic.chat_with_fallback([{"role": "user", "content": "second"}], models=[
+            ap_logic.config.OPENROUTER_FREE_MODEL,
+            ap_logic.config.OPENROUTER_FREE_MODEL_2,
+        ]))
+
+        assert calls == [
+            ap_logic.config.OPENROUTER_FREE_MODEL,
+            ap_logic.config.OPENROUTER_FREE_MODEL_2,
+            ap_logic.config.OPENROUTER_FREE_MODEL_2,
+        ]
+    finally:
+        ap_logic._MODEL_COOLDOWN_UNTIL.clear()
+
+
 def test_permanent_provider_error_does_not_waste_fallback_calls(monkeypatch):
     calls = []
 

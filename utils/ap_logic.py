@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import time
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
@@ -84,6 +85,27 @@ def _has_visual_input(messages) -> bool:
     return False
 
 
+# Process-local health state. This is intentionally small and ephemeral: a
+# provider outage should not permanently change the configured model order.
+_MODEL_COOLDOWN_UNTIL: dict[str, float] = {}
+_COOLDOWN_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _route_with_available_models(models: list[str]) -> list[str]:
+    """Keep healthy models first while preserving configured order."""
+    now = time.monotonic()
+    available = [model for model in models if _MODEL_COOLDOWN_UNTIL.get(model, 0) <= now]
+    cooling_down = [model for model in models if model not in available]
+    return available + cooling_down
+
+
+def _cool_down_model(model: str) -> None:
+    seconds = max(0, int(config.AI_MODEL_COOLDOWN_SECONDS))
+    if seconds:
+        _MODEL_COOLDOWN_UNTIL[model] = time.monotonic() + seconds
+        logging.warning("Temporarily moving model to fallback tail: model=%s cooldown=%ss", model, seconds)
+
+
 def select_model_route(messages, task: str | None = None) -> list[str]:
     """Choose an inexpensive model for chat and a stronger one for hard work."""
     text = _request_text(messages)
@@ -100,7 +122,7 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
         paid_models = ([config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL]
                        if is_complex else [config.OPENROUTER_MODEL])
         primary += paid_models + [config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
-    return list(dict.fromkeys(filter(None, primary)))
+    return _route_with_available_models(list(dict.fromkeys(filter(None, primary))))
 
 
 def _provider_status_code(error: Exception) -> int | None:
@@ -109,7 +131,8 @@ def _provider_status_code(error: Exception) -> int | None:
 
 
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
-    for model in select_model_route(messages, task) if models is None else models:
+    route = select_model_route(messages, task) if models is None else _route_with_available_models(list(dict.fromkeys(filter(None, models))))
+    for model in route:
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -124,6 +147,8 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
                 increment("ai.provider.permanent_failure", status=status_code)
                 logging.error("Chat model rejected request: model=%s status=%s; fallback skipped", model, status_code)
                 break
+            if status_code in _COOLDOWN_STATUS_CODES:
+                _cool_down_model(model)
             if status_code == 404:
                 logging.warning("Chat model is unavailable: model=%s status=404; paid fallback enabled=%s", model, config.OPENROUTER_ALLOW_PAID_FALLBACK)
             else:
