@@ -309,7 +309,11 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
         if should_search_web(prompt) and not is_youtube_request(prompt):
             web_results = await search_web(prompt)
         kind = "Фото" if message.photo else "Видео"
-        append_session_message(session, "user", f"[{kind}] {prompt}")
+        media_ref = {
+            "media_type": "image/jpeg" if message.photo else "video/mp4",
+            "file_id": message.photo[-1].file_id if message.photo else message.video.file_id,
+        }
+        append_session_message(session, "user", f"[{kind}] {prompt}", media=media_ref)
         reply = await generate_media_reply(
             prompt,
             media,
@@ -354,11 +358,32 @@ async def get_active_session(user_id: int, db_session: AsyncSession) -> Session 
     return result.scalar_one_or_none()
 
 
-def append_session_message(session: Session, role: str, content: str) -> None:
+def append_session_message(session: Session, role: str, content: str, media: dict | None = None) -> None:
     """Append a user or assistant turn to the short-term transcript."""
     messages = list(session.raw_messages or [])
-    messages.append({"role": role, "content": content, "timestamp": datetime.utcnow().isoformat()})
+    item = {"role": role, "content": content, "timestamp": datetime.utcnow().isoformat()}
+    if media:
+        item["media"] = media
+    messages.append(item)
     session.raw_messages = messages
+
+
+async def restore_session_media(bot, media_ref: dict) -> list[tuple[str, bytes]]:
+    """Restore the latest Telegram media turn for a visual follow-up."""
+    file_id = media_ref.get("file_id")
+    media_type = media_ref.get("media_type")
+    if not file_id or not media_type:
+        return []
+    try:
+        buffer = await bot.download(file_id, destination=BytesIO())
+        data = buffer.getvalue()
+        if media_type.startswith("image/"):
+            return [(media_type, data)]
+        if media_type.startswith("video/"):
+            return await video_preview(data)
+    except Exception:
+        logging.exception("Failed to restore media context")
+    return []
 
 
 def recent_context(messages: list, limit: int = 40) -> list:
@@ -656,7 +681,25 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled
-    reply = await generate_reply(recent_context(updated_messages), memory_for_reply, ([] if audio_sent else search_results) + web_results)
+    previous_media = next(
+        (
+            item.get("media")
+            for item in reversed(updated_messages[:-1])
+            if item.get("role") == "user" and item.get("media")
+        ),
+        None,
+    )
+    restored_media = await restore_session_media(message.bot, previous_media) if previous_media else []
+    if restored_media:
+        reply = await generate_media_reply(
+            message.text,
+            restored_media,
+            conversation_context=recent_context(updated_messages[:-1]),
+            memory=memory_for_reply,
+            search_results=web_results,
+        )
+    else:
+        reply = await generate_reply(recent_context(updated_messages), memory_for_reply, ([] if audio_sent else search_results) + web_results)
     if web_results:
         reply += "\n\n🌐 Источники:\n" + "\n".join(f"• {item['title']} — {item['url']}" for item in web_results[:5])
     if search_results and not audio_sent:
