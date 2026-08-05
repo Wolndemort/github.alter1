@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
 from utils.metrics import increment
+from utils.quality import assess_reply
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=1)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "worldview", "politics", "preferences", "important_events", "open_loops"}
@@ -115,6 +116,15 @@ async def execute_tool(name: str, arguments: dict) -> list | str:
     return "Неизвестный инструмент."
 
 
+def validate_tool_result(name: str, result) -> tuple[str, object]:
+    """Normalize tool output so the planner can distinguish success from empty data."""
+    if isinstance(result, list) and not result:
+        return "empty", f"Инструмент {name} ничего не нашёл. Измени запрос или выбери другой инструмент."
+    if isinstance(result, str) and (not result.strip() or "не удалось" in result.casefold() or "неизвестный" in result.casefold()):
+        return "error", result or f"Инструмент {name} вернул пустой результат."
+    return "ok", result
+
+
 async def plan_audio_request(text: str) -> dict:
     """Classify an audio request by meaning, without trigger-word lists."""
     prompt = (
@@ -187,15 +197,16 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
                 arguments = {}
             try:
                 result = await execute_tool(function.name, arguments)
-                increment("ai.tool.success", tool=function.name)
+                status, result_for_model = validate_tool_result(function.name, result)
+                increment(f"ai.tool.{status}", tool=function.name)
             except Exception:
                 increment("ai.tool.failure", tool=function.name)
                 logging.exception("Tool failed: %s", function.name)
-                result = "Инструмент временно недоступен."
+                status, result_for_model = "error", "Инструмент временно недоступен. Измени запрос или продолжи без него."
             working.append({
                 "role": "tool",
                 "tool_call_id": getattr(call, "id", ""),
-                "content": json.dumps(result, ensure_ascii=False)[:12000],
+                "content": json.dumps({"status": status, "data": result_for_model}, ensure_ascii=False)[:12000],
             })
     increment("ai.tool.round_limit", limit=max_rounds)
     return await chat_with_fallback(working, max_tokens=max_tokens, task=task)
@@ -214,10 +225,15 @@ async def generate_reply(messages, memory=None, search_results=None):
             sources = "\nАктуальные результаты поиска (используй их, не выдумывай факты; сравнивай несколько источников, отмечай противоречия и не считай один сниппет доказательством):\n" + "\n".join(
                 f"- {item.get('title')}: {item.get('content', '')[:1200]} ({item.get('url')})" for item in search_results
             )
-        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Сначала пойми смысл запроса, затем реши, нужен ли инструмент; не ориентируйся на конкретные ключевые фразы. Для актуальных фактов, погоды и поиска используй инструменты, а после их выполнения проверь результат и ответь по нему. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
+        system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Сначала пойми смысл запроса, затем реши, нужен ли инструмент; не ориентируйся на конкретные ключевые фразы. Для актуальных фактов, погоды и поиска используй инструменты. После tool-вызова проверь поле status: при empty/error один раз измени запрос или выбери другой инструмент, а если данных всё равно нет — честно скажи об ограничении. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
+        reply = response.choices[0].message.content or "Не смог сформулировать ответ."
+        quality = assess_reply(reply, has_sources=bool(search_results))
+        increment("ai.reply.quality", score=quality.score)
+        for issue in quality.issues:
+            increment("ai.reply.quality_warning", issue=issue)
         increment("ai.reply.success")
-        return response.choices[0].message.content or "Не смог сформулировать ответ."
+        return reply
     except Exception:
         increment("ai.reply.failure")
         return "Не удалось получить ответ от AI."

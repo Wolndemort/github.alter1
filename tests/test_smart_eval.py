@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from utils import ap_logic
 from utils.helpers import merge_memory
 from utils.intent import is_web_request, should_search_web
+from utils.quality import assess_reply
 
 
 def run(coro):
@@ -70,6 +71,17 @@ def test_tool_eval_rejects_unknown_tool_without_external_call():
     assert run(ap_logic.execute_tool("delete_database", {})) == "Неизвестный инструмент."
 
 
+def test_tool_eval_marks_empty_results_for_planner_retry():
+    assert ap_logic.validate_tool_result("web_search", []) == (
+        "empty",
+        "Инструмент web_search ничего не нашёл. Измени запрос или выбери другой инструмент.",
+    )
+
+
+def test_tool_eval_accepts_nonempty_results():
+    assert ap_logic.validate_tool_result("web_search", [{"title": "Source"}])[0] == "ok"
+
+
 def test_audio_eval_uses_semantic_plan_for_explicit_action(monkeypatch):
     async def create(**kwargs):
         return response('{"download_audio": true, "query": "Nirvana Come As You Are"}')
@@ -86,3 +98,16 @@ def test_audio_eval_does_not_download_for_music_discussion(monkeypatch):
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     result = run(ap_logic.plan_audio_request("Почему у Nirvana такой узнаваемый звук?"))
     assert result["download_audio"] is False
+
+
+def test_quality_eval_accepts_normal_reply():
+    result = assess_reply("Короткий ответ по делу.")
+    assert result.score == 100
+    assert result.issues == ()
+
+
+def test_quality_eval_detects_internal_leak_and_missing_sources():
+    result = assess_reply('{"status":"ok"}? Второй вопрос?', has_sources=True)
+    assert result.score < 100
+    assert "internal_details" in result.issues
+    assert "missing_source_attribution" in result.issues

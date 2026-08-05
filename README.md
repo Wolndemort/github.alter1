@@ -26,7 +26,7 @@ ALTER не ограничивается ответом на последний �
 - погода через `/weather Москва` или фразу «погода в Москве»;
 - напоминания, follow-up и мягкие check-in;
 - PostgreSQL, Redis, Docker Compose и Alembic;
-- 114 локальных тестов.
+- 120 локальных тестов.
 
 ## Запуск
 
@@ -75,7 +75,8 @@ ALTER пишет метрики в обычный лог приложения. �
 - `memory.vector.recall_success`, `memory.vector.recall_failure`, `memory.vector.save_failure` — векторная память;
 - `voice.transcription.success` / `voice.transcription.failure` — Whisper;
 - `voice.tts.success`, `voice.tts.empty`, `voice.tts.failure` — голосовой ответ;
-- `ai.tool.success`, `ai.tool.failure`, `ai.tool.round_limit` — planner/executor;
+- `ai.tool.ok`, `ai.tool.empty`, `ai.tool.error`, `ai.tool.failure`, `ai.tool.round_limit` — planner/executor и проверка результата;
+- `ai.reply.quality`, `ai.reply.quality_warning` — автоматический quality gate финального ответа;
 - `metric=<name> duration=...` — длительность операций.
 
 На сервере смотреть поток:
@@ -286,6 +287,7 @@ docker compose logs -f --tail=100 bot
 - `utils/ap_logic.py` — ответы AI и память;
 - `utils/metrics.py` — счётчики, тайминги и диагностические события;
 - `utils/runtime.py` — offline-safe preflight Redis/PostgreSQL;
+- `utils/quality.py` — автоматическая проверка качества ответа;
 - `utils/media_logic.py` — анализ изображений;
 - `utils/media.py` — кадры и аудио из видео через ffmpeg;
 - `utils/voice.py` — speech-to-text;
@@ -314,4 +316,6 @@ Eval-сценарии находятся в `tests/test_smart_eval.py`. Они �
 py -m pytest -q tests/test_smart_eval.py
 ```
 
-Обычный текстовый и медиа-поиск проходит через `generate_reply`/`generate_media_reply` и planner/executor tool loop. Regex-интенты больше не решают, искать ли web-факты или погоду. Audio action тоже проходит через semantic-планировщик; число раундов задаётся `TOOL_MAX_ROUNDS` (по умолчанию 6, максимум 12).
+Обычный текстовый и медиа-поиск проходит через `generate_reply`/`generate_media_reply` и planner/executor tool loop. Regex-интенты больше не решают, искать ли web-факты или погоду. Audio action тоже проходит через semantic-планировщик; число раундов задаётся `TOOL_MAX_ROUNDS` (по умолчанию 6, максимум 12). Каждый результат получает статус `ok`, `empty` или `error`; при проблеме planner может один раз изменить стратегию без участия пользователя.
+
+После генерации `utils/quality.py` выполняет быстрый quality gate: проверяет пустоту, чрезмерную длину, лишние вопросы, утечку служебных полей и атрибуцию переданных источников. Ответ не блокируется, а предупреждение попадает в метрики. Это дешёвый runtime-контроль; глубокая фактологическая оценка выполняется отдельными eval-тестами.
