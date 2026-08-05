@@ -84,6 +84,11 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
     return list(dict.fromkeys(filter(None, primary)))
 
 
+def _provider_status_code(error: Exception) -> int | None:
+    value = getattr(error, "status_code", None) or getattr(error, "status", None)
+    return value if isinstance(value, int) else None
+
+
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
     for model in select_model_route(messages, task) if models is None else models:
         try:
@@ -93,9 +98,17 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
                 max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS,
                 **kwargs,
             )
-        except Exception:
-            increment("ai.model.failure", model=model)
-            logging.exception("Chat model failed: %s", model)
+        except Exception as error:
+            status_code = _provider_status_code(error)
+            increment("ai.model.failure", model=model, status=status_code or "exception")
+            if status_code in {401, 403}:
+                increment("ai.provider.permanent_failure", status=status_code)
+                logging.error("Chat model rejected request: model=%s status=%s; fallback skipped", model, status_code)
+                break
+            if status_code == 404:
+                logging.warning("Chat model is unavailable: model=%s status=404; trying fallback", model)
+            else:
+                logging.exception("Chat model failed: %s", model)
             continue
         increment("ai.model.success", model=model)
         return response

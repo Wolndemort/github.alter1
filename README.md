@@ -26,7 +26,7 @@ ALTER не ограничивается ответом на последний �
 - погода через `/weather Москва` или фразу «погода в Москве»;
 - напоминания, follow-up и мягкие check-in;
 - PostgreSQL, Redis, Docker Compose и Alembic;
-- 120 локальных тестов.
+- 121 локальный тест.
 
 ## Запуск
 
@@ -324,4 +324,4 @@ py -m pytest -q tests/test_smart_eval.py
 
 ALTER сейчас состоит не только из chat-вызова. В рабочем потоке есть память, семантический planner/executor, разрешённые инструменты, fallback-модели, проверка результата инструментов, quality gate, метрики, preflight зависимостей и offline smoke/eval-тесты.
 
-Текущий локальный baseline: `120 passed`, `compileall` проходит. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.
+Текущий локальный baseline: `121 passed`, `compileall` проходит. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.

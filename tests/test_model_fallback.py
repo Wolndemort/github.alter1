@@ -24,6 +24,24 @@ def test_chat_fallback_uses_second_model(monkeypatch):
     assert len(calls) == 2
 
 
+def test_permanent_provider_error_does_not_waste_fallback_calls(monkeypatch):
+    calls = []
+
+    class ProviderLimit(Exception):
+        status_code = 403
+
+    async def create(**kwargs):
+        calls.append(kwargs["model"])
+        raise ProviderLimit("key limit")
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    try:
+        run(ap_logic.chat_with_fallback([{"role": "user", "content": "hi"}]))
+    except RuntimeError:
+        pass
+    assert len(calls) == 1
+
+
 def test_complex_request_starts_with_reasoning_model():
     route = ap_logic.select_model_route([
         {"role": "user", "content": "Сравни архитектуры и составь подробный план миграции."},
