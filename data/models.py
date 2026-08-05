@@ -20,6 +20,7 @@ class User(Base):
     pending_reminder: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}')
     checkins_enabled: Mapped[bool] = mapped_column(default=True, server_default='true')
     last_checkin_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -87,3 +88,16 @@ class MemoryChunk(Base):
     embedding: Mapped[list] = mapped_column(Vector(1536))
     source: Mapped[str] = mapped_column(String(32), server_default='conversation')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Payment(Base):
+    __tablename__ = 'payments'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    provider_payment_id: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    idempotence_key: Mapped[str] = mapped_column(String(64), unique=True)
+    amount_rub: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(24), server_default='pending', index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

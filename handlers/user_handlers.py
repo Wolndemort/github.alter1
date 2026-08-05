@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
 from aiogram import F, Router, types
-from aiogram.types import BufferedInputFile
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command, CommandStart
 from aiogram.filters.command import CommandObject
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from data.models import ImportantEvent, Reminder, User, Session
+from data.models import ImportantEvent, Reminder, User, Session, Payment
 from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
 from utils.media import video_audio, video_duration, video_preview
@@ -26,6 +26,7 @@ from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price
 import logging
 
 router = Router()
@@ -406,9 +407,73 @@ async def get_or_create_user(message: types.Message, db_session: AsyncSession) -
     return user
 
 
+@router.message(Command("buy"))
+async def cmd_buy(message: types.Message, db_session: AsyncSession):
+    if is_owner(message.from_user.id):
+        await message.answer("Для владельца ALTER подписка не нужна.")
+        return
+    if has_active_subscription(await db_session.get(User, message.from_user.id)):
+        await message.answer("У тебя уже есть активная подписка. Проверить срок можно через /status.")
+        return
+    if not billing_configured():
+        await message.answer("Оплата пока настраивается. Попробуй немного позже.")
+        return
+    try:
+        me = await message.bot.get_me()
+        url = await create_payment(db_session, await get_or_create_user(message, db_session), me.username or "")
+        await message.answer(
+            f"Подписка ALTER на {config.SUBSCRIPTION_DAYS} дней — {price()} ₽.\n\nНажми кнопку для оплаты:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Оплатить подписку", url=url)],
+            ]),
+        )
+    except Exception:
+        logging.exception("Failed to create YooKassa payment")
+        await message.answer("Не удалось создать оплату. Попробуй ещё раз позже.")
+
+
+@router.message(Command("status"))
+async def cmd_status(message: types.Message, db_session: AsyncSession):
+    user = await db_session.get(User, message.from_user.id)
+    if is_owner(message.from_user.id):
+        await message.answer("Ты владелец ALTER — доступ без подписки.")
+    elif user and not has_active_subscription(user):
+        pending = (await db_session.execute(
+            select(Payment).where(Payment.user_id == user.id, Payment.status == "pending")
+            .order_by(Payment.created_at.desc())
+        )).scalars().first()
+        if pending:
+            try:
+                await check_and_activate(db_session, pending.idempotence_key)
+            except Exception:
+                logging.exception("Failed to refresh pending YooKassa payment")
+        if has_active_subscription(user):
+            expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+            await message.answer(f"Оплата подтверждена, подписка активна до {expires}.")
+        else:
+            await message.answer("Платёж ещё не подтверждён. Если уже оплатил, подожди минуту и повтори /status.")
+    elif has_active_subscription(user):
+        expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        await message.answer(f"Подписка активна до {expires}.")
+    else:
+        await message.answer("Активной подписки нет. Используй /buy, чтобы получить доступ на 30 дней.")
+
+
 @router.message(CommandStart())
-async def cmd_start_welcome(message: types.Message, db_session: AsyncSession):
+async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, command: CommandObject | None = None):
     user = await get_or_create_user(message, db_session)
+    start_arg = (command.args or "").strip() if command else ""
+    if start_arg.startswith("payment_"):
+        try:
+            activated = await check_and_activate(db_session, start_arg.removeprefix("payment_"))
+        except Exception:
+            logging.exception("Failed to check YooKassa payment")
+            activated = False
+        if activated:
+            await message.answer(f"Оплата получена. Доступ ALTER открыт на {config.SUBSCRIPTION_DAYS} дней.\nПроверить срок: /status")
+        else:
+            await message.answer("Платёж ещё обрабатывается. Через минуту нажми /status или снова открой ссылку из оплаты.")
+        return
     await db_session.commit()
     name = message.from_user.first_name or "друг"
     text = (

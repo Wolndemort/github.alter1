@@ -15,6 +15,12 @@ class Setting(BaseSettings):
     OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
+    OWNER_TELEGRAM_IDS: str = "1271717628"
+    YUKASSA_SHOP_ID: str | None = None
+    YUKASSA_SECRET_KEY: SecretStr | None = None
+    YUKASSA_RECEIPT_EMAIL: str | None = None
+    SUBSCRIPTION_PRICE_RUB: str = "490.00"
+    SUBSCRIPTION_DAYS: int = 30
     YOUTUBE_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
     TRANSCRIPTION_MODEL: str = "openai/whisper-1"
