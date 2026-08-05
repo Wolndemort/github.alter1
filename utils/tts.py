@@ -8,6 +8,7 @@ from pathlib import Path
 
 from config import config
 from utils.ap_logic import client
+from utils.metrics import increment
 
 
 def _get_audio_data(response) -> bytes:
@@ -81,7 +82,10 @@ async def synthesize_speech(text: str) -> bytes:
         )
         pcm = await _get_stream_audio_data(response)
         wav = _pcm16_to_wav(pcm) if pcm else b""
-        return await _wav_to_ogg(wav) if wav else b""
+        result = await _wav_to_ogg(wav) if wav else b""
+        increment("voice.tts.success" if result else "voice.tts.empty")
+        return result
     except Exception:
+        increment("voice.tts.failure")
         logging.exception("Speech synthesis error")
         return b""

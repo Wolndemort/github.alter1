@@ -3,6 +3,7 @@ from utils.metrics import timer
 
 from config import config
 from utils.ap_logic import client
+from utils.metrics import increment
 
 
 async def transcribe_voice(data: bytes) -> str:
@@ -15,8 +16,10 @@ async def transcribe_voice(data: bytes) -> str:
         )
         text = (result.text or "").strip()
         metric(size=len(data), result="ok")
+        increment("voice.transcription.success")
         return text
     except Exception:
         logging.exception("Voice transcription error")
+        increment("voice.transcription.failure")
         metric(size=len(data), result="error")
         return ""

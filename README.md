@@ -26,7 +26,7 @@ ALTER не ограничивается ответом на последний �
 - погода через `/weather Москва` или фразу «погода в Москве»;
 - напоминания, follow-up и мягкие check-in;
 - PostgreSQL, Redis, Docker Compose и Alembic;
-- 49 локальных тестов.
+- 106 локальных тестов.
 
 ## Запуск
 
@@ -52,6 +52,44 @@ docker compose run --rm --build migrations alembic upgrade head
 .\venv\Scripts\python.exe -m pytest -q
 docker compose config --quiet
 ```
+
+Без запуска Docker можно проверить весь offline-контур:
+
+```powershell
+py -m pytest -q
+py -m compileall -q .
+py main.py
+```
+
+Последняя команда при недоступных Redis/PostgreSQL завершится безопасно после preflight и напечатает причину, не зависая на polling.
+
+## Метрики и диагностика
+
+ALTER пишет метрики в обычный лог приложения. Это не содержит токенов, ключей или текста пользовательских сообщений.
+
+Основные имена:
+
+- `ai.model.success` / `ai.model.failure` — доступность моделей и fallback;
+- `ai.reply.success` / `ai.reply.failure` — итог генерации ответа;
+- `search.web.success` / `search.web.failure` — Tavily;
+- `memory.vector.recall_success`, `memory.vector.recall_failure`, `memory.vector.save_failure` — векторная память;
+- `voice.transcription.success` / `voice.transcription.failure` — Whisper;
+- `voice.tts.success`, `voice.tts.empty`, `voice.tts.failure` — голосовой ответ;
+- `metric=<name> duration=...` — длительность операций.
+
+На сервере смотреть поток:
+
+```bash
+docker compose logs -f --tail=200 bot | grep --line-buffered 'metric'
+```
+
+Для краткой диагностики последних ошибок:
+
+```bash
+docker compose logs --since=1h bot | grep -E 'metric_count=.*failure|ERROR|Traceback'
+```
+
+В Windows без Docker метрики видны в выводе `py main.py`; счётчики живут в памяти процесса и сбрасываются после перезапуска. Для долгосрочных графиков следующим этапом можно подключить Prometheus/Loki, но для текущей отладки grep-friendly логов достаточно.
 
 ## Резервная копия базы — обязательно
 
@@ -245,6 +283,8 @@ docker compose logs -f --tail=100 bot
 - `handlers/` — Telegram-команды и сообщения;
 - `middleware/` — база данных и лимиты;
 - `utils/ap_logic.py` — ответы AI и память;
+- `utils/metrics.py` — счётчики, тайминги и диагностические события;
+- `utils/runtime.py` — offline-safe preflight Redis/PostgreSQL;
 - `utils/media_logic.py` — анализ изображений;
 - `utils/media.py` — кадры и аудио из видео через ffmpeg;
 - `utils/voice.py` — speech-to-text;
@@ -256,3 +296,13 @@ docker compose logs -f --tail=100 bot
 - `scripts/backup-db.ps1` — резервная копия;
 - `scripts/backup-db.sh` — автоматический проверенный backup PostgreSQL для Linux/VPS;
 - `tests/` — тесты.
+
+## План развития «умного» ALTER
+
+1. Надёжность: fallback-модели, безопасные инструменты, preflight и offline smoke-тесты.
+2. Память: разделять факты, события, незавершённые дела и семантически похожий контекст; всегда уважать исправления и команды удаления.
+3. Маршрутизация: быстрый режим для простых сообщений, reasoning-модель для планов, сравнений, кода и дебага.
+4. Инструменты: поиск, погода и YouTube вызываются только по намерению, результат проверяется и объясняется со ссылками.
+5. Контекст: ограничивать prompt, не повторять память дословно, сохранять нить диалога между текстом, голосом и медиа.
+6. Проактивность: возвращаться к `open_loops` аккуратно, с quiet hours, лимитами и без ощущения анкеты.
+7. Наблюдаемость и качество: метрики, сценарные eval-тесты и регулярная проверка реальными диалогами.

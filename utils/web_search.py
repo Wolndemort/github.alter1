@@ -1,6 +1,7 @@
 import aiohttp
 import logging
 from config import config
+from utils.metrics import increment
 
 
 async def search_web(query: str, max_results: int = 5) -> list[dict]:
@@ -23,6 +24,7 @@ async def search_web(query: str, max_results: int = 5) -> list[dict]:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             async with session.post("https://api.tavily.com/search", json=payload) as response:
                 if response.status != 200:
+                    increment("search.web.failure", status=response.status)
                     logging.warning("Tavily search failed with HTTP %s", response.status)
                     return []
                 data = await response.json()
@@ -38,7 +40,9 @@ async def search_web(query: str, max_results: int = 5) -> list[dict]:
                 "url": url,
                 "content": item.get("content", "")[:3000],
             })
+        increment("search.web.success", results=len(results))
         return results
     except Exception:
+        increment("search.web.failure", reason="exception")
         logging.exception("Tavily search request failed")
         return []

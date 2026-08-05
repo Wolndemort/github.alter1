@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
+from utils.metrics import increment
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=1)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "worldview", "politics", "preferences", "important_events", "open_loops"}
@@ -64,7 +65,7 @@ def _request_text(messages) -> str:
     parts = []
     for message in messages or []:
         content = message.get("content") if isinstance(message, dict) else ""
-        if isinstance(content, str):
+        if isinstance(content, str) and message.get("role") == "user":
             parts.append(content)
     return " ".join(parts).casefold()
 
@@ -83,8 +84,19 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
 
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
     for model in select_model_route(messages, task) if models is None else models:
-        try: return await client.chat.completions.create(model=model, messages=messages, max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS, **kwargs)
-        except Exception: logging.exception("Chat model failed: %s", model)
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS,
+                **kwargs,
+            )
+        except Exception:
+            increment("ai.model.failure", model=model)
+            logging.exception("Chat model failed: %s", model)
+            continue
+        increment("ai.model.success", model=model)
+        return response
     raise RuntimeError("No chat model configured")
 
 
@@ -174,5 +186,8 @@ async def generate_reply(messages, memory=None, search_results=None):
             )
         system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
+        increment("ai.reply.success")
         return response.choices[0].message.content or "Не смог сформулировать ответ."
-    except Exception: return "Не удалось получить ответ от AI."
+    except Exception:
+        increment("ai.reply.failure")
+        return "Не удалось получить ответ от AI."

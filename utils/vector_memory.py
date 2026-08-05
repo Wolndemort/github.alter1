@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from data.models import MemoryChunk
 from utils.ap_logic import client
 from config import config
+from utils.metrics import increment
 
 EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
@@ -19,6 +20,7 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
     try:
         db.add(MemoryChunk(user_id=user_id, content=text[:8000], embedding=await embed(text), source=source))
     except Exception:
+        increment("memory.vector.save_failure")
         logging.exception("Vector memory save failed")
 
 
@@ -31,7 +33,10 @@ async def recall(db: AsyncSession, user_id: int, text: str, limit=5) -> list[str
             .order_by(MemoryChunk.embedding.cosine_distance(vector))
             .limit(limit)
         )
-        return list(result.scalars())
+        values = list(result.scalars())
+        increment("memory.vector.recall_success", results=len(values))
+        return values
     except Exception:
+        increment("memory.vector.recall_failure")
         logging.exception("Vector memory search failed")
         return []

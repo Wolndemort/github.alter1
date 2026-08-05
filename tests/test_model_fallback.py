@@ -36,6 +36,14 @@ def test_simple_request_uses_fast_model_first():
     assert route[0] == ap_logic.config.OPENROUTER_MODEL
 
 
+def test_long_system_prompt_does_not_force_reasoning_route():
+    route = ap_logic.select_model_route([
+        {"role": "system", "content": "memory " * 1000},
+        {"role": "user", "content": "Привет"},
+    ])
+    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+
+
 def test_tool_loop_preserves_tool_calls_and_returns_final_answer(monkeypatch):
     calls = []
     tool_call = SimpleNamespace(

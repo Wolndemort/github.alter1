@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from utils import ap_logic, web_search, youtube_search
 from utils.tasks import process_session
 from data.models import Session, User
+from utils import metrics
 
 
 def run(coro):
@@ -15,6 +16,19 @@ def test_openrouter_failure_returns_safe_reply(monkeypatch):
         raise RuntimeError("provider down")
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", fail)
     assert "не удалось получить" in run(ap_logic.generate_reply([])).lower()
+
+
+def test_metrics_count_failures_and_snapshot(monkeypatch):
+    metrics.reset()
+
+    async def fail(**kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", fail)
+    run(ap_logic.generate_reply([]))
+    values = metrics.snapshot()
+    assert values["ai.reply.failure"] == 1
+    assert values["ai.model.failure"] >= 1
 
 
 def test_youtube_non_200_returns_empty(monkeypatch):
