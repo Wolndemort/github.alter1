@@ -1,8 +1,10 @@
 """One place for request admission: spam protection and daily quota."""
 from typing import Any, Awaitable, Callable
+import logging
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
+from redis.exceptions import RedisError
 
 from config import config
 from utils.redis_store import charge_request, allow_request
@@ -18,6 +20,14 @@ class GuardMiddleware(BaseMiddleware):
     async def __call__(self, handler: Callable[..., Awaitable[Any]], event: TelegramObject, data: dict[str, Any]) -> Any:
         user = getattr(event, "from_user", None)
         if user is not None:
-            data["billing_allowed"] = await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
-            data["spam_allowed"] = await allow_request(self.redis, user.id, self.spam_limit, self.spam_window)
+            try:
+                data["billing_allowed"] = await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
+            except RedisError:
+                logging.exception("Redis billing check failed; allowing request")
+                data["billing_allowed"] = True
+            try:
+                data["spam_allowed"] = await allow_request(self.redis, user.id, self.spam_limit, self.spam_window)
+            except RedisError:
+                logging.exception("Redis spam check failed; allowing request")
+                data["spam_allowed"] = True
         return await handler(event, data)

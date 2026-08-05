@@ -15,6 +15,7 @@ from data.models import User
 from utils.checkins import contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.helpers import deep_merge
+from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -116,6 +117,8 @@ async def process_session(session: Session, db) -> bool:
             db.add(Reminder(user_id=session.user.id, kind="followup", **followup))
     health_followup = extract_health_followup(session.raw_messages)
     if health_followup and session.user.checkins_enabled:
+        hours = max(1, min(48, int(user_setting(session.user, "health_followup_hours", DEFAULT_HEALTH_FOLLOWUP_HOURS))))
+        health_followup["remind_at"] = datetime.now(timezone.utc) + timedelta(hours=hours)
         # Do not create a second health check-in while one is still pending.
         if hasattr(db, "execute"):
             existing = await db.execute(select(Reminder).where(
@@ -171,6 +174,9 @@ async def monitor_reminders(bot: Bot):
                 ).with_for_update(skip_locked=True))
                 for reminder in result.scalars().all():
                     try:
+                        user = await db.get(User, reminder.user_id)
+                        if user and is_quiet_time(user, now):
+                            continue
                         if not reminder.is_sent:
                             if reminder.kind == "checkin":
                                 prefix, suffix = "Как прошло", "?"
@@ -204,7 +210,8 @@ async def monitor_checkins(bot: Bot):
                         "open_loops", "goals_habits",
                     )):
                         continue
-                    if user.last_checkin_at and user.last_checkin_at > now - timedelta(days=1):
+                    interval = max(1, min(168, int(user_setting(user, "checkin_interval_hours", 24))))
+                    if user.last_checkin_at and user.last_checkin_at > now - timedelta(hours=interval):
                         continue
                     # Сначала возвращаемся к конкретным незавершённым темам и событиям,
                     # а не к общему настроению: так не теряются обещанные follow-up.

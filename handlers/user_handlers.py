@@ -18,7 +18,7 @@ from utils.web_search import search_web
 from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
-from utils.keyboards import memory_keyboard, memory_categories_keyboard, voice_keyboard, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
+from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
@@ -95,12 +95,12 @@ async def button_reminders(message: types.Message, db_session: AsyncSession):
 
 @router.message(F.text == "💭 Check-in")
 async def button_checkins(message: types.Message, db_session: AsyncSession):
-    await message.answer("Выбери режим: /checkins_on или /checkins_off", reply_markup=memory_keyboard())
+    await message.answer("Выбери режим: /checkins_on или /checkins_off", reply_markup=settings_keyboard())
 
 
-@router.message(F.text == "⚙️ Настройки")
-async def button_settings(message: types.Message):
-    await message.answer("Настройки памяти: выбери категорию для удаления или используй /clear_memory.", reply_markup=memory_categories_keyboard())
+@router.message(F.text == SETTINGS_BUTTON)
+async def button_settings(message: types.Message, db_session: AsyncSession):
+    await cmd_settings(message, db_session)
 
 
 @router.message(F.text == VOICE_BUTTON)
@@ -128,6 +128,11 @@ async def button_back(message: types.Message):
     await message.answer("Главное меню", reply_markup=memory_keyboard())
 
 
+@router.message(F.text == SETTINGS_BACK_BUTTON)
+async def button_settings_back(message: types.Message):
+    await message.answer("Главное меню", reply_markup=memory_keyboard())
+
+
 @router.message(F.text.in_({"identity", "goals_habits", "skills_career", "interests_hobbies", "open_loops"}))
 async def button_forget_category(message: types.Message, command: CommandObject, db_session: AsyncSession):
     await cmd_forget(message, CommandObject(args=message.text), db_session)
@@ -145,6 +150,73 @@ async def cmd_help(message: types.Message):
         "Команды памяти: /memory, /forget, /clear_memory, /new_session\n"
         "Check-in: /checkins_on или /checkins_off"
     )
+
+
+def _settings_text(user: User) -> str:
+    settings = user.tech_stack or {}
+    return (
+        "⚙️ Настройки ALTER:\n"
+        f"• check-in: раз в {settings.get('checkin_interval_hours', 24)} ч.\n"
+        f"• проверка самочувствия: через {settings.get('health_followup_hours', 4)} ч.\n"
+        f"• тихие часы: {settings.get('quiet_start', 23):02d}:00–{settings.get('quiet_end', 8):02d}:00\n\n"
+        "Команды:\n"
+        "/checkin_every 24 — частота check-in в часах\n"
+        "/health_followup 4 — задержка проверки самочувствия\n"
+        "/quiet_hours 23 8 — тихие часы"
+    )
+
+
+@router.message(Command("settings"))
+async def cmd_settings(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
+    await message.answer(_settings_text(user), reply_markup=settings_keyboard())
+
+
+async def _set_numeric_setting(message: types.Message, db_session: AsyncSession, key: str, label: str, low: int, high: int):
+    parts = (message.text or "").split()
+    try:
+        value = int(parts[1])
+    except (IndexError, ValueError):
+        await message.answer(f"Формат: {parts[0]} число")
+        return
+    if not low <= value <= high:
+        await message.answer(f"Укажи число от {low} до {high}.")
+        return
+    user = await get_or_create_user(message, db_session)
+    settings = dict(user.tech_stack or {})
+    settings[key] = value
+    user.tech_stack = settings
+    await db_session.commit()
+    await message.answer(f"Готово: {label} — {value} ч.")
+
+
+@router.message(Command("checkin_every"))
+async def cmd_checkin_every(message: types.Message, db_session: AsyncSession):
+    await _set_numeric_setting(message, db_session, "checkin_interval_hours", "check-in каждые", 1, 168)
+
+
+@router.message(Command("health_followup"))
+async def cmd_health_followup(message: types.Message, db_session: AsyncSession):
+    await _set_numeric_setting(message, db_session, "health_followup_hours", "проверка самочувствия через", 1, 48)
+
+
+@router.message(Command("quiet_hours"))
+async def cmd_quiet_hours(message: types.Message, db_session: AsyncSession):
+    parts = (message.text or "").split()
+    try:
+        start, end = int(parts[1]), int(parts[2])
+    except (IndexError, ValueError):
+        await message.answer("Формат: /quiet_hours 23 8")
+        return
+    if not 0 <= start <= 23 or not 0 <= end <= 23:
+        await message.answer("Часы должны быть от 0 до 23.")
+        return
+    user = await get_or_create_user(message, db_session)
+    settings = dict(user.tech_stack or {})
+    settings.update({"quiet_start": start, "quiet_end": end})
+    user.tech_stack = settings
+    await db_session.commit()
+    await message.answer(f"Тихие часы установлены: {start:02d}:00–{end:02d}:00.")
 
 
 @router.message(lambda message: message.voice is not None)
@@ -197,6 +269,13 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
 async def handle_media(message: types.Message, db_session: AsyncSession):
     prompt = message.caption or "Проанализируй это изображение и объясни, что на нём."
     try:
+        user = await get_or_create_user(message, db_session)
+        session = await get_active_session(user.id, db_session)
+        if session is None:
+            session = Session(user_id=user.id, raw_messages=[])
+            db_session.add(session)
+            await db_session.flush()
+        context = recent_context(session.raw_messages)
         if message.photo:
             buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
             media = [("image/jpeg", buffer.getvalue())]
@@ -220,13 +299,13 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                 if transcript:
                     prompt += f"\n\nРасшифровка речи в видео:\n{transcript}"
         await message.bot.send_chat_action(message.chat.id, "typing")
-        reply = await generate_media_reply(prompt, media)
+        reply = await generate_media_reply(
+            prompt,
+            media,
+            conversation_context=context,
+            memory=dict(user.memory or {}),
+        )
         await message.answer(reply)
-        user = await get_or_create_user(message, db_session)
-        session = await get_active_session(user.id, db_session)
-        if session is None:
-            session = Session(user_id=user.id, raw_messages=[])
-            db_session.add(session)
         kind = "Фото" if message.photo else "Видео"
         append_session_message(session, "user", f"[{kind}] {prompt}")
         append_session_message(session, "assistant", reply)

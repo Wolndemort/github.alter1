@@ -6,13 +6,28 @@ from utils.ap_logic import client
 from utils.prompts import MEDIA_SYSTEM_PROMPT
 
 
-async def generate_media_reply(prompt: str, media: list[tuple[str, bytes]]) -> str:
+async def generate_media_reply(
+    prompt: str,
+    media: list[tuple[str, bytes]],
+    conversation_context: list | None = None,
+    memory: dict | None = None,
+) -> str:
     content = [{"type": "text", "text": prompt or "Проанализируй этот материал и ответь по-русски."}]
     for media_type, data in media:
         encoded = base64.b64encode(data).decode("ascii")
         content.append({"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{encoded}"}})
     try:
-        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT}, {"role": "user", "content": content}]
+        context_note = ""
+        if conversation_context or memory:
+            context_note = (
+                "\nЭто продолжение одного диалога. Учитывай контекст и не начинай разговор заново. "
+                f"Память пользователя: {memory or {}}"
+            )
+        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT + context_note}]
+        for turn in (conversation_context or [])[-12:]:
+            if turn.get("role") in {"user", "assistant"} and turn.get("content"):
+                messages.append({"role": turn["role"], "content": str(turn["content"])})
+        messages.append({"role": "user", "content": content})
         models = [config.OPENROUTER_MODEL]
         if config.OPENROUTER_FALLBACK_MODEL and config.OPENROUTER_FALLBACK_MODEL not in models:
             models.append(config.OPENROUTER_FALLBACK_MODEL)

@@ -26,6 +26,25 @@ def test_media_reply_sends_image_as_data_url(monkeypatch):
     assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
+def test_media_reply_preserves_conversation_context(monkeypatch):
+    captured = {}
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Вижу продолжение темы."))])
+
+    monkeypatch.setattr(media_logic.client.chat.completions, "create", create)
+    run(media_logic.generate_media_reply(
+        "Посмотри этот скрин",
+        [("image/jpeg", b"fake-image")],
+        conversation_context=[{"role": "user", "content": "Мы обсуждали духи René de Nuit"}],
+        memory={"preferences": {"fragrance": "нишевые ароматы"}},
+    ))
+    messages = captured["messages"]
+    assert messages[1] == {"role": "user", "content": "Мы обсуждали духи René de Nuit"}
+    assert "нишевые ароматы" in messages[0]["content"]
+
+
 def test_media_reply_returns_safe_error(monkeypatch):
     async def fail(**kwargs):
         raise RuntimeError("vision unavailable")
