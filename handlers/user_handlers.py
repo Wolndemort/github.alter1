@@ -17,7 +17,7 @@ from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather
 from utils.marketplace_links import format_marketplace_links
-from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON
+from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
@@ -119,8 +119,32 @@ async def button_cabinet(message: types.Message, db_session: AsyncSession):
         status = "Подписка не активна."
     await message.answer(
         f"👤 Кабинет ALTER\n\n{status}\n\nСтоимость доступа: {price()} ₽ / {config.SUBSCRIPTION_DAYS} дней\n\nКоманды: /status и /buy",
-        reply_markup=cabinet_keyboard(),
+        reply_markup=cabinet_keyboard(bool(user and user.auto_renew), bool(user and user.payment_method_id)),
     )
+
+
+@router.message(F.text.in_({AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON}))
+async def button_auto_renew(message: types.Message, db_session: AsyncSession):
+    user = await db_session.get(User, message.from_user.id)
+    if not user or not user.payment_method_id:
+        await message.answer("Сначала нужна одна обычная оплата — после неё можно включить автопродление.", reply_markup=cabinet_keyboard())
+        return
+    user.auto_renew = message.text == AUTO_RENEW_ON_BUTTON
+    user.next_charge_at = user.subscription_expires_at if user.auto_renew else None
+    await db_session.commit()
+    state = "включено" if user.auto_renew else "выключено"
+    await message.answer(f"Автопродление {state}.", reply_markup=cabinet_keyboard(user.auto_renew, bool(user.payment_method_id)))
+
+
+@router.message(F.text == UNLINK_CARD_BUTTON)
+async def button_unlink_card(message: types.Message, db_session: AsyncSession):
+    user = await db_session.get(User, message.from_user.id)
+    if user:
+        user.payment_method_id = None
+        user.auto_renew = False
+        user.next_charge_at = None
+        await db_session.commit()
+    await message.answer("Карта отвязана от автопродления ALTER. Следующая оплата потребует новую привязку.", reply_markup=cabinet_keyboard())
 
 
 @router.message(F.text == SUPPORT_BUTTON)

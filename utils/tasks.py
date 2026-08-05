@@ -16,6 +16,7 @@ from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.helpers import merge_memory
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
+from utils.billing import charge_recurring_payment
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -260,3 +261,30 @@ async def monitor_checkins(bot: Bot):
         except Exception:
             logging.exception("Gentle check-in monitor failed")
         await asyncio.sleep(300)
+
+
+async def monitor_subscription_renewals(bot: Bot):
+    """Hourly opt-in YooKassa renewals; failed renewals disable auto-charge."""
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(User).where(
+                    User.auto_renew.is_(True),
+                    User.payment_method_id.is_not(None),
+                    User.next_charge_at <= now,
+                ).with_for_update(skip_locked=True))
+                for user in result.scalars().all():
+                    try:
+                        result_code = await charge_recurring_payment(db, user)
+                        if result_code == "succeeded":
+                            await bot.send_message(user.id, "Подписка ALTER продлена ещё на 30 дней.")
+                        elif result_code == "failed":
+                            await bot.send_message(user.id, "Не удалось продлить подписку. Автопродление отключено — проверь карту и продли подписку вручную через кабинет.")
+                    except Exception:
+                        await db.rollback()
+                        logging.exception("Subscription renewal failed for user %s", user.id)
+                await db.commit()
+        except Exception:
+            logging.exception("Subscription renewal monitor failed")
+        await asyncio.sleep(max(300, config.SUBSCRIPTION_RENEWAL_CHECK_SECONDS))

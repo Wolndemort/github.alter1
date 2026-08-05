@@ -21,6 +21,9 @@ class User(Base):
     checkins_enabled: Mapped[bool] = mapped_column(default=True, server_default='true')
     last_checkin_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     subscription_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    payment_method_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    auto_renew: Mapped[bool] = mapped_column(default=False, server_default='false')
+    next_charge_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -60,6 +60,7 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str) -
         },
         "metadata": {"user_id": str(user.id), "payment_key": key},
         "description": f"ALTER — доступ на {config.SUBSCRIPTION_DAYS} дней",
+        "save_payment_method": True,
     }
     if config.YUKASSA_RECEIPT_EMAIL:
         payload["receipt"] = {
@@ -109,7 +110,72 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     now = datetime.now(timezone.utc)
     base = user.subscription_expires_at if has_active_subscription(user) else now
     user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
+    payment_method = (data.get("payment_method") or {}).get("id")
+    if payment_method:
+        user.payment_method_id = str(payment_method)
+    user.next_charge_at = user.subscription_expires_at
     payment.status = "succeeded"
     payment.paid_at = now
     await session.commit()
     return True
+
+
+async def charge_recurring_payment(session: AsyncSession, user: User) -> str:
+    """Charge a saved YooKassa payment method once and extend the subscription."""
+    if not configured() or not user.payment_method_id or not user.auto_renew:
+        return "skipped"
+    amount = price()
+    key = f"alter-renew-{user.id}-{(user.next_charge_at or datetime.now(timezone.utc)).date().isoformat()}"
+    existing = (await session.execute(select(Payment).where(Payment.idempotence_key == key))).scalar_one_or_none()
+    if existing and existing.status == "succeeded":
+        return "already_paid"
+    payload = {
+        "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
+        "capture": True,
+        "payment_method_id": user.payment_method_id,
+        "metadata": {"user_id": str(user.id), "payment_key": key, "type": "recurring"},
+        "description": f"ALTER — автопродление на {config.SUBSCRIPTION_DAYS} дней",
+    }
+    if config.YUKASSA_RECEIPT_EMAIL:
+        payload["receipt"] = {
+            "customer": {"email": config.YUKASSA_RECEIPT_EMAIL},
+            "items": [{
+                "description": "Автопродление доступа к AI-ассистенту ALTER",
+                "quantity": "1.00",
+                "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
+                "vat_code": 1,
+                "payment_mode": "full_payment",
+                "payment_subject": "service",
+            }],
+        }
+    async with httpx.AsyncClient(auth=(config.YUKASSA_SHOP_ID, config.YUKASSA_SECRET_KEY.get_secret_value()), timeout=15) as client:
+        response = await client.post(
+            "https://api.yookassa.ru/v3/payments",
+            json=payload,
+            headers={"Idempotence-Key": key},
+        )
+    data = response.json()
+    if response.status_code not in {200, 201} or data.get("status") != "succeeded":
+        user.auto_renew = False
+        await session.commit()
+        return "failed"
+    now = datetime.now(timezone.utc)
+    base = user.subscription_expires_at if has_active_subscription(user) else now
+    user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
+    user.next_charge_at = user.subscription_expires_at
+    user.payment_method_id = str((data.get("payment_method") or {}).get("id") or user.payment_method_id)
+    if existing:
+        existing.provider_payment_id = data.get("id")
+        existing.status = "succeeded"
+        existing.paid_at = now
+    else:
+        session.add(Payment(
+            user_id=user.id,
+            provider_payment_id=data.get("id"),
+            idempotence_key=key,
+            amount_rub=str(amount),
+            status="succeeded",
+            paid_at=now,
+        ))
+    await session.commit()
+    return "succeeded"

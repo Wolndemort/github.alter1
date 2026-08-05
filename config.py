@@ -23,6 +23,7 @@ class Setting(BaseSettings):
     YUKASSA_RECEIPT_EMAIL: str | None = None
     SUBSCRIPTION_PRICE_RUB: str = "490.00"
     SUBSCRIPTION_DAYS: int = 30
+    SUBSCRIPTION_RENEWAL_CHECK_SECONDS: int = 3600
     YOUTUBE_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
     TRANSCRIPTION_MODEL: str = "openai/whisper-1"

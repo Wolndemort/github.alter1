@@ -14,6 +14,9 @@ BUY_SUBSCRIPTION_BUTTON = "\U0001f4b3 \u041a\u0443\u043f\u0438\u0442\u044c \u043
 CABINET_BUTTON = "\U0001f464 \u041a\u0430\u0431\u0438\u043d\u0435\u0442"
 SUPPORT_BUTTON = "\U0001f198 \u041f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0430"
 BACK_BUTTON = "\u2b05\ufe0f \u041d\u0430\u0437\u0430\u0434"
+AUTO_RENEW_ON_BUTTON = "\U0001f501 \u0412\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u0430\u0432\u0442\u043e\u043f\u0440\u043e\u0434\u043bение"
+AUTO_RENEW_OFF_BUTTON = "\u23f8\ufe0f \u0412\u044b\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u0430\u0432\u0442\u043e\u043f\u0440\u043e\u0434\u043bение"
+UNLINK_CARD_BUTTON = "\U0001f4b3 \u041e\u0442\u0432\u044fзать карту"
 
 
 def memory_categories_keyboard() -> ReplyKeyboardMarkup:
@@ -38,12 +41,14 @@ def memory_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def cabinet_keyboard() -> ReplyKeyboardMarkup:
+def cabinet_keyboard(auto_renew: bool = False, has_card: bool = False) -> ReplyKeyboardMarkup:
+    renewal_button = AUTO_RENEW_OFF_BUTTON if auto_renew else AUTO_RENEW_ON_BUTTON
+    rows = [[KeyboardButton(text=BUY_SUBSCRIPTION_BUTTON)], [KeyboardButton(text=renewal_button)]]
+    if has_card:
+        rows.append([KeyboardButton(text=UNLINK_CARD_BUTTON)])
+    rows.append([KeyboardButton(text=SUPPORT_BUTTON), KeyboardButton(text=BACK_BUTTON)])
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BUY_SUBSCRIPTION_BUTTON)],
-            [KeyboardButton(text=SUPPORT_BUTTON), KeyboardButton(text=BACK_BUTTON)],
-        ], resize_keyboard=True,
+        keyboard=rows, resize_keyboard=True,
         input_field_placeholder="Выбери действие",
     )
 
