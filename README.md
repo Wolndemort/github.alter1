@@ -192,11 +192,11 @@ tail -n 100 /var/log/alter-backup.log
 BOT_TOKEN=...
 OPENROUTER_API_KEY=...
 OPENROUTER_MODEL=google/gemini-2.5-flash
-OPENROUTER_FREE_MODEL=google/gemini-2.0-flash-exp:free
-OPENROUTER_FREE_MODEL_2=meta-llama/llama-3.3-70b-instruct:free
-OPENROUTER_FREE_MODEL_3=qwen/qwen3-235b-a22b:free
-OPENROUTER_FREE_VISION_MODEL=google/gemini-2.0-flash-exp:free
-OPENROUTER_FREE_VISION_MODEL_2=qwen/qwen2.5-vl-32b-instruct:free
+OPENROUTER_FREE_MODEL=google/gemma-4-31b-it:free
+OPENROUTER_FREE_MODEL_2=inclusionai/ling-3.0-flash:free
+OPENROUTER_FREE_MODEL_3=nvidia/nemotron-3-super-120b-a12b:free
+OPENROUTER_FREE_VISION_MODEL=google/gemma-4-31b-it:free
+OPENROUTER_FREE_VISION_MODEL_2=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 OPENROUTER_FALLBACK_MODEL=openai/gpt-4o-mini
 OPENROUTER_FALLBACK_MODEL_2=anthropic/claude-3.5-haiku
 OPENROUTER_ALLOW_PAID_FALLBACK=true
