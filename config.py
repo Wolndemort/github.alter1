@@ -11,10 +11,15 @@ class Setting(BaseSettings):
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
     # Override these with an available OpenRouter :free model in .env.
     OPENROUTER_FREE_MODEL: str = "google/gemini-2.0-flash-exp:free"
+    OPENROUTER_FREE_MODEL_2: str = "meta-llama/llama-3.3-70b-instruct:free"
+    OPENROUTER_FREE_MODEL_3: str = "qwen/qwen3-235b-a22b:free"
     OPENROUTER_FREE_VISION_MODEL: str = "google/gemini-2.0-flash-exp:free"
+    OPENROUTER_FREE_VISION_MODEL_2: str = "qwen/qwen2.5-vl-32b-instruct:free"
     OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
+    # Safety switch: never spend money unless this is explicitly enabled.
+    OPENROUTER_ALLOW_PAID_FALLBACK: bool = False
     OWNER_TELEGRAM_IDS: str = "1271717628"
     SUPPORT_USERNAME: str = "Adam_Omarov"
     SUPPORT_TELEGRAM_ID: int = 1271717628

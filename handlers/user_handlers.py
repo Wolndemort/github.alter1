@@ -15,7 +15,7 @@ from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
-from utils.weather import get_weather
+from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
@@ -871,8 +871,8 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     updated_messages = list(session.raw_messages)
     print(f"🛠 DEBUG: Сохраняю сообщение в сессию {session.id if session.id else 'NEW'}")
     await message.bot.send_chat_action(message.chat.id, "typing")
-    # Search and weather are semantic tools in generate_reply. The text handler
-    # must not decide by matching a fixed list of user phrases.
+    # Weather is handled deterministically so a provider/model tool decision
+    # cannot turn a simple forecast request into a vague AI refusal.
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
     events = [{"title": event.title, "event_type": event.event_type, "importance": event.importance, "description": event.description} for event in events_result.scalars()]
     memory_for_reply = dict(user.memory or {})
@@ -898,6 +898,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             memory=memory_for_reply,
                 search_results=[],
         )
+    elif is_weather_request(message.text):
+        city = parse_weather_city(message.text)
+        reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
     else:
         reply = await generate_reply(recent_context(updated_messages), memory_for_reply)
     marketplace_words = ("wildberries", "вб", "вайлдберриз", "ozon", "озон", "товар", "купить")

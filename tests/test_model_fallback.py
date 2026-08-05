@@ -9,6 +9,7 @@ def run(coro):
 
 
 def test_chat_fallback_uses_second_model(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
     calls = []
 
     async def create(**kwargs):
@@ -43,10 +44,26 @@ def test_permanent_provider_error_does_not_waste_fallback_calls(monkeypatch):
 
 
 def test_complex_request_starts_with_reasoning_model():
+    ap_logic.config.OPENROUTER_ALLOW_PAID_FALLBACK = True
     route = ap_logic.select_model_route([
         {"role": "user", "content": "Сравни архитектуры и составь подробный план миграции."},
     ])
-    assert route[0] == ap_logic.config.OPENROUTER_REASONING_MODEL
+    assert route[:3] == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
+    assert route[3] == ap_logic.config.OPENROUTER_REASONING_MODEL
+    ap_logic.config.OPENROUTER_ALLOW_PAID_FALLBACK = False
+
+
+def test_paid_fallback_is_disabled_by_default(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", False)
+    route = ap_logic.select_model_route([{"role": "user", "content": "сравни два варианта"}])
+    assert route == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
+
+
+def test_paid_models_are_last_resort(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
+    route = ap_logic.select_model_route([{"role": "user", "content": "Привет"}])
+    assert route[:3] == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
+    assert route[3] == ap_logic.config.OPENROUTER_MODEL
 
 
 def test_simple_request_uses_fast_model_first():
@@ -63,6 +80,7 @@ def test_visual_request_uses_free_vision_model_first():
         ],
     }])
     assert route[0] == ap_logic.config.OPENROUTER_FREE_VISION_MODEL
+    assert ap_logic.config.OPENROUTER_MODEL not in route[:2]
 
 
 def test_long_system_prompt_does_not_force_reasoning_route():

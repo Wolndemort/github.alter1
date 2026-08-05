@@ -56,7 +56,7 @@ def test_intent_eval_searches_current_facts_only_when_requested():
 
 def test_model_eval_routes_long_user_task_to_reasoning():
     route = ap_logic.select_model_route([{"role": "user", "content": "Составь подробный пошаговый план миграции базы данных"}])
-    assert route[0] == ap_logic.config.OPENROUTER_REASONING_MODEL
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL
 
 
 def test_model_eval_does_not_route_long_assistant_history_to_reasoning():

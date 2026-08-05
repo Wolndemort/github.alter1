@@ -90,11 +90,16 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
     is_complex = task in {"reasoning", "planning"} or len(text) >= 700 or any(
         re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
     )
-    if is_complex:
-        primary = [config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL, config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
+    if _has_visual_input(messages):
+        free_models = [config.OPENROUTER_FREE_VISION_MODEL, config.OPENROUTER_FREE_VISION_MODEL_2]
     else:
-        free_model = config.OPENROUTER_FREE_VISION_MODEL if _has_visual_input(messages) else config.OPENROUTER_FREE_MODEL
-        primary = [free_model, config.OPENROUTER_MODEL, config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
+        free_models = [config.OPENROUTER_FREE_MODEL, config.OPENROUTER_FREE_MODEL_2, config.OPENROUTER_FREE_MODEL_3]
+    # Paid models are deliberately appended only after every configured free model.
+    primary = free_models
+    if config.OPENROUTER_ALLOW_PAID_FALLBACK:
+        paid_models = ([config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL]
+                       if is_complex else [config.OPENROUTER_MODEL])
+        primary += paid_models + [config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
     return list(dict.fromkeys(filter(None, primary)))
 
 
@@ -120,12 +125,14 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
                 logging.error("Chat model rejected request: model=%s status=%s; fallback skipped", model, status_code)
                 break
             if status_code == 404:
-                logging.warning("Chat model is unavailable: model=%s status=404; trying fallback", model)
+                logging.warning("Chat model is unavailable: model=%s status=404; paid fallback enabled=%s", model, config.OPENROUTER_ALLOW_PAID_FALLBACK)
             else:
                 logging.exception("Chat model failed: %s", model)
             continue
         increment("ai.model.success", model=model)
         return response
+    if not config.OPENROUTER_ALLOW_PAID_FALLBACK:
+        raise RuntimeError("Бесплатная модель временно недоступна. Платный fallback отключён, чтобы не списывать деньги.")
     raise RuntimeError("No chat model configured")
 
 
