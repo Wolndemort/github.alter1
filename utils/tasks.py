@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -14,6 +15,21 @@ from data.models import User
 from utils.checkins import contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.helpers import deep_merge
+
+
+def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
+    """Create one gentle follow-up when a user mentions a health problem."""
+    for message in messages or []:
+        if message.get("role") != "user":
+            continue
+        text = str(message.get("content") or "").strip()
+        lowered = text.casefold()
+        if re.search(r"\b(?:не\s+болит|ничего\s+не\s+болит|не\s+больно)\b", lowered):
+            continue
+        if re.search(r"\b(?:болит|боль|температур|тошнит|плохо\s+себя|самочувств|головн|спин[аеу])", lowered):
+            current = now or datetime.now(timezone.utc)
+            return {"text": "Как ты себя чувствуешь? Стало лучше?", "remind_at": current + timedelta(hours=4)}
+    return None
 
 
 def extract_important_events(facts: dict) -> list[dict]:
@@ -98,6 +114,20 @@ async def process_session(session: Session, db) -> bool:
         ))
         if existing.scalar_one_or_none() is None:
             db.add(Reminder(user_id=session.user.id, kind="followup", **followup))
+    health_followup = extract_health_followup(session.raw_messages)
+    if health_followup and session.user.checkins_enabled:
+        # Do not create a second health check-in while one is still pending.
+        if hasattr(db, "execute"):
+            existing = await db.execute(select(Reminder).where(
+                Reminder.user_id == session.user.id,
+                Reminder.kind == "health_checkin",
+                Reminder.is_sent.is_(False),
+                Reminder.remind_at > datetime.now(timezone.utc),
+            ))
+            if existing.scalar_one_or_none() is None:
+                db.add(Reminder(user_id=session.user.id, kind="health_checkin", **health_followup))
+        else:
+            db.add(Reminder(user_id=session.user.id, kind="health_checkin", **health_followup))
     session.is_processed = True
     await db.commit()
     return True
@@ -142,8 +172,12 @@ async def monitor_reminders(bot: Bot):
                 for reminder in result.scalars().all():
                     try:
                         if not reminder.is_sent:
-                            prefix = "Как прошло" if reminder.kind == "checkin" else "⏰ Напоминание"
-                            suffix = "?" if reminder.kind == "checkin" else ""
+                            if reminder.kind == "checkin":
+                                prefix, suffix = "Как прошло", "?"
+                            elif reminder.kind == "health_checkin":
+                                prefix, suffix = "🩺", ""
+                            else:
+                                prefix, suffix = "⏰ Напоминание", ""
                             await bot.send_message(reminder.user_id, f"{prefix}: {reminder.text}{suffix}")
                             reminder.is_sent = True
                         elif reminder.follow_up_at and not reminder.follow_up_sent and reminder.follow_up_at <= datetime.now(timezone.utc):
@@ -165,13 +199,18 @@ async def monitor_checkins(bot: Bot):
                 result = await db.execute(select(User).where(User.checkins_enabled.is_(True)))
                 for user in result.scalars().all():
                     memory = user.memory or {}
-                    if not memory.get("psycho_vibe") and not memory.get("important_events"):
+                    if not any(memory.get(key) for key in (
+                        "psycho_vibe", "health_sport", "important_events",
+                        "open_loops", "goals_habits",
+                    )):
                         continue
                     if user.last_checkin_at and user.last_checkin_at > now - timedelta(days=1):
                         continue
                     # Сначала возвращаемся к конкретным незавершённым темам и событиям,
                     # а не к общему настроению: так не теряются обещанные follow-up.
-                    context = memory.get("open_loops") or memory.get("important_events") or memory.get("goals_habits") or memory.get("skills_career")
+                    context = (memory.get("open_loops") or memory.get("health_sport") or
+                               memory.get("important_events") or memory.get("goals_habits") or
+                               memory.get("skills_career"))
                     if isinstance(context, dict):
                         context = next((str(value) for value in context.values() if value), None)
                     if isinstance(context, list) and context:

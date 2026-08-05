@@ -4,6 +4,15 @@ from datetime import datetime, timedelta, timezone
 MOSCOW = timezone(timedelta(hours=3))
 
 
+def is_reminder_request(text: str) -> bool:
+    return bool(re.search(r"\b(?:напомни|поставь\s+напоминание|создай\s+напоминание)\b", (text or "").casefold()))
+
+
+def extract_reminder_text(text: str) -> str:
+    value = re.sub(r"^.*?\b(?:напомни|поставь\s+напоминание|создай\s+напоминание)\b", "", text or "", count=1, flags=re.I)
+    return re.sub(r"\s+", " ", value).strip(" ,.!?-")
+
+
 def parse_reminder(text: str) -> tuple[datetime, str] | None:
     """Parse only unambiguous reminder phrases; return None otherwise."""
     now = datetime.now(MOSCOW)

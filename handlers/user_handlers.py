@@ -19,7 +19,7 @@ from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, voice_keyboard, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON
-from utils.reminders import parse_reminder, parse_time_answer
+from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
@@ -486,6 +486,16 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         db_session.add(Reminder(user_id=user.id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
         await db_session.commit()
         await message.answer(f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}")
+        return
+
+    if is_reminder_request(message.text):
+        reminder_text = extract_reminder_text(message.text)
+        if not reminder_text:
+            await message.answer("Что именно напомнить и во сколько?")
+            return
+        user.pending_reminder = {"text": reminder_text[:500]}
+        await db_session.commit()
+        await message.answer(f"Хорошо. Во сколько напомнить про «{reminder_text}»?")
         return
 
     if any(word in message.text.lower() for word in ("завтра", "сегодня", "пойду", "иду", "буду")):
