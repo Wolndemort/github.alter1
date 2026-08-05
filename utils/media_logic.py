@@ -1,8 +1,9 @@
 import base64
+import json
 import logging
 
 from config import config
-from utils.ap_logic import client
+from utils.ap_logic import chat_with_fallback, client
 from utils.prompts import MEDIA_SYSTEM_PROMPT
 
 
@@ -53,3 +54,37 @@ async def generate_media_reply(
     except Exception:
         logging.exception("Media analysis error")
         return "Не удалось проанализировать файл. Проверь формат и ключ модели."
+
+
+async def extract_visual_context(
+    prompt: str,
+    media: list[tuple[str, bytes]],
+) -> dict:
+    """Create a compact, factual visual summary for future turns."""
+    content = [{
+        "type": "text",
+        "text": (
+            "Верни только JSON без markdown. Опиши исключительно то, что реально "
+            "видно на изображении: предметы, одежду, цвета, стиль, посадку и важные "
+            "детали. Не определяй личность, возраст, бренд или настроение без "
+            "надёжных визуальных оснований. Формат: {\"items\":[], \"colors\":[], "
+            "\"style\":[], \"fit\":[], \"details\":[]}. Запрос пользователя: "
+            + (prompt or "анализ изображения")
+        ),
+    }]
+    for media_type, data in media:
+        encoded = base64.b64encode(data).decode("ascii")
+        content.append({"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{encoded}"}})
+    try:
+        response = await chat_with_fallback(
+            [{"role": "system", "content": "Ты аккуратный визуальный каталогизатор."}, {"role": "user", "content": content}],
+            max_tokens=180,
+        )
+        raw = (response.choices[0].message.content or "{}").strip().strip("` ")
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        result = json.loads(raw)
+        return result if isinstance(result, dict) else {}
+    except Exception:
+        logging.exception("Visual context extraction failed")
+        return {}

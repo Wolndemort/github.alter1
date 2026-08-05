@@ -14,7 +14,7 @@ from data.models import ImportantEvent, Reminder, Session
 from data.models import User
 from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
-from utils.helpers import deep_merge
+from utils.helpers import merge_memory
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 
 
@@ -101,7 +101,7 @@ async def process_session(session: Session, db) -> bool:
     if not facts or not session.user:
         return False
     current = dict(session.user.memory or {})
-    session.user.memory = deep_merge(current, facts)
+    session.user.memory = merge_memory(current, facts)
     flag_modified(session.user, "memory")
     for event in extract_important_events(facts):
         await save_unique_event(event, session.user.id, db)

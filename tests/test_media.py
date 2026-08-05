@@ -62,6 +62,17 @@ def test_media_reply_includes_search_context(monkeypatch):
     assert "https://example.com/item" in captured["messages"][-1]["content"][0]["text"]
 
 
+def test_extract_visual_context_parses_structured_summary(monkeypatch):
+    async def fake_chat(*args, **kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+            content='{"items":["куртка"],"colors":["чёрный"],"style":["casual"],"fit":["oversize"],"details":[]}'))])
+
+    monkeypatch.setattr(media_logic, "chat_with_fallback", fake_chat)
+    result = run(media_logic.extract_visual_context("Подбери лук", [("image/jpeg", b"fake-image")]))
+    assert result["items"] == ["куртка"]
+    assert result["fit"] == ["oversize"]
+
+
 def test_media_reply_returns_safe_error(monkeypatch):
     async def fail(**kwargs):
         raise RuntimeError("vision unavailable")

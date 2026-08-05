@@ -9,6 +9,7 @@ class Setting(BaseSettings):
     # Keep local defaults aligned with the documented .env configuration.
     # Environment variables still take precedence over these values.
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
+    OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
     YOUTUBE_API_KEY: SecretStr | None = None

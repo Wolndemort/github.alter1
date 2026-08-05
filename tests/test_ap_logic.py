@@ -51,3 +51,8 @@ def test_generate_reply_includes_memory_and_avoids_repetition_instruction(monkey
     system_prompt = captured["messages"][0]["content"]
     assert "Adam" in system_prompt
     assert "Не повторяй факты" in system_prompt
+
+
+def test_tool_definitions_are_present():
+    names = {item["function"]["name"] for item in ap_logic.TOOL_DEFINITIONS}
+    assert {"web_search", "get_weather", "youtube_search"} <= names

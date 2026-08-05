@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from data.models import ImportantEvent, Reminder, User, Session
 from utils.ap_logic import generate_reply
-from utils.media_logic import generate_media_reply
+from utils.media_logic import extract_visual_context, generate_media_reply
 from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
@@ -309,11 +309,6 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
         if should_search_web(prompt) and not is_youtube_request(prompt):
             web_results = await search_web(prompt)
         kind = "Фото" if message.photo else "Видео"
-        media_ref = {
-            "media_type": "image/jpeg" if message.photo else "video/mp4",
-            "file_id": message.photo[-1].file_id if message.photo else message.video.file_id,
-        }
-        append_session_message(session, "user", f"[{kind}] {prompt}", media=media_ref)
         reply = await generate_media_reply(
             prompt,
             media,
@@ -328,6 +323,13 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                 f"• {item['title']} — {item['url']}" for item in web_results[:5]
             )
         await message.answer(reply)
+        visual_context = await extract_visual_context(prompt, media)
+        media_ref = {
+            "media_type": "image/jpeg" if message.photo else "video/mp4",
+            "file_id": message.photo[-1].file_id if message.photo else message.video.file_id,
+        }
+        context_suffix = f"\nВизуальный контекст: {visual_context}" if visual_context else ""
+        append_session_message(session, "user", f"[{kind}] {prompt}{context_suffix}", media=media_ref)
         append_session_message(session, "assistant", reply)
         await db_session.commit()
     except Exception:
@@ -386,8 +388,17 @@ async def restore_session_media(bot, media_ref: dict) -> list[tuple[str, bytes]]
     return []
 
 
-def recent_context(messages: list, limit: int = 40) -> list:
-    return list(messages[-limit:])
+def recent_context(messages: list, limit: int = 40, max_chars: int = 12000) -> list:
+    """Keep the newest turns while bounding prompt size and preserving order."""
+    selected = []
+    chars = 0
+    for item in reversed(list(messages or [])[-limit:]):
+        content = str(item.get("content", "")) if isinstance(item, dict) else str(item)
+        if selected and chars + len(content) > max_chars:
+            break
+        selected.append(item)
+        chars += len(content)
+    return list(reversed(selected))
 
 
 async def get_or_create_user(message: types.Message, db_session: AsyncSession) -> User:
