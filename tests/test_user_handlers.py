@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from data.models import Session, User
 from handlers import user_handlers
+from utils import ap_logic
 from handlers.user_handlers import append_session_message, recent_context
 
 
@@ -103,3 +104,70 @@ def test_plain_message_offline_handler_flow(monkeypatch):
 
     assert answers == ["Ответ из offline smoke-теста"]
     assert actions == [(100, "typing")]
+
+
+def test_handler_returns_safe_reply_when_ai_is_unavailable(monkeypatch):
+    user = User(id=43, first_name="Test", memory={}, tech_stack={})
+    user.pending_reminder = {}
+    answers = []
+
+    class Result:
+        def scalar_one_or_none(self):
+            return None
+
+        def scalars(self):
+            return iter(())
+
+    class DB:
+        async def get(self, model, key):
+            return user
+
+        async def execute(self, statement):
+            return Result()
+
+        def add(self, item):
+            pass
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+        async def refresh(self, item):
+            pass
+
+    class Bot:
+        async def send_chat_action(self, chat_id, action):
+            pass
+
+    class Message:
+        text = "Помоги мне, пожалуйста"
+        from_user = SimpleNamespace(id=43, username="test", first_name="Test")
+        chat = SimpleNamespace(id=101)
+        bot = Bot()
+
+        async def answer(self, text):
+            answers.append(text)
+
+    async def ai_failure(**kwargs):
+        raise RuntimeError("provider unavailable")
+
+    async def no_recall(*args):
+        return []
+
+    async def no_remember(*args, **kwargs):
+        pass
+
+    async def fake_answer(message, reply, current_user, force_voice=False):
+        await message.answer(reply)
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", ai_failure)
+    monkeypatch.setattr(user_handlers, "recall", no_recall)
+    monkeypatch.setattr(user_handlers, "remember", no_remember)
+    monkeypatch.setattr(user_handlers, "answer_reply", fake_answer)
+
+    asyncio.run(user_handlers.handle_any_message(Message(), DB()))
+
+    assert len(answers) == 1
+    assert "не удалось получить ответ" in answers[0].lower()
