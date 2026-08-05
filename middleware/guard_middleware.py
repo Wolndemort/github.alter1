@@ -62,4 +62,16 @@ class GuardMiddleware(BaseMiddleware):
                     return None
             else:
                 data["subscription_allowed"] = True
-        return await handler(event, data)
+        try:
+            return await handler(event, data)
+        except Exception:
+            # Do not leave the user without feedback when an unexpected error
+            # happens after admission (DB, model, Telegram, or application code).
+            logging.exception("Unhandled bot handler error")
+            answer = getattr(event, "answer", None)
+            if answer:
+                try:
+                    await answer("Не смог обработать сообщение. Попробуй ещё раз через несколько секунд.")
+                except Exception:
+                    logging.exception("Failed to send handler error reply")
+            return None

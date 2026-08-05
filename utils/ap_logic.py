@@ -7,7 +7,7 @@ from config import config
 from utils.metrics import increment
 from utils.quality import assess_reply
 
-client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=1)
+client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "worldview", "politics", "preferences", "important_events", "open_loops"}
 KEY_ALIASES = {"имя": "name", "возраст": "age", "город": "city", "работа": "job", "профессия": "job"}
 TOOL_DEFINITIONS = [

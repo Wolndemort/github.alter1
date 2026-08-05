@@ -50,8 +50,10 @@ class Setting(BaseSettings):
     MAX_OUTPUT_TOKENS: int = 600
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
-    AI_TIMEOUT_SECONDS: int = 45
-    TOOL_MAX_ROUNDS: int = 6
+    # Keep free-model failures bounded during testing. A long sequential
+    # fallback chain otherwise looks like the bot stopped responding.
+    AI_TIMEOUT_SECONDS: int = 20
+    TOOL_MAX_ROUNDS: int = 2
 
     model_config = SettingsConfigDict(
         env_file=".env",
