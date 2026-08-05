@@ -72,15 +72,29 @@ def _request_text(messages) -> str:
     return " ".join(parts).casefold()
 
 
+def _has_visual_input(messages) -> bool:
+    """Whether the request contains OpenAI-compatible image content."""
+    for message in messages or []:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(
+            isinstance(item, dict) and item.get("type") in {"image_url", "input_image"}
+            for item in content
+        ):
+            return True
+    return False
+
+
 def select_model_route(messages, task: str | None = None) -> list[str]:
     """Choose an inexpensive model for chat and a stronger one for hard work."""
     text = _request_text(messages)
     is_complex = task in {"reasoning", "planning"} or len(text) >= 700 or any(
         re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
     )
-    primary = [config.OPENROUTER_MODEL, config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
     if is_complex:
-        primary.insert(0, config.OPENROUTER_REASONING_MODEL)
+        primary = [config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL, config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
+    else:
+        free_model = config.OPENROUTER_FREE_VISION_MODEL if _has_visual_input(messages) else config.OPENROUTER_FREE_MODEL
+        primary = [free_model, config.OPENROUTER_MODEL, config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
     return list(dict.fromkeys(filter(None, primary)))
 
 

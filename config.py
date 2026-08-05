@@ -9,6 +9,9 @@ class Setting(BaseSettings):
     # Keep local defaults aligned with the documented .env configuration.
     # Environment variables still take precedence over these values.
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
+    # Override these with an available OpenRouter :free model in .env.
+    OPENROUTER_FREE_MODEL: str = "google/gemini-2.0-flash-exp:free"
+    OPENROUTER_FREE_VISION_MODEL: str = "google/gemini-2.0-flash-exp:free"
     OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
     OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
     OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"

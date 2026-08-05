@@ -20,7 +20,7 @@ def test_chat_fallback_uses_second_model(monkeypatch):
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     result = run(ap_logic.chat_with_fallback([{"role": "user", "content": "hi"}]))
     assert result.choices == []
-    assert calls[0] == ap_logic.config.OPENROUTER_MODEL
+    assert calls[0] == ap_logic.config.OPENROUTER_FREE_MODEL
     assert len(calls) == 2
 
 
@@ -51,7 +51,18 @@ def test_complex_request_starts_with_reasoning_model():
 
 def test_simple_request_uses_fast_model_first():
     route = ap_logic.select_model_route([{"role": "user", "content": "Привет, как дела?"}])
-    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL
+
+
+def test_visual_request_uses_free_vision_model_first():
+    route = ap_logic.select_model_route([{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What is in this photo?"},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,abc"}},
+        ],
+    }])
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_VISION_MODEL
 
 
 def test_long_system_prompt_does_not_force_reasoning_route():
@@ -59,7 +70,7 @@ def test_long_system_prompt_does_not_force_reasoning_route():
         {"role": "system", "content": "memory " * 1000},
         {"role": "user", "content": "Привет"},
     ])
-    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL
 
 
 def test_tool_loop_preserves_tool_calls_and_returns_final_answer(monkeypatch):

@@ -64,7 +64,7 @@ def test_model_eval_does_not_route_long_assistant_history_to_reasoning():
         {"role": "assistant", "content": "history " * 2000},
         {"role": "user", "content": "Спасибо"},
     ])
-    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL
 
 
 def test_tool_eval_rejects_unknown_tool_without_external_call():
