@@ -3,6 +3,7 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
+from aiohttp import web
 
 from config import config
 from data.database import async_session, engine
@@ -12,6 +13,7 @@ from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis
 from utils.runtime import check_dependencies
 from utils.tasks import monitor_checkins, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
+from utils.payment_webhook import handle_yookassa_webhook
 
 
 async def main():
@@ -29,6 +31,14 @@ async def main():
     dispatcher.callback_query.middleware(DbSessionMiddleware(session_pool=async_session))
     dispatcher.message.middleware(GuardMiddleware(redis))
     dispatcher.include_router(router)
+    web_app = web.Application()
+    web_app.router.add_get("/health", lambda request: web.json_response({"ok": True}))
+    web_app.router.add_post(config.PAYMENT_WEBHOOK_PATH, handle_yookassa_webhook)
+    web_runner = web.AppRunner(web_app)
+    await web_runner.setup()
+    web_site = web.TCPSite(web_runner, config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT)
+    await web_site.start()
+    logging.info("Payment webhook listening on %s:%s%s", config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT, config.PAYMENT_WEBHOOK_PATH)
     asyncio.create_task(monitor_personality_imprint())
     asyncio.create_task(monitor_reminders(bot))
     asyncio.create_task(monitor_checkins(bot))
@@ -41,6 +51,7 @@ async def main():
     except Exception:
         logging.exception("Critical bot runtime error")
     finally:
+        await web_runner.cleanup()
         await close_redis(redis)
         await bot.session.close()
 

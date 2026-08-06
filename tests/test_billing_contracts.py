@@ -62,3 +62,25 @@ def test_legal_start_flow_and_callback_middleware_are_wired():
     assert "legal_accepted_at" in handlers
     assert "dispatcher.callback_query.middleware" in main
     assert "_legal_exempt" in guard
+
+
+def test_yookassa_webhook_is_publicly_wired_and_verified():
+    root = Path(__file__).parents[1]
+    webhook = (root / "utils" / "payment_webhook.py").read_text(encoding="utf-8")
+    main = (root / "main.py").read_text(encoding="utf-8")
+    nginx = (root / "nginx.alter.conf").read_text(encoding="utf-8")
+    assert "payment.succeeded" in webhook
+    assert "check_and_activate" in webhook
+    assert "PAYMENT_WEBHOOK_PATH" in main
+    assert "/webhooks/yookassa" in nginx
+    assert "alter_bot:8080" in nginx
+
+
+def test_payment_safety_controls_are_present():
+    root = Path(__file__).parents[1]
+    billing = (root / "utils" / "billing.py").read_text(encoding="utf-8")
+    guard = (root / "middleware" / "guard_middleware.py").read_text(encoding="utf-8")
+    assert "with_for_update" in billing
+    assert "payment_method_data" in billing
+    assert "save_payment_method" in billing
+    assert "spam_allowed" in guard and "billing_allowed" in guard

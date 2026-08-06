@@ -508,7 +508,7 @@ async def restore_session_media(bot, media_ref: dict) -> list[tuple[str, bytes]]
     return []
 
 
-def recent_context(messages: list, limit: int = 24, max_chars: int = 6000) -> list:
+def recent_context(messages: list, limit: int = 40, max_chars: int = 12000) -> list:
     """Keep the newest turns while bounding prompt size and preserving order."""
     selected = []
     chars = 0

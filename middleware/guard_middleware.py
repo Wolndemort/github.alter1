@@ -44,6 +44,16 @@ class GuardMiddleware(BaseMiddleware):
             except RedisError:
                 logging.exception("Redis spam check failed; allowing request")
                 data["spam_allowed"] = True
+            if data.get("db_session") is not None and not is_owner(user.id) and not _billing_exempt(event):
+                answer = getattr(event, "answer", None)
+                if not data["spam_allowed"]:
+                    if answer:
+                        await answer("Слишком много запросов подряд. Подожди немного и попробуй снова.")
+                    return None
+                if not data["billing_allowed"]:
+                    if answer:
+                        await answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
+                    return None
             db_session = data.get("db_session")
             if db_session is not None:
                 db_user = await db_session.get(User, user.id)

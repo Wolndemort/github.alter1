@@ -52,6 +52,11 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/alter_project_db"
       REDIS_URL: "redis://redis:6379/0"
+    expose:
+      - "8080"
+    networks:
+      - default
+      - web_network
     logging: *default-logging
 
   migrations:

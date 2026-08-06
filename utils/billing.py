@@ -91,7 +91,9 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
 
 
 async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
-    payment = (await session.execute(select(Payment).where(Payment.idempotence_key == payment_key))).scalar_one_or_none()
+    payment = (await session.execute(
+        select(Payment).where(Payment.idempotence_key == payment_key).with_for_update()
+    )).scalar_one_or_none()
     if not payment or not configured() or not payment.provider_payment_id:
         return False
     async with httpx.AsyncClient(auth=(config.YUKASSA_SHOP_ID, config.YUKASSA_SECRET_KEY.get_secret_value()), timeout=15) as client:
@@ -159,10 +161,24 @@ async def charge_recurring_payment(session: AsyncSession, user: User) -> str:
             headers={"Idempotence-Key": key},
         )
     data = response.json()
-    if response.status_code not in {200, 201} or data.get("status") != "succeeded":
+    if response.status_code not in {200, 201} or data.get("status") not in {"succeeded", "pending", "waiting_for_capture"}:
         user.auto_renew = False
         await session.commit()
         return "failed"
+    if data.get("status") != "succeeded":
+        if existing is None:
+            session.add(Payment(
+                user_id=user.id,
+                provider_payment_id=data.get("id"),
+                idempotence_key=key,
+                amount_rub=str(amount),
+                status="pending",
+            ))
+        user.next_charge_at = datetime.now(timezone.utc) + timedelta(
+            seconds=max(3600, config.SUBSCRIPTION_RENEWAL_CHECK_SECONDS)
+        )
+        await session.commit()
+        return "pending"
     now = datetime.now(timezone.utc)
     base = user.subscription_expires_at if has_active_subscription(user) else now
     user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)

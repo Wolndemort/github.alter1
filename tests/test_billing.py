@@ -198,6 +198,18 @@ def test_recurring_failure_disables_auto_renew(configured_yookassa):
     assert user.auto_renew is False
 
 
+def test_recurring_pending_waits_for_webhook(configured_yookassa):
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    user.payment_method_id = "pm-1"
+    user.auto_renew = True
+    user.next_charge_at = datetime.now(timezone.utc)
+    session = Session(user=user)
+    FakeClient.response = FakeResponse(201, {"id": "renew-pending", "status": "pending"})
+    assert run(charge_recurring_payment(session, user)) == "pending"
+    assert session.added and session.added[0].status == "pending"
+    assert user.next_charge_at > datetime.now(timezone.utc)
+
+
 def test_recurring_skips_without_opt_in_or_card():
     user = User(id=7, first_name="Test", memory={}, tech_stack={})
     assert run(charge_recurring_payment(Session(user=user), user)) == "skipped"
