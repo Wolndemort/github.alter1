@@ -1,5 +1,130 @@
 # ALTER
 
+## Current project state (2026-08-06)
+
+ALTER has an independent Expo mobile client alongside the existing Telegram
+client. Both clients use the same users, memory, sessions, reminders,
+subscriptions, and payments. No duplicate mobile database was introduced.
+
+### Local iPhone testing
+
+Use this mode while the iPhone and computer are on the same Wi-Fi network:
+
+```powershell
+cd C:\Users\79615\PycharmProjects\Alter\mobile
+npm install --registry=https://registry.npmmirror.com --fetch-timeout=120000 --fetch-retries=5
+npx expo start --offline --port 8082 -c
+```
+
+Scan the QR code in Expo Go. Press `r` in Metro to reload. `--offline` only
+disables Expo registry checks; the app still uses the HTTPS API from
+`mobile/.env`.
+
+Same-network mode without the offline flag:
+
+```powershell
+npx expo start --lan --port 8082 -c
+```
+
+Mobile-network testing through Expo Go needs a tunnel. ngrok is currently
+unstable, so this is temporary:
+
+```powershell
+npx expo start --tunnel --port 8082
+```
+
+Permanent iPhone use without a computer requires EAS/TestFlight and an Apple
+Developer Program account. Telegram remains available remotely meanwhile.
+
+### Verification commands
+
+```powershell
+cd C:\Users\79615\PycharmProjects\Alter
+py -3 -m pytest -q
+py -3 -m compileall -q .
+git diff --check
+cd mobile
+cmd /c "npx tsc --noEmit"
+cmd /c "npm test -- --runInBand"
+```
+
+Verified current result: `235` backend tests and `11` mobile tests pass.
+TypeScript passes too. The SafeAreaView output is only a deprecation warning.
+
+### Completed mobile work
+
+- Expo SDK 54 dependency alignment and lockfile update.
+- Black/white futuristic interface with a violet accent and animated intro.
+- Optional intro sound through `EXPO_PUBLIC_INTRO_SOUND_URL`.
+- Email registration, six-digit verification, resend, and token persistence.
+- Chat typing animation, keyboard insets, automatic scroll-to-bottom, media
+  picker, multipart image/video upload, and press-and-hold violet microphone.
+- Minimal account cabinet with white ALTER-style typography, memory screen,
+  subscription/payment action, logout, and `Synchronize memory with Telegram`.
+
+### Completed backend work
+
+- Auth endpoints: register, verify email, resend code, login, and account.
+- Shared chat, memory, media, weather/tools, reminders, settings, YouTube,
+  subscriptions, YooKassa payments, and Telegram-link APIs.
+- One-time Redis Telegram link merges mobile and Telegram profiles.
+- SMTP and console email modes; console mode is useful for testing only.
+- `OWNER_TELEGRAM_IDS` and `OWNER_EMAILS` bypass subscription checks for the
+  owner without adding a database field or migration.
+
+### VPS update after a push
+
+The `.env` file is never committed. On the server:
+
+```bash
+cd /root/alter
+git pull --ff-only origin master
+```
+
+Ensure the server `.env` contains:
+
+```dotenv
+OWNER_EMAILS=kid.cudi.1995@mail.ru
+OPENROUTER_ALLOW_PAID_FALLBACK=true
+```
+
+Rebuild and verify:
+
+```bash
+docker compose run --rm migrations
+docker compose up -d --build bot alter-nginx
+docker compose ps
+curl https://api.alterai.ru/health
+docker compose logs --tail=120 bot
+```
+
+Expected health response: `{"ok":true}`.
+
+### OpenRouter key diagnostic
+
+The OpenRouter key has its own spending limit. A key with
+`limit_remaining: 0` returns `403` even after account top-up. Check it without
+printing the key:
+
+```bash
+cd /root/alter
+docker compose exec bot python -c "from config import config; import httpx; r=httpx.get('https://openrouter.ai/api/v1/key',headers={'Authorization':'Bearer '+config.OPENROUTER_API_KEY.get_secret_value()}); print(r.status_code, r.text)"
+```
+
+Never paste API keys or passwords into chat, Git, README, or screenshots.
+
+### Important files
+
+| Area | Files |
+|---|---|
+| Mobile UI | `mobile/App.tsx` |
+| Mobile API/tests | `mobile/src/api/client.ts`, `mobile/App.test.tsx`, `mobile/src/api/client.test.ts` |
+| Auth/email | `api/auth_routes.py`, `services/auth_service.py`, `services/email_service.py` |
+| Chat/media | `api/chat_routes.py`, `api/youtube_routes.py`, `services/chat_service.py` |
+| Billing/access | `utils/billing.py`, `config.py` |
+| Migrations | `alembic/versions/0016_email_verification.py`, `0017_telegram_account_link.py` |
+| API contract | `docs/APP_API.md` |
+
 Telegram-ассистент на aiogram с памятью, живым диалогом, голосовыми, фото, видео, музыкой, погодой, напоминаниями и check-in.
 
 ## Возможности
