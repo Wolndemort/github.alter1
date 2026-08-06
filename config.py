@@ -59,6 +59,11 @@ class Setting(BaseSettings):
     AI_DEEP_REVIEW_ENABLED: bool = True
     AI_DEEP_REVIEW_MAX_TOKENS: int = 900
     TOOL_MAX_ROUNDS: int = 2
+    MEMORY_RECALL_LIMIT: int = 3
+    MEMORY_RECALL_MAX_DISTANCE: float = 0.35
+    MEMORY_AUTO_RECALL_MIN_CHARS: int = 40
+    MEMORY_PROMPT_MAX_CHARS: int = 4500
+    MEMORY_SUMMARY_MAX_CHARS: int = 7000
 
     model_config = SettingsConfigDict(
         env_file=".env",

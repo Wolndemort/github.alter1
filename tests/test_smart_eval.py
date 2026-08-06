@@ -27,6 +27,30 @@ def test_memory_eval_keeps_only_supported_categories_and_normalizes_keys():
     }
 
 
+def test_prompt_memory_is_bounded_without_dropping_the_memory_shape():
+    bounded = ap_logic._bounded_memory({"identity": {"name": "Adam"}, "open_loops": ["x" * 10000]}, max_chars=300)
+    assert len(str(bounded)) < 600
+    assert "identity" in bounded
+
+
+def test_session_summary_uses_recent_bounded_messages(monkeypatch):
+    captured = {}
+
+    async def create(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return response("{}")
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    result = run(ap_logic.summarize_session([
+        {"role": "user", "content": "old " * 3000},
+        {"role": "user", "content": "latest"},
+    ]))
+    assert result == {}
+    payload = captured["messages"][1]["content"]
+    assert len(payload) <= ap_logic.config.MEMORY_SUMMARY_MAX_CHARS + 100
+    assert "latest" in payload
+
+
 def test_memory_eval_correction_overwrites_scalar_but_preserves_other_facts():
     result = merge_memory(
         {"identity": {"city": "Москва", "name": "Адам"}},

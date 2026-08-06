@@ -71,6 +71,27 @@ def test_recall_returns_empty_when_embedding_provider_fails(monkeypatch):
     assert run(vector_memory.recall(object(), 1, "question")) == []
 
 
+def test_recall_applies_similarity_filter_and_small_default_limit(monkeypatch):
+    async def fake_embed(_):
+        return [0.1] * 1536
+
+    captured = {}
+
+    class Result:
+        def scalars(self):
+            return iter(["relevant memory"])
+
+    class DB:
+        async def execute(self, statement):
+            captured["statement"] = str(statement)
+            return Result()
+
+    monkeypatch.setattr(vector_memory, "embed", fake_embed)
+    assert run(vector_memory.recall(DB(), 1, "question")) == ["relevant memory"]
+    assert "LIMIT" in captured["statement"].upper()
+    assert "<=" in captured["statement"]
+
+
 def test_remember_ignores_embedding_provider_failure(monkeypatch):
     async def fail(_):
         raise RuntimeError("embedding provider unavailable")

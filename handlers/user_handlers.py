@@ -932,7 +932,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     # queries. Recalling old vector memories for them makes the bot inject
     # unrelated topics into an otherwise normal reply.
     recalled = []
-    if len(message.text.strip()) >= 20 and should_recall_context(message.text):
+    if (
+        len(message.text.strip()) >= config.MEMORY_AUTO_RECALL_MIN_CHARS
+        or should_recall_context(message.text)
+    ):
         recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled

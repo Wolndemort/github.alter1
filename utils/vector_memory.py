@@ -24,13 +24,22 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
         logging.exception("Vector memory save failed")
 
 
-async def recall(db: AsyncSession, user_id: int, text: str, limit=5) -> list[str]:
+async def recall(
+    db: AsyncSession,
+    user_id: int,
+    text: str,
+    limit: int | None = None,
+    max_distance: float | None = None,
+) -> list[str]:
     try:
         vector = await embed(text)
+        limit = limit or config.MEMORY_RECALL_LIMIT
+        max_distance = config.MEMORY_RECALL_MAX_DISTANCE if max_distance is None else max_distance
+        distance = MemoryChunk.embedding.cosine_distance(vector)
         result = await db.execute(
             select(MemoryChunk.content)
-            .where(MemoryChunk.user_id == user_id)
-            .order_by(MemoryChunk.embedding.cosine_distance(vector))
+            .where(MemoryChunk.user_id == user_id, distance <= max_distance)
+            .order_by(distance)
             .limit(limit)
         )
         values = list(result.scalars())

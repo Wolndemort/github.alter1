@@ -81,6 +81,20 @@ def _bounded_memory(value, max_chars: int = 4500) -> dict:
             break
     return bounded
 
+
+def _bounded_messages(messages, max_chars: int | None = None) -> list:
+    """Keep the newest turns when summarizing an inactive session."""
+    max_chars = max_chars or config.MEMORY_SUMMARY_MAX_CHARS
+    selected = []
+    chars = 0
+    for item in reversed(list(messages or [])):
+        content = str(item.get("content", "")) if isinstance(item, dict) else str(item)
+        if selected and chars + len(content) > max_chars:
+            break
+        selected.append(item)
+        chars += len(content)
+    return list(reversed(selected))
+
 GOLDEN_PROMT = ("Извлекай факты только если пользователь явно сообщил их сам — о себе или своих планах. Не извлекай предположения, настроение, диагнозы или сведения о третьих лицах как факты пользователя. Если пользователь исправил старую информацию, используй новую. Отдельно сохраняй будущие события, обещания ALTER вернуться к теме и незавершённые дела в open_loops; для них указывай title, follow_up_question и follow_up_at. follow_up_at заполняй только если время понятно, в ISO 8601 с часовым поясом; иначе оставляй пустым. Верни строгий JSON, ключи snake_case; "
                 "категории: identity:; health_sport:; food_drinks:; skills_career:; interests_hobbies:; goals_habits:; "
                 "psycho_vibe:; relationships:; worldview:; politics:; preferences:; important_events:; open_loops:. "
@@ -373,14 +387,14 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
 
 async def summarize_session(messages):
     try:
-        context = {"current_time": datetime.now(timezone.utc).isoformat(), "messages": messages}
+        context = {"current_time": datetime.now(timezone.utc).isoformat(), "messages": _bounded_messages(messages)}
         response = await chat_with_fallback([{"role": "system", "content": GOLDEN_PROMT}, {"role": "user", "content": json.dumps(context, ensure_ascii=False)}], config.MAX_MEMORY_OUTPUT_TOKENS)
         return normalize_memory(json.loads((response.choices[0].message.content or "{}").strip("` ").removeprefix("json").strip()))
     except Exception: return {}
 
 async def generate_reply(messages, memory=None, search_results=None):
     try:
-        memory = _bounded_memory(memory)
+        memory = _bounded_memory(memory, config.MEMORY_PROMPT_MAX_CHARS)
         sources = ""
         if search_results:
             sources = "\nАктуальные результаты поиска (используй их, не выдумывай факты; сравнивай несколько источников, отмечай противоречия и не считай один сниппет доказательством):\n" + "\n".join(
