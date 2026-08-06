@@ -95,6 +95,44 @@ def _bounded_messages(messages, max_chars: int | None = None) -> list:
         chars += len(content)
     return list(reversed(selected))
 
+
+def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
+    """Hard cost guard: never send an unexpectedly huge prompt upstream."""
+    max_chars = max_chars or config.AI_MAX_PROMPT_CHARS
+    items = list(messages or [])
+    if sum(len(str(item.get("content", ""))) for item in items if isinstance(item, dict)) <= max_chars:
+        return items
+
+    system_item = next((item for item in items if isinstance(item, dict) and item.get("role") == "system"), None)
+    latest_user_item = next((item for item in reversed(items) if isinstance(item, dict) and item.get("role") == "user"), None)
+    kept = []
+    selected = {}
+    used = 0
+    if system_item:
+        system = dict(system_item)
+        system["content"] = str(system.get("content", ""))[:max_chars // 3]
+        selected[id(system_item)] = system
+        used += len(system["content"])
+    if latest_user_item and latest_user_item is not system_item:
+        latest_user = dict(latest_user_item)
+        latest_user["content"] = str(latest_user.get("content", ""))[:max_chars // 3]
+        selected[id(latest_user_item)] = latest_user
+        used += len(latest_user["content"])
+    for item in reversed(items):
+        if item is system_item or item is latest_user_item:
+            continue
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get("content", ""))
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        copy = dict(item)
+        copy["content"] = content[:remaining]
+        selected[id(item)] = copy
+        used += len(copy["content"])
+    return [selected[id(item)] for item in items if id(item) in selected]
+
 GOLDEN_PROMT = ("Извлекай факты только если пользователь явно сообщил их сам — о себе или своих планах. Не извлекай предположения, настроение, диагнозы или сведения о третьих лицах как факты пользователя. Если пользователь исправил старую информацию, используй новую. Отдельно сохраняй будущие события, обещания ALTER вернуться к теме и незавершённые дела в open_loops; для них указывай title, follow_up_question и follow_up_at. follow_up_at заполняй только если время понятно, в ISO 8601 с часовым поясом; иначе оставляй пустым. Верни строгий JSON, ключи snake_case; "
                 "категории: identity:; health_sport:; food_drinks:; skills_career:; interests_hobbies:; goals_habits:; "
                 "psycho_vibe:; relationships:; worldview:; politics:; preferences:; important_events:; open_loops:. "
@@ -252,6 +290,7 @@ async def _deep_review_reply(messages, draft: str, search_results=None) -> str:
 
 
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
+    messages = _bounded_api_messages(messages)
     route = select_model_route(messages, task) if models is None else _route_with_available_models(list(dict.fromkeys(filter(None, models))))
     for model in route:
         try:

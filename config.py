@@ -61,6 +61,7 @@ class Setting(BaseSettings):
     AI_DEEP_REVIEW_ENABLED: bool = True
     AI_DEEP_REVIEW_MAX_TOKENS: int = 900
     TOOL_MAX_ROUNDS: int = 2
+    AI_MAX_PROMPT_CHARS: int = 12000
     PAYMENT_WEBHOOK_HOST: str = "0.0.0.0"
     PAYMENT_WEBHOOK_PORT: int = 8080
     PAYMENT_WEBHOOK_PATH: str = "/webhooks/yookassa"

@@ -51,6 +51,16 @@ def test_session_summary_uses_recent_bounded_messages(monkeypatch):
     assert "latest" in payload
 
 
+def test_api_prompt_has_a_hard_cost_limit():
+    messages = [
+        {"role": "system", "content": "system " * 5000},
+        {"role": "user", "content": "latest " * 5000},
+    ]
+    bounded = ap_logic._bounded_api_messages(messages, max_chars=1200)
+    assert sum(len(str(item.get("content", ""))) for item in bounded) <= 1200
+    assert bounded[-1]["role"] == "user"
+
+
 def test_memory_eval_correction_overwrites_scalar_but_preserves_other_facts():
     result = merge_memory(
         {"identity": {"city": "Москва", "name": "Адам"}},
