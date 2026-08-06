@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import BigInteger, String, func, ForeignKey, DateTime
+from sqlalchemy import BigInteger, String, Float, func, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
@@ -90,8 +90,11 @@ class MemoryChunk(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
     content: Mapped[str] = mapped_column(String)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     embedding: Mapped[list] = mapped_column(Vector(1536))
     source: Mapped[str] = mapped_column(String(32), server_default='conversation')
+    importance: Mapped[float] = mapped_column(Float, default=0.5, server_default='0.5')
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

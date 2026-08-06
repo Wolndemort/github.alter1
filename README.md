@@ -199,6 +199,8 @@ ALTER разделяет память на несколько уровней:
 
 Память и история дополнительно ограничиваются перед запросом к модели. Это важно для бесплатных моделей OpenRouter с небольшим context window: долговременные данные сохраняются в БД, но в конкретный prompt попадают только нужные фрагменты.
 
+Vector memory дополнительно защищена от повторной записи через `content_hash`, имеет `importance` и срок хранения `expires_at`. Истёкшие фрагменты удаляются отдельной ежедневной cleanup-задачей, а для PostgreSQL/pgvector создаётся HNSW cosine-индекс миграцией `0014_memory_lifecycle`.
+
 Настройки memory:
 
 ```env
@@ -214,16 +216,17 @@ MEMORY_SUMMARY_MAX_CHARS=7000
 ```env
 BOT_TOKEN=...
 OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=google/gemini-2.5-flash
 OPENROUTER_FREE_MODEL=google/gemma-4-31b-it:free
 OPENROUTER_FREE_MODEL_2=inclusionai/ling-3.0-flash:free
 OPENROUTER_FREE_MODEL_3=nvidia/nemotron-3-super-120b-a12b:free
 OPENROUTER_FREE_MODEL_4=google/gemma-4-26b-a4b-it:free
 OPENROUTER_FREE_MODEL_5=openai/gpt-oss-20b:free
+OPENROUTER_MODEL=openai/gpt-5.6-luna
 OPENROUTER_FREE_VISION_MODEL=google/gemma-4-31b-it:free
 OPENROUTER_FREE_VISION_MODEL_2=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
-OPENROUTER_FALLBACK_MODEL=openai/gpt-4o-mini
-OPENROUTER_FALLBACK_MODEL_2=anthropic/claude-3.5-haiku
+OPENROUTER_REASONING_MODEL=inclusionai/ling-2.6-1t
+OPENROUTER_FALLBACK_MODEL=inclusionai/ling-2.6-flash
+OPENROUTER_FALLBACK_MODEL_2=openai/gpt-5.6-terra
 OPENROUTER_ALLOW_PAID_FALLBACK=true
 OWNER_TELEGRAM_IDS=1271717628
 SUPPORT_USERNAME=Adam_Omarov
@@ -245,7 +248,7 @@ SESSION_TIMEOUT=300
 DAILY_REQUEST_LIMIT=100
 ```
 
-Текущая рабочая связка: Gemini 2.5 Flash как основная модель, затем GPT-4o-mini и Claude 3.5 Haiku как fallback через OpenRouter. После изменения моделей достаточно пересоздать контейнер bot:
+Текущая рабочая связка: бесплатные модели OpenRouter идут первыми, затем `openai/gpt-5.6-luna`, reasoning-модель `inclusionai/ling-2.6-1t` и платные fallback-модели. После изменения моделей достаточно пересоздать контейнер bot:
 
 ```powershell
 docker compose up -d --no-deps --force-recreate bot
@@ -320,6 +323,8 @@ https://api.alterai.ru/webhooks/yookassa
 
 В событиях включи как минимум `payment.succeeded` и `payment.canceled`. Nginx проксирует endpoint во внутренний порт bot `8080`. Проверка доступности: `https://api.alterai.ru/health`.
 
+Фоновые задачи используют транзакционные блокировки PostgreSQL (`FOR UPDATE SKIP LOCKED`) для сессий, check-in, expiry-напоминаний, renewals и обычных reminders. Это предотвращает двойную обработку при случайном запуске второго экземпляра.
+
 Обычная оплата картой сохраняет `payment_method_id`, а СБП оплачивает подписку без сохранения метода и поэтому не включает рекуррент автоматически. Автопродление включается отдельной кнопкой в кабинете только после успешной оплаты картой.
 
 ## Команды
@@ -382,14 +387,14 @@ Eval-сценарии находятся в `tests/test_smart_eval.py`. Они �
 py -m pytest -q tests/test_smart_eval.py
 ```
 
-Обычный текстовый и медиа-поиск проходит через `generate_reply`/`generate_media_reply` и planner/executor tool loop. Regex-интенты больше не решают, искать ли web-факты или погоду. Audio action тоже проходит через semantic-планировщик; число раундов задаётся `TOOL_MAX_ROUNDS` (по умолчанию 6, максимум 12). Каждый результат получает статус `ok`, `empty` или `error`; при проблеме planner может один раз изменить стратегию без участия пользователя.
+Обычный текстовый и медиа-поиск проходит через `generate_reply`/`generate_media_reply` и planner/executor tool loop. Regex-интенты больше не решают, искать ли web-факты или погоду. Audio action тоже проходит через semantic-планировщик; число раундов задаётся `TOOL_MAX_ROUNDS` (текущее значение по умолчанию — 2). Каждый результат получает статус `ok`, `empty` или `error`; при проблеме planner может один раз изменить стратегию без участия пользователя.
 
 После генерации `utils/quality.py` выполняет быстрый quality gate: проверяет пустоту, чрезмерную длину, лишние вопросы, утечку служебных полей и атрибуцию переданных источников. Ответ не блокируется, а предупреждение попадает в метрики. Это дешёвый runtime-контроль; глубокая фактологическая оценка выполняется отдельными eval-тестами.
 
 ## Итог текущей итерации
 
-После добавления биллинга и legal consent полный локальный suite: `144 passed`; `compileall` проходит.
+После добавления биллинга, legal consent, webhook и memory lifecycle полный локальный suite проверяется CI; `compileall` проходит.
 
 ALTER сейчас состоит не только из chat-вызова. В рабочем потоке есть память, семантический planner/executor, разрешённые инструменты, fallback-модели, проверка результата инструментов, quality gate, метрики, preflight зависимостей и offline smoke/eval-тесты.
 
-Текущий локальный baseline: `143 passed`, `compileall` проходит. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.
+Текущий локальный baseline меняется вместе с тестовым suite. Для локальной проверки Docker не нужен: `py -m pytest -q`, `py -m compileall -q .`, затем `py main.py`. Реальные Redis/PostgreSQL и Telegram нужны только для серверного интеграционного запуска.

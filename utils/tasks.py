@@ -18,6 +18,7 @@ from utils.ap_logic import summarize_session
 from utils.helpers import merge_memory
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
+from utils.vector_memory import purge_expired
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -147,6 +148,7 @@ async def monitor_personality_imprint():
                 result = await db.execute(
                     select(Session)
                     .where(Session.is_processed.is_(False), Session.updated_at < threshold)
+                    .with_for_update(skip_locked=True)
                     .options(selectinload(Session.user))
                 )
                 sessions = result.scalars().all()
@@ -162,6 +164,19 @@ async def monitor_personality_imprint():
             logging.exception("Background memory monitor failed")
 
         await asyncio.sleep(30)
+
+
+async def monitor_memory_cleanup():
+    """Remove expired episodic memories once a day in bounded batches."""
+    while True:
+        try:
+            async with async_session() as db:
+                removed = await purge_expired(db)
+                if removed:
+                    logging.info("Expired vector memories removed: %s", removed)
+        except Exception:
+            logging.exception("Vector memory cleanup failed")
+        await asyncio.sleep(86400)
 
 
 async def monitor_reminders(bot: Bot):
@@ -221,7 +236,9 @@ async def monitor_checkins(bot: Bot):
         try:
             async with async_session() as db:
                 now = datetime.now(timezone.utc)
-                result = await db.execute(select(User).where(User.checkins_enabled.is_(True)))
+                result = await db.execute(
+                    select(User).where(User.checkins_enabled.is_(True)).with_for_update(skip_locked=True)
+                )
                 for user in result.scalars().all():
                     memory = user.memory or {}
                     if not any(memory.get(key) for key in (
@@ -318,7 +335,9 @@ async def monitor_subscription_expiry_reminders(bot: Bot):
         try:
             async with async_session() as db:
                 now = datetime.now(timezone.utc)
-                result = await db.execute(select(User).where(User.subscription_expires_at > now))
+                result = await db.execute(
+                    select(User).where(User.subscription_expires_at > now).with_for_update(skip_locked=True)
+                )
                 bot_user = await bot.get_me()
                 for user in result.scalars().all():
                     if not user.subscription_expires_at or not has_active_subscription(user):

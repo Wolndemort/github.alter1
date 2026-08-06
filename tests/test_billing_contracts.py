@@ -84,3 +84,23 @@ def test_payment_safety_controls_are_present():
     assert "payment_method_data" in billing
     assert "save_payment_method" in billing
     assert "spam_allowed" in guard and "billing_allowed" in guard
+
+
+def test_memory_lifecycle_migration_is_after_legal_consent():
+    root = Path(__file__).parents[1]
+    migration = (root / "alembic" / "versions" / "0014_memory_lifecycle.py").read_text(encoding="utf-8")
+    assert 'revision = "0014_memory_lifecycle"' in migration
+    assert 'down_revision = "0013_legal_consent"' in migration
+    assert "content_hash" in migration
+    assert "vector_cosine_ops" in migration
+
+
+def test_background_workers_use_row_locks_and_ai_has_request_diagnostics():
+    root = Path(__file__).parents[1]
+    tasks = (root / "utils" / "tasks.py").read_text(encoding="utf-8")
+    logic = (root / "utils" / "ap_logic.py").read_text(encoding="utf-8")
+    compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
+    assert tasks.count("with_for_update(skip_locked=True)") >= 5
+    assert "request_id" in logic
+    assert "prompt_chars" in logic
+    assert "- .:/app" not in compose

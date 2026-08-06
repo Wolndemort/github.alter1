@@ -8,7 +8,7 @@ class Setting(BaseSettings):
     OPENROUTER_API_KEY: SecretStr | None = None
     # Keep local defaults aligned with the documented .env configuration.
     # Environment variables still take precedence over these values.
-    OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
+    OPENROUTER_MODEL: str = "openai/gpt-5.6-luna"
     # Override these with an available OpenRouter :free model in .env.
     OPENROUTER_FREE_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_MODEL_2: str = "inclusionai/ling-3.0-flash:free"
@@ -17,9 +17,9 @@ class Setting(BaseSettings):
     OPENROUTER_FREE_MODEL_5: str = "openai/gpt-oss-20b:free"
     OPENROUTER_FREE_VISION_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_VISION_MODEL_2: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-    OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
-    OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-4o-mini"
-    OPENROUTER_FALLBACK_MODEL_2: str = "anthropic/claude-3.5-haiku"
+    OPENROUTER_REASONING_MODEL: str = "inclusionai/ling-2.6-1t"
+    OPENROUTER_FALLBACK_MODEL: str = "inclusionai/ling-2.6-flash"
+    OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-5.6-terra"
     # Safety switch: never spend money unless this is explicitly enabled.
     OPENROUTER_ALLOW_PAID_FALLBACK: bool = False
     OWNER_TELEGRAM_IDS: str = "1271717628"

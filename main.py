@@ -12,7 +12,7 @@ from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis
 from utils.runtime import check_dependencies
-from utils.tasks import monitor_checkins, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
+from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
 
 
@@ -40,6 +40,7 @@ async def main():
     await web_site.start()
     logging.info("Payment webhook listening on %s:%s%s", config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT, config.PAYMENT_WEBHOOK_PATH)
     asyncio.create_task(monitor_personality_imprint())
+    asyncio.create_task(monitor_memory_cleanup())
     asyncio.create_task(monitor_reminders(bot))
     asyncio.create_task(monitor_checkins(bot))
     asyncio.create_task(monitor_subscription_renewals(bot))

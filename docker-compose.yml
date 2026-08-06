@@ -46,9 +46,6 @@ services:
         condition: service_started
       migrations:
         condition: service_completed_successfully
-    volumes:
-      - /app/.venv/
-      - .:/app
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/alter_project_db"
       REDIS_URL: "redis://redis:6379/0"

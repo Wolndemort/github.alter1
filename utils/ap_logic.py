@@ -2,6 +2,7 @@ import json
 import re
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
@@ -291,6 +292,9 @@ async def _deep_review_reply(messages, draft: str, search_results=None) -> str:
 
 async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, **kwargs):
     messages = _bounded_api_messages(messages)
+    request_id = uuid.uuid4().hex[:10]
+    prompt_chars = sum(len(str(item.get("content", ""))) for item in messages if isinstance(item, dict))
+    logging.info("AI request started request_id=%s prompt_chars=%d task=%s", request_id, prompt_chars, task or "chat")
     route = select_model_route(messages, task) if models is None else _route_with_available_models(list(dict.fromkeys(filter(None, models))))
     for model in route:
         try:
@@ -312,7 +316,7 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
             if status_code == 404:
                 logging.warning("Chat model is unavailable: model=%s status=404; paid fallback enabled=%s", model, config.OPENROUTER_ALLOW_PAID_FALLBACK)
             else:
-                logging.exception("Chat model failed: %s", model)
+                logging.exception("Chat model failed: %s request_id=%s", model, request_id)
             continue
         increment("ai.model.success", model=model)
         return response
@@ -465,4 +469,6 @@ async def generate_reply(messages, memory=None, search_results=None):
         return reply
     except Exception:
         increment("ai.reply.failure")
-        return "Не удалось получить ответ от AI."
+        request_id = uuid.uuid4().hex[:10]
+        logging.exception("AI reply failed request_id=%s", request_id)
+        return f"Не удалось получить ответ от AI. Код запроса: {request_id}"

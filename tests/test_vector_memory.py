@@ -11,8 +11,17 @@ def run(coro):
 
 def test_memory_chunk_contract():
     columns = MemoryChunk.__table__.columns
-    assert {"user_id", "content", "embedding", "source", "created_at"} <= set(columns.keys())
+    assert {"user_id", "content", "content_hash", "embedding", "source", "importance", "expires_at", "created_at"} <= set(columns.keys())
     assert columns.embedding.type.dim == 1536
+
+
+def test_memory_lifecycle_migration_contract():
+    from pathlib import Path
+    migration = (Path(__file__).parents[1] / "alembic" / "versions" / "0014_memory_lifecycle.py").read_text(encoding="utf-8")
+    assert 'revision = "0014_memory_lifecycle"' in migration
+    assert 'down_revision = "0013_legal_consent"' in migration
+    assert "content_hash" in migration
+    assert "vector_cosine_ops" in migration
 
 
 def test_embedding_uses_openrouter_model(monkeypatch):
@@ -61,6 +70,8 @@ def test_remember_adds_embedded_chunk(monkeypatch):
     assert isinstance(added[0], MemoryChunk)
     assert added[0].user_id == 42
     assert added[0].embedding == [0.2] * 1536
+    assert len(added[0].content_hash) == 64
+    assert added[0].expires_at is not None
 
 
 def test_recall_returns_empty_when_embedding_provider_fails(monkeypatch):
