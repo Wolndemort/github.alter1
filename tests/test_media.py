@@ -90,6 +90,21 @@ def test_video_audio_handles_invalid_video():
     assert run(video_audio(b"not a video")) == b""
 
 
+def test_media_tools_return_safe_values_when_ffmpeg_is_missing(monkeypatch):
+    async def missing(*args, **kwargs): raise FileNotFoundError("ffmpeg")
+    monkeypatch.setattr("utils.media.asyncio.create_subprocess_exec", missing)
+    assert run(video_preview(b"data")) == []
+    assert run(video_audio(b"data")) == b""
+
+
+def test_video_duration_returns_none_when_ffprobe_output_is_invalid(monkeypatch):
+    class Process:
+        async def communicate(self): return b"not-a-number", b""
+    async def launch(*args, **kwargs): return Process()
+    monkeypatch.setattr("utils.media.asyncio.create_subprocess_exec", launch)
+    assert run(__import__("utils.media", fromlist=["video_duration"]).video_duration(b"data")) is None
+
+
 def test_media_prompt_is_clean_utf8_and_sets_capabilities():
     assert "мультимодальный ALTER" in MEDIA_SYSTEM_PROMPT
     assert "Не выдумывай" in MEDIA_SYSTEM_PROMPT

@@ -6,3 +6,6 @@ venv/
 .idea/
 .vscode/
 backups/
+mobile/node_modules/
+mobile/.env
+\.coverage

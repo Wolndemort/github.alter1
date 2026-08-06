@@ -1,0 +1,58 @@
+"""Protected YouTube search and audio adapter for the independent app."""
+from __future__ import annotations
+
+from urllib.parse import urlparse
+
+from aiohttp import web
+
+from api.auth_routes import _bearer, _json
+from data.database import async_session
+from data.models import User
+from utils.audio_search import download_audio, remove_audio
+from utils.billing import has_active_subscription, is_owner
+from utils.youtube_search import search_youtube
+
+
+def _youtube_url(value: object) -> str:
+    url = str(value or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in {"youtube.com", "www.youtube.com", "youtu.be", "www.youtu.be"}:
+        raise ValueError("youtube url required")
+    return url
+
+
+async def _require_access(request: web.Request):
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None: raise web.HTTPUnauthorized(text="account not found")
+        if not is_owner(user_id) and not has_active_subscription(user): raise web.HTTPPaymentRequired(text="active subscription required")
+    return user_id
+
+
+async def youtube_search_route(request: web.Request) -> web.Response:
+    await _require_access(request)
+    payload = await _json(request)
+    query = str(payload.get("query", "")).strip()
+    if not query or len(query) > 200: raise web.HTTPBadRequest(text="query is required")
+    return web.json_response({"results": await search_youtube(query, max_results=5)})
+
+
+async def youtube_audio_route(request: web.Request) -> web.Response:
+    await _require_access(request)
+    payload = await _json(request)
+    try: url = _youtube_url(payload.get("url"))
+    except ValueError as exc: raise web.HTTPBadRequest(text=str(exc))
+    result = await download_audio(url)
+    if result is None: raise web.HTTPBadGateway(text="audio download failed")
+    path, title = result
+    try:
+        data = path.read_bytes()
+        return web.Response(body=data, content_type="audio/mpeg", headers={"Content-Disposition": f'attachment; filename="ALTER.mp3"', "X-ALTER-Title": title[:120]})
+    finally:
+        remove_audio(path)
+
+
+def setup_youtube_routes(app: web.Application) -> None:
+    app.router.add_post("/api/v1/youtube/search", youtube_search_route)
+    app.router.add_post("/api/v1/youtube/audio", youtube_audio_route)

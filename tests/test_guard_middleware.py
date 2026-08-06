@@ -34,3 +34,34 @@ async def test_guard_sets_spam_flag():
     event = SimpleNamespace(from_user=SimpleNamespace(id=7))
     await middleware(handler, event, {}); await middleware(handler, event, {})
     assert seen[0]["spam_allowed"] is True and seen[1]["spam_allowed"] is False
+
+
+@pytest.mark.asyncio
+async def test_guard_blocks_unpaid_and_reports_to_user(monkeypatch):
+    from data.models import User
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    answers = []
+    async def answer(text): answers.append(text)
+    event = SimpleNamespace(from_user=SimpleNamespace(id=7), text="hello", answer=answer)
+    class Db:
+        async def get(self, model, ident): return user
+    monkeypatch.setattr("middleware.guard_middleware.charge_request", lambda *args: _true())
+    monkeypatch.setattr("middleware.guard_middleware.allow_request", lambda *args: _true())
+    async def resolved(*args): return user
+    async def _true(): return True
+    monkeypatch.setattr("middleware.guard_middleware.resolve_telegram_user", resolved)
+    monkeypatch.setattr("middleware.guard_middleware.has_active_subscription", lambda _: False)
+    seen = []
+    async def handler(event, data): seen.append(True)
+    await __import__("middleware.guard_middleware", fromlist=["GuardMiddleware"]).GuardMiddleware(object())(handler, event, {"db_session": Db()})
+    assert not seen and answers
+
+
+@pytest.mark.asyncio
+async def test_guard_returns_safe_error_when_handler_fails():
+    answers = []
+    async def answer(text): answers.append(text)
+    event = SimpleNamespace(from_user=SimpleNamespace(id=7), answer=answer)
+    async def handler(event, data): raise RuntimeError("boom")
+    await __import__("middleware.guard_middleware", fromlist=["GuardMiddleware"]).GuardMiddleware(ReadOnlyRedis())(handler, event, {})
+    assert answers

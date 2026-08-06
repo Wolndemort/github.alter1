@@ -10,6 +10,7 @@ from config import config
 from data.models import User
 from utils.redis_store import charge_request, allow_request
 from utils.billing import has_active_subscription, is_owner
+from services.account_linking import resolve_telegram_user
 
 
 def _billing_exempt(event: TelegramObject) -> bool:
@@ -56,7 +57,7 @@ class GuardMiddleware(BaseMiddleware):
                     return None
             db_session = data.get("db_session")
             if db_session is not None:
-                db_user = await db_session.get(User, user.id)
+                db_user = await resolve_telegram_user(db_session, user.id)
                 if (db_user is None or not db_user.legal_accepted_at) and not _legal_exempt(event):
                     answer = getattr(event, "answer", None)
                     if answer:

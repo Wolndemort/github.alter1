@@ -12,6 +12,7 @@ from config import config
 from data.models import ImportantEvent, Session, User
 from utils.ap_logic import generate_reply
 from utils.vector_memory import recall, remember
+from utils.weather import get_weather, is_weather_request, parse_weather_city
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,11 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
 
-        reply = await generate_reply(list(session.raw_messages), memory)
+        if is_weather_request(text):
+            city = parse_weather_city(text)
+            reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
+        else:
+            reply = await generate_reply(list(session.raw_messages), memory)
         _append(session, "assistant", reply)
         await remember(db, user_id, text, source="user_message")
         await db.commit()

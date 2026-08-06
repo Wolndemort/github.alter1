@@ -1,6 +1,8 @@
 import pytest
+from types import SimpleNamespace
 
-from services.chat_service import validate_message
+from data.models import Session, User
+from services.chat_service import ChatService, validate_message
 
 
 def test_chat_message_is_trimmed():
@@ -18,3 +20,76 @@ def test_chat_message_has_prompt_safety_limit(monkeypatch):
     monkeypatch.setattr(chat_service.config, "AI_MAX_PROMPT_CHARS", 3)
     with pytest.raises(ValueError, match="too long"):
         validate_message("1234")
+
+
+class Result:
+    def __init__(self, value=None, values=None): self.value, self.values = value, values or []
+    def scalar_one_or_none(self): return self.value
+    def scalars(self): return self.values
+
+
+class Db:
+    def __init__(self, user, active=None, events=None):
+        self.user, self.active, self.events = user, active, events or []
+        self.added = []
+        self.committed = False
+    async def get(self, model, user_id): return self.user if model is User and user_id == self.user.id else None
+    async def execute(self, statement):
+        return Result(self.active if not self.added else self.active, self.events) if self.added == [] else Result(self.active, self.events)
+    def add(self, value):
+        if isinstance(value, Session): value.id = 12
+        self.added.append(value)
+    async def flush(self): pass
+    async def commit(self): self.committed = True
+
+
+@pytest.mark.asyncio
+async def test_chat_service_creates_session_recalls_memory_and_persists(monkeypatch):
+    user = User(id=5, first_name="Adam", memory={"goals": ["launch"]}, tech_stack={})
+    db = Db(user, active=None, events=[SimpleNamespace(title="Milestone", event_type="goal", importance="high", description="ship")])
+    recalled = []
+
+    async def fake_recall(db, user_id, text):
+        recalled.append((user_id, text)); return ["previous context"]
+    async def fake_remember(db, user_id, text, source):
+        assert source == "user_message"
+    async def fake_reply(messages, memory):
+        assert memory["goals"] == ["launch"]
+        assert memory["important_events"][0]["title"] == "Milestone"
+        assert memory["related_previous_context"] == ["previous context"]
+        return "assistant reply"
+    monkeypatch.setattr("services.chat_service.recall", fake_recall)
+    monkeypatch.setattr("services.chat_service.remember", fake_remember)
+    monkeypatch.setattr("services.chat_service.generate_reply", fake_reply)
+    monkeypatch.setattr("services.chat_service.config.MEMORY_AUTO_RECALL_MIN_CHARS", 1)
+
+    result = await ChatService().reply(db, 5, "A sufficiently long message")
+
+    assert result.reply == "assistant reply"
+    assert result.session_id == 12
+    assert recalled and db.committed
+    assert db.added[0].raw_messages[0]["role"] == "user"
+    assert db.added[0].raw_messages[1]["role"] == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_rejects_missing_user():
+    class EmptyDb:
+        async def get(self, model, user_id): return None
+    with pytest.raises(ValueError, match="user not found"):
+        await ChatService().reply(EmptyDb(), 404, "hello")
+
+
+@pytest.mark.asyncio
+async def test_chat_service_routes_weather_through_shared_backend(monkeypatch):
+    user = User(id=8, first_name="Weather", memory={}, tech_stack={})
+    db = Db(user, active=None, events=[])
+    async def weather(city):
+        assert city
+        return "weather result"
+    monkeypatch.setattr("services.chat_service.get_weather", weather)
+    monkeypatch.setattr("services.chat_service.is_weather_request", lambda text: True)
+    async def remember(*args, **kwargs): pass
+    monkeypatch.setattr("services.chat_service.remember", remember)
+    result = await ChatService().reply(db, 8, "погода в Москве")
+    assert result.reply == "weather result"

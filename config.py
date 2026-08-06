@@ -25,6 +25,7 @@ class Setting(BaseSettings):
     OWNER_TELEGRAM_IDS: str = "1271717628"
     SUPPORT_USERNAME: str = "Adam_Omarov"
     SUPPORT_TELEGRAM_ID: int = 1271717628
+    TELEGRAM_BOT_USERNAME: str = "alter_ai_bot"
     LEGAL_BASE_URL: str = "https://alterai.ru"
     YUKASSA_SHOP_ID: str | None = None
     YUKASSA_SECRET_KEY: SecretStr | None = None
@@ -47,6 +48,13 @@ class Setting(BaseSettings):
     SESSION_TIMEOUT: int = 1800
     # Required for the independent app API. Keep it separate from BOT_TOKEN.
     APP_AUTH_SECRET: SecretStr | None = None
+    APP_EMAIL_MODE: str = "console"
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: SecretStr | None = None
+    SMTP_FROM_EMAIL: str | None = None
+    SMTP_USE_TLS: bool = True
 
     DAILY_REQUEST_LIMIT: int = 100
     SPAM_REQUEST_LIMIT: int = 5
@@ -54,6 +62,7 @@ class Setting(BaseSettings):
     MAX_OUTPUT_TOKENS: int = 600
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
+    MEDIA_MAX_BYTES: int = 20 * 1024 * 1024
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 20

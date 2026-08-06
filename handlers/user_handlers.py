@@ -27,6 +27,8 @@ from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price
+from services.account_linking import link_telegram_identity, resolve_telegram_user
+from utils.redis_store import consume_link_token
 from utils.metrics import increment
 import logging
 
@@ -64,7 +66,7 @@ async def handle_reply_feedback(callback: types.CallbackQuery, db_session: Async
     if rating not in {"positive", "negative"} or not callback.from_user:
         await callback.answer()
         return
-    user = await db_session.get(User, callback.from_user.id)
+    user = await get_telegram_user(callback.from_user.id, db_session)
     if user:
         settings = dict(user.tech_stack or {})
         feedback = list(settings.get("reply_feedback") or [])
@@ -136,7 +138,7 @@ async def button_buy_subscription(message: types.Message, db_session: AsyncSessi
 
 @router.message(F.text == CABINET_BUTTON)
 async def button_cabinet(message: types.Message, db_session: AsyncSession):
-    user = await db_session.get(User, message.from_user.id)
+    user = await get_telegram_user(message.from_user.id, db_session)
     if is_owner(message.from_user.id):
         status = "Владелец ALTER — доступ открыт без подписки."
     elif has_active_subscription(user):
@@ -156,7 +158,7 @@ async def button_cabinet(message: types.Message, db_session: AsyncSession):
 
 @router.message(F.text.in_({AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON}))
 async def button_auto_renew(message: types.Message, db_session: AsyncSession):
-    user = await db_session.get(User, message.from_user.id)
+    user = await get_telegram_user(message.from_user.id, db_session)
     if not user or not user.payment_method_id:
         await message.answer("Сначала нужна одна обычная оплата — после неё можно включить автопродление.", reply_markup=cabinet_keyboard())
         return
@@ -169,7 +171,7 @@ async def button_auto_renew(message: types.Message, db_session: AsyncSession):
 
 @router.message(F.text == UNLINK_CARD_BUTTON)
 async def button_unlink_card(message: types.Message, db_session: AsyncSession):
-    user = await db_session.get(User, message.from_user.id)
+    user = await get_telegram_user(message.from_user.id, db_session)
     if user:
         user.payment_method_id = None
         user.auto_renew = False
@@ -522,7 +524,7 @@ def recent_context(messages: list, limit: int = 40, max_chars: int = 12000) -> l
 
 
 async def get_or_create_user(message: types.Message, db_session: AsyncSession) -> User:
-    user = await db_session.get(User, message.from_user.id)
+    user = await resolve_telegram_user(db_session, message.from_user.id)
     if user is None:
         user = User(id=message.from_user.id,
                     username=message.from_user.username,
@@ -533,12 +535,16 @@ async def get_or_create_user(message: types.Message, db_session: AsyncSession) -
     return user
 
 
+async def get_telegram_user(telegram_user_id: int, db_session: AsyncSession) -> User | None:
+    return await resolve_telegram_user(db_session, telegram_user_id)
+
+
 @router.message(Command("buy"))
 async def cmd_buy(message: types.Message, db_session: AsyncSession):
     if is_owner(message.from_user.id):
         await message.answer("Для владельца ALTER подписка не нужна.")
         return
-    if has_active_subscription(await db_session.get(User, message.from_user.id)):
+    if has_active_subscription(await get_telegram_user(message.from_user.id, db_session)):
         await message.answer("У тебя уже есть активная подписка. Проверить срок можно через /status.")
         return
     if not billing_configured():
@@ -563,7 +569,7 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
 
 @router.message(Command("status"))
 async def cmd_status(message: types.Message, db_session: AsyncSession):
-    user = await db_session.get(User, message.from_user.id)
+    user = await get_telegram_user(message.from_user.id, db_session)
     if is_owner(message.from_user.id):
         await message.answer("Ты владелец ALTER — доступ без подписки.")
     elif user and not has_active_subscription(user):
@@ -613,7 +619,7 @@ def legal_consent_text(name: str) -> str:
 
 @router.callback_query(F.data == "accept_legal")
 async def accept_legal(callback: types.CallbackQuery, db_session: AsyncSession):
-    user = await db_session.get(User, callback.from_user.id)
+    user = await get_telegram_user(callback.from_user.id, db_session)
     if user is None:
         user = User(
             id=callback.from_user.id,
@@ -636,9 +642,30 @@ async def accept_legal(callback: types.CallbackQuery, db_session: AsyncSession):
 
 
 @router.message(CommandStart())
-async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, command: CommandObject | None = None):
-    user = await get_or_create_user(message, db_session)
+async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, command: CommandObject | None = None, redis=None):
     start_arg = (command.args or "").strip() if command else ""
+    if start_arg.startswith("link_"):
+        if redis is None:
+            await message.answer("Связка временно недоступна. Попробуй ещё раз позже.")
+            return
+        app_user_id = await consume_link_token(redis, start_arg.removeprefix("link_"))
+        if app_user_id is None:
+            await message.answer("Ссылка устарела или уже использована. Создай новую ссылку в приложении.")
+            return
+        try:
+            user = await link_telegram_identity(
+                db_session, app_user_id, message.from_user.id,
+                message.from_user.username, message.from_user.first_name,
+            )
+            user.legal_accepted_at = user.legal_accepted_at or datetime.now(timezone.utc)
+            await db_session.commit()
+        except ValueError as exc:
+            await db_session.rollback()
+            await message.answer(str(exc))
+            return
+        await message.answer("Telegram подключён. Теперь приложение и бот используют одну память и одну подписку.")
+        return
+    user = await get_or_create_user(message, db_session)
     if start_arg.startswith("payment_"):
         try:
             activated = await check_and_activate(db_session, start_arg.removeprefix("payment_"))

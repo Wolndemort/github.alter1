@@ -1,4 +1,10 @@
-from utils.tasks import extract_important_events, extract_followups
+import pytest
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+from data.models import Session, User
+from utils import tasks
+from utils.tasks import extract_health_followup, extract_important_events, extract_followups, process_session
 
 
 def test_extract_important_events_normalizes_model_output():
@@ -30,3 +36,33 @@ def test_extract_followups_ignores_missing_or_invalid_time():
         "bad",
     ]}
     assert extract_followups(facts) == []
+
+
+def test_extract_health_followup_ignores_negative_health_statements():
+    assert extract_health_followup([{"role": "user", "content": "ничего не болит"}]) is None
+
+
+def test_extract_health_followup_creates_utc_reminder():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    result = extract_health_followup([{"role": "user", "content": "у меня болит голова"}], now)
+    assert result and result["remind_at"] == now + timedelta(hours=4)
+
+
+@pytest.mark.asyncio
+async def test_process_session_is_idempotent_for_events_and_followups(monkeypatch):
+    user = User(id=5, first_name="Test", memory={}, tech_stack={})
+    user.checkins_enabled = False
+    session = Session(id=9, user_id=5, raw_messages=[{"role": "user", "content": "Запусти проект"}], user=user)
+    db = SimpleNamespace(added=[], commits=0)
+    class Result:
+        def scalar_one_or_none(self): return None
+    async def execute(statement): return Result()
+    async def commit(): db.commits += 1
+    db.execute = execute; db.commit = commit
+    db.add = lambda value: db.added.append(value)
+    async def summary(messages):
+        return {"important_events": [{"event_type": "goal", "title": "Launch"}], "open_loops": [{"title": "Check launch", "follow_up_at": "2026-01-02T10:00:00+00:00"}]}
+    monkeypatch.setattr(tasks, "summarize_session", summary)
+    assert await process_session(session, db)
+    assert session.is_processed and db.commits == 1
+    assert len(db.added) == 2

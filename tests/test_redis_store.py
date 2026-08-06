@@ -1,6 +1,6 @@
 import pytest
 
-from utils.redis_store import cache_get, cache_set, charge_request, state_get, state_set
+from utils.redis_store import cache_get, cache_set, charge_request, consume_link_token, create_link_token, state_get, state_set
 
 
 class FakeRedis:
@@ -9,9 +9,12 @@ class FakeRedis:
         self.expirations = {}
 
     async def get(self, key): return self.values.get(key)
-    async def set(self, key, value, ex=None):
+    async def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.values:
+            return False
         self.values[key] = value
         self.expirations[key] = ex
+        return True
     async def incr(self, key):
         self.values[key] = int(self.values.get(key, 0)) + 1
         return self.values[key]
@@ -20,6 +23,7 @@ class FakeRedis:
         self.values[key] -= 1
         return self.values[key]
     async def delete(self, key): self.values.pop(key, None)
+    async def getdel(self, key): return self.values.pop(key, None)
 
 
 @pytest.mark.asyncio
@@ -44,3 +48,11 @@ async def test_state_json_roundtrip():
     redis = FakeRedis()
     await state_set(redis, "session", 7, {"step": "waiting"}, ttl=30)
     assert await state_get(redis, "session", 7) == {"step": "waiting"}
+
+
+@pytest.mark.asyncio
+async def test_telegram_link_token_is_one_time():
+    redis = FakeRedis()
+    token = await create_link_token(redis, 42, ttl=600)
+    assert await consume_link_token(redis, token) == 42
+    assert await consume_link_token(redis, token) is None

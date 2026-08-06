@@ -95,6 +95,18 @@ def test_memory_lifecycle_migration_is_after_legal_consent():
     assert "vector_cosine_ops" in migration
 
 
+def test_telegram_link_migration_and_shared_api_contract_are_present():
+    root = Path(__file__).parents[1]
+    migration = (root / "alembic" / "versions" / "0017_telegram_account_link.py").read_text(encoding="utf-8")
+    models = (root / "data" / "models.py").read_text(encoding="utf-8")
+    routes = (root / "api" / "auth_routes.py").read_text(encoding="utf-8")
+    assert 'revision = "0017_telegram_account_link"' in migration
+    assert 'down_revision = "0016_email_verification"' in migration
+    assert "telegram_user_id" in models
+    for endpoint in ("/api/v1/account", "/api/v1/memory", "/api/v1/subscription", "/api/v1/telegram/link"):
+        assert endpoint in routes
+
+
 def test_background_workers_use_row_locks_and_ai_has_request_diagnostics():
     root = Path(__file__).parents[1]
     tasks = (root / "utils" / "tasks.py").read_text(encoding="utf-8")

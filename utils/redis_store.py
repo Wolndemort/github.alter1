@@ -1,5 +1,6 @@
 """Shared Redis primitives: FSM storage, short-lived cache and billing counters."""
 import json
+import secrets
 from redis.asyncio import Redis
 
 from config import config
@@ -38,6 +39,22 @@ async def state_set(redis: Redis, namespace: str, user_id: int, value: dict, ttl
 
 async def state_delete(redis: Redis, namespace: str, user_id: int) -> None:
     await redis.delete(f"alter:state:{namespace}:{user_id}")
+
+
+async def create_link_token(redis: Redis, user_id: int, ttl: int = 600) -> str:
+    """Create a one-time Telegram linking token; the payload lives only in Redis."""
+    token = secrets.token_urlsafe(32)
+    await redis.set(f"alter:link:{token}", str(user_id), ex=ttl, nx=True)
+    return token
+
+
+async def consume_link_token(redis: Redis, token: str) -> int | None:
+    """Consume a linking token atomically when Redis supports GETDEL."""
+    raw = await redis.getdel(f"alter:link:{token}")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 async def charge_request(redis: Redis, user_id: int, limit: int) -> bool:

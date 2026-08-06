@@ -8,6 +8,14 @@ Add this server-side variable before enabling application login:
 
 ```dotenv
 APP_AUTH_SECRET=replace-with-a-long-random-value
+APP_EMAIL_MODE=console
+# For real email delivery set APP_EMAIL_MODE=smtp and configure SMTP_* below.
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+SMTP_FROM_EMAIL=no-reply@example.com
+SMTP_USE_TLS=true
 ```
 
 Run `alembic upgrade head` after deployment. Migration `0015_web_accounts`
@@ -18,14 +26,47 @@ Endpoints:
 
 ```text
 POST /api/v1/auth/register   {"email":"...", "password":"..."}
+POST /api/v1/auth/verify-email {"email":"...", "code":"123456"}
+POST /api/v1/auth/resend-verification {"email":"..."}
 POST /api/v1/auth/login      {"email":"...", "password":"..."}
 GET  /api/v1/auth/me         Authorization: Bearer <token>
 POST /api/v1/chat/messages   Authorization: Bearer <token>, {"message":"..."}
+POST /api/v1/chat/media      Authorization: Bearer <token>, multipart `message` + `file`
+GET  /api/v1/settings        Authorization: Bearer <token>
+PATCH /api/v1/settings       Authorization: Bearer <token>, settings JSON
+POST /api/v1/checkins        Authorization: Bearer <token>, {"enabled":true}
+GET  /api/v1/reminders       Authorization: Bearer <token>
+POST /api/v1/reminders       Authorization: Bearer <token>, {"text":"...","remind_at":"...+03:00"}
+DELETE /api/v1/reminders/:id Authorization: Bearer <token>
+POST /api/v1/youtube/search   Authorization: Bearer <token>, {"query":"..."}
+POST /api/v1/youtube/audio    Authorization: Bearer <token>, {"url":"https://youtube.com/..."}
+GET  /api/v1/account         Authorization: Bearer <token>
+GET  /api/v1/memory          Authorization: Bearer <token>
+GET  /api/v1/subscription    Authorization: Bearer <token>
+POST /api/v1/subscription/create-payment Authorization: Bearer <token>
+POST /api/v1/telegram/link   Authorization: Bearer <token>
 ```
 
-The first slice is text-first. Media, reminders, settings, subscription
-cabinet, Telegram linking, and streaming are separate slices so mobile code
-does not become coupled to Telegram handlers.
+The application and Telegram use the same `users`, `session`, memory, and
+billing records. `POST /api/v1/telegram/link` creates a short-lived deep link;
+opening it in Telegram consumes the link once and merges an existing Telegram
+profile into the application profile transactionally. Migration `0017` adds
+only the nullable Telegram identity link to `web_accounts`.
+
+## Telegram/mobile parity
+
+| Capability | Mobile status | Shared backend path |
+|---|---|---|
+| Text chat and memory recall | ready | `ChatService` |
+| Weather | ready | `ChatService` + weather adapter |
+| Tavily/web research | ready through the AI tool loop | shared AI services |
+| Photo/video analysis | ready | `/api/v1/chat/media` |
+| Voice transcription | ready | `/api/v1/chat/media` |
+| Subscription/payment | ready | shared YooKassa records and webhook |
+| Telegram linking | ready | Redis one-time deep link |
+| Memory cabinet | ready | `/api/v1/memory` |
+| Reminders/check-ins/settings | next API slice | existing shared models and tasks |
+| YouTube audio workflow | next API slice | existing Telegram adapter logic |
 
 ## Server deployment checklist
 
@@ -56,8 +97,9 @@ does not become coupled to Telegram handlers.
    ```
 
 5. In the mobile project, create `mobile/.env` from `.env.example` and set
-   `EXPO_PUBLIC_API_URL=https://api.alterai.ru`, then run `npm install` and
-   `npm test` before `npm start`.
+   `EXPO_PUBLIC_API_URL=https://api.alterai.ru`. `EXPO_PUBLIC_INTRO_SOUND_URL`
+   is optional; the offline loading scene works without it. Then run
+   `npm install`, `npm test`, and `npm start`.
 
 The migration is idempotent through Alembic. Do not run `alembic downgrade` on
 production. Backups and the existing Telegram polling process are not changed

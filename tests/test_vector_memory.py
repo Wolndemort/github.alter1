@@ -113,3 +113,37 @@ def test_remember_ignores_embedding_provider_failure(monkeypatch):
 
     monkeypatch.setattr(vector_memory, "embed", fail)
     run(vector_memory.remember(DB(), 1, "A sufficiently long memory fragment"))
+
+
+def test_remember_skips_duplicate_content(monkeypatch):
+    async def embed(_): raise AssertionError("duplicate must not be embedded")
+    class Result:
+        def scalar_one_or_none(self): return 99
+    class DB:
+        async def execute(self, statement): return Result()
+        def add(self, _): raise AssertionError("duplicate must not be added")
+    monkeypatch.setattr(vector_memory, "embed", embed)
+    run(vector_memory.remember(DB(), 1, "A sufficiently long memory fragment"))
+
+
+def test_purge_expired_deletes_bounded_batch():
+    class Result:
+        rowcount = 2
+        def scalars(self): return self
+        def all(self): return [1, 2]
+    class DB:
+        def __init__(self): self.calls = 0; self.committed = False
+        async def execute(self, statement): self.calls += 1; return Result()
+        async def commit(self): self.committed = True
+    db = DB()
+    assert run(vector_memory.purge_expired(db, limit=2)) == 2
+    assert db.calls == 2 and db.committed
+
+
+def test_purge_expired_returns_zero_without_rows():
+    class Result:
+        def scalars(self): return self
+        def all(self): return []
+    class DB:
+        async def execute(self, statement): return Result()
+    assert run(vector_memory.purge_expired(DB())) == 0

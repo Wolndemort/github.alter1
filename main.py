@@ -16,6 +16,8 @@ from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_person
 from utils.payment_webhook import handle_yookassa_webhook
 from api.auth_routes import setup_auth_routes
 from api.chat_routes import setup_chat_routes
+from api.user_features_routes import setup_user_features_routes
+from api.youtube_routes import setup_youtube_routes
 
 
 async def main():
@@ -29,6 +31,7 @@ async def main():
         await bot.session.close()
         return
     dispatcher = Dispatcher(storage=RedisStorage(redis=redis))
+    dispatcher["redis"] = redis
     dispatcher.message.middleware(DbSessionMiddleware(session_pool=async_session))
     dispatcher.callback_query.middleware(DbSessionMiddleware(session_pool=async_session))
     dispatcher.message.middleware(GuardMiddleware(redis))
@@ -38,6 +41,8 @@ async def main():
     web_app.router.add_post(config.PAYMENT_WEBHOOK_PATH, handle_yookassa_webhook)
     setup_auth_routes(web_app)
     setup_chat_routes(web_app)
+    setup_user_features_routes(web_app)
+    setup_youtube_routes(web_app)
     web_runner = web.AppRunner(web_app)
     await web_runner.setup()
     web_site = web.TCPSite(web_runner, config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT)

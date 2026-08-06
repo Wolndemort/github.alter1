@@ -10,14 +10,19 @@ import os
 import re
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from data.models import User, WebAccount
+from config import config
+from services.email_service import send_verification_code
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7
+VERIFICATION_TTL = timedelta(minutes=10)
+MAX_VERIFICATION_ATTEMPTS = 5
 
 
 def normalize_email(email: str) -> str:
@@ -49,6 +54,18 @@ def verify_password(password: str, encoded: str) -> bool:
         return hmac.compare_digest(actual, expected)
     except (ValueError, TypeError):
         return False
+
+
+def generate_verification_code() -> str:
+    return f"{int.from_bytes(os.urandom(4), 'big') % 1_000_000:06d}"
+
+
+def hash_verification_code(email: str, code: str) -> str:
+    return hmac.new(_secret(config.APP_AUTH_SECRET.get_secret_value() if config.APP_AUTH_SECRET else ""), f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def code_matches(email: str, code: str, encoded: str) -> bool:
+    return hmac.compare_digest(hash_verification_code(email, code), encoded)
 
 
 def _secret(secret: str) -> bytes:
@@ -85,13 +102,54 @@ async def register(session: AsyncSession, email: str, password: str) -> WebAccou
     if existing:
         raise ValueError("account already exists")
     user = User(first_name=email.split("@", 1)[0][:64], memory={}, tech_stack={})
-    account = WebAccount(id=str(uuid.uuid4()), email=email, password_hash=hash_password(password), user=user)
+    code = generate_verification_code()
+    account = WebAccount(
+        id=str(uuid.uuid4()), email=email, password_hash=hash_password(password), user=user,
+        verification_code_hash=hash_verification_code(email, code),
+        verification_expires_at=datetime.now(timezone.utc) + VERIFICATION_TTL,
+        verification_attempts=0,
+    )
     session.add(account)
     await session.flush()
+    await send_verification_code(email, code)
     return account
+
+
+async def verify_email(session: AsyncSession, email: str, code: str) -> WebAccount:
+    email = normalize_email(email)
+    account = (await session.execute(select(WebAccount).where(WebAccount.email == email))).scalar_one_or_none()
+    if account is None:
+        raise ValueError("invalid verification code")
+    if account.email_verified_at is not None:
+        return account
+    if account.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
+        raise ValueError("too many verification attempts")
+    account.verification_attempts += 1
+    if not account.verification_expires_at or account.verification_expires_at <= datetime.now(timezone.utc):
+        raise ValueError("verification code expired")
+    if not account.verification_code_hash or not code_matches(email, code.strip(), account.verification_code_hash):
+        raise ValueError("invalid verification code")
+    account.email_verified_at = datetime.now(timezone.utc)
+    account.verification_code_hash = None
+    account.verification_expires_at = None
+    await session.flush()
+    return account
+
+
+async def resend_verification(session: AsyncSession, email: str) -> None:
+    email = normalize_email(email)
+    account = (await session.execute(select(WebAccount).where(WebAccount.email == email))).scalar_one_or_none()
+    if account is None or account.email_verified_at is not None:
+        return
+    code = generate_verification_code()
+    account.verification_code_hash = hash_verification_code(email, code)
+    account.verification_expires_at = datetime.now(timezone.utc) + VERIFICATION_TTL
+    account.verification_attempts = 0
+    await send_verification_code(email, code)
+    await session.flush()
 
 
 async def authenticate(session: AsyncSession, email: str, password: str) -> WebAccount | None:
     email = normalize_email(email)
     account = (await session.execute(select(WebAccount).where(WebAccount.email == email))).scalar_one_or_none()
-    return account if account and verify_password(password, account.password_hash) else None
+    return account if account and account.email_verified_at and verify_password(password, account.password_hash) else None

@@ -21,4 +21,50 @@ describe("AlterApi", () => {
     await expect(new AlterApi("https://alter.example").me("bad"))
       .rejects.toEqual(new ApiError(401, "unauthorized"));
   });
+
+  it("verifies an email code", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ access_token: "verified-token", token_type: "bearer" }) });
+    await expect(new AlterApi("https://alter.example").verifyEmail("user@example.com", "123456"))
+      .resolves.toEqual({ access_token: "verified-token", token_type: "bearer" });
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/auth/verify-email", expect.objectContaining({
+      method: "POST", body: JSON.stringify({ email: "user@example.com", code: "123456" }),
+    }));
+  });
+
+  it("resends a verification code", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    await new AlterApi("https://alter.example").resendVerification("user@example.com");
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/auth/resend-verification", expect.objectContaining({
+      method: "POST", body: JSON.stringify({ email: "user@example.com" }),
+    }));
+  });
+
+  it("loads shared account data and starts Telegram linking", async () => {
+    (fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 7, name: "Adam", email: "a@b.c", telegram_linked: false, subscription_expires_at: null, auto_renew: false }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: "https://t.me/alter_ai_bot?start=link_x" }) });
+    await expect(new AlterApi("https://alter.example").account("token")).resolves.toMatchObject({ id: 7 });
+    await expect(new AlterApi("https://alter.example").startTelegramLink("token")).resolves.toEqual({ url: "https://t.me/alter_ai_bot?start=link_x" });
+    expect(fetch).toHaveBeenLastCalledWith("https://alter.example/api/v1/telegram/link", expect.objectContaining({
+      method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token" }),
+    }));
+  });
+
+  it("sends media as multipart without overriding the boundary", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "seen", session_id: 4 }) });
+    await new AlterApi("https://alter.example").sendMedia("token", "describe", "file:///photo.jpg", "image");
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/chat/media", expect.objectContaining({
+      method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData),
+    }));
+  });
+
+  it("updates settings and manages reminders", async () => {
+    (fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ settings: { voice_replies: true }, checkins_enabled: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 1, text: "call", remind_at: "2026-08-07T10:00:00+03:00" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+    await expect(new AlterApi("https://alter.example").updateSettings("token", { voice_replies: true })).resolves.toMatchObject({ checkins_enabled: true });
+    await expect(new AlterApi("https://alter.example").createReminder("token", "call", "2026-08-07T10:00:00+03:00")).resolves.toMatchObject({ id: 1 });
+    await expect(new AlterApi("https://alter.example").deleteReminder("token", 1)).resolves.toEqual({ ok: true });
+  });
 });

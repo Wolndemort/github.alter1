@@ -23,3 +23,9 @@ def test_transcribe_voice_returns_empty_on_provider_error(monkeypatch):
 
     monkeypatch.setattr(voice.client.audio.transcriptions, "create", fail)
     assert run(voice.transcribe_voice(b"audio")) == ""
+
+
+def test_transcribe_voice_returns_empty_for_empty_provider_text(monkeypatch):
+    async def create(**kwargs): return SimpleNamespace(text="  ")
+    monkeypatch.setattr(voice.client.audio.transcriptions, "create", create)
+    assert run(voice.transcribe_voice(b"audio")) == ""
