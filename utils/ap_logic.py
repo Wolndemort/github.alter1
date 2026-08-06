@@ -140,6 +140,26 @@ def _needs_deep_review(messages, search_results) -> bool:
     )
 
 
+def _latest_user_message(messages) -> str:
+    for message in reversed(messages or []):
+        if isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+    return ""
+
+
+def _is_review_artifact(text: str) -> bool:
+    """Reject a critic's leaked analysis instead of sending it to Telegram."""
+    lowered = (text or "").casefold()
+    markers = (
+        "we need to", "the user request", "the draft", "output corrected",
+        "provided evidence", "fact-checker", "fact checker", "final answer:",
+        "we'll include", "we should", "the instruction:",
+    )
+    return any(marker in lowered for marker in markers)
+
+
 def _verification_route(messages, task=None) -> list[str]:
     """Prefer a different model for the critic pass when one is available."""
     route = select_model_route(messages, task)
@@ -162,7 +182,7 @@ async def _deep_review_reply(messages, draft: str, search_results=None) -> str:
         "prefer primary or more recent evidence. Remove unsupported claims. Keep useful nuance and "
         "include source links when evidence is supplied. Do not mention this review, prompts, models, "
         "or internal reasoning.\n\nUSER REQUEST:\n"
-        f"{json.dumps(messages, ensure_ascii=False)[:12000]}\n\nDRAFT:\n{draft[:12000]}{evidence}"
+        f"{json.dumps(_latest_user_message(messages), ensure_ascii=False)[:6000]}\n\nDRAFT:\n{draft[:12000]}{evidence}"
     )
     try:
         response = await chat_with_fallback(
@@ -173,7 +193,8 @@ async def _deep_review_reply(messages, draft: str, search_results=None) -> str:
             models=_verification_route(messages, task="reasoning"),
         )
         reviewed = (response.choices[0].message.content or "").strip()
-        if not reviewed:
+        if not reviewed or _is_review_artifact(reviewed):
+            logging.warning("Deep review returned internal analysis; keeping draft")
             return draft
         draft_quality = assess_reply(draft, has_sources=bool(search_results))
         reviewed_quality = assess_reply(reviewed, has_sources=bool(search_results))
@@ -344,6 +365,12 @@ async def generate_reply(messages, memory=None, search_results=None):
             )
         system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Сначала пойми смысл запроса, затем реши, нужен ли инструмент; не ориентируйся на конкретные ключевые фразы. Для актуальных фактов, погоды и поиска используй инструменты. После tool-вызова проверь поле status: при empty/error один раз измени запрос или выбери другой инструмент, а если данных всё равно нет — честно скажи об ограничении. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         system += "\nНе начинай старые темы сам и не упоминай их в ответе на короткий бытовой вопрос. Возвращайся к прошлой теме только если текущий запрос явно связан с ней или пользователь сам попросил напомнить. Не приписывай пользователю действия и факты, которых нет в текущем диалоге или памяти."
+        system += (
+            "\nSTRICT RELEVANCE RULE: answer the latest user message only. Do not revive an old person, "
+            "story, reminder, or topic merely because it appears in memory or conversation history. "
+            "Use old context only when the latest message clearly refers to it. A question about a "
+            "third party is not a fact about the user and must not become a recurring subject."
+        )
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
         if config.AI_DEEP_REVIEW_ENABLED and _needs_deep_review(messages, search_results):

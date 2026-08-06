@@ -8,7 +8,7 @@ from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from data.models import ImportantEvent, Reminder, User, Session, Payment
+from data.models import ImportantEvent, Reminder, User, Session, Payment, MemoryChunk
 from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
 from utils.media import video_audio, video_duration, video_preview
@@ -697,6 +697,7 @@ async def cmd_clear_memory(message: types.Message, db_session: AsyncSession):
     user = await get_or_create_user(message, db_session)
     user.memory = {}
     await db_session.execute(delete(ImportantEvent).where(ImportantEvent.user_id == user.id))
+    await db_session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user.id))
     await db_session.commit()
     await message.answer("Долгосрочная память очищена.", reply_markup=memory_keyboard())
 
