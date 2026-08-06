@@ -14,6 +14,8 @@ from utils.redis_store import create_redis, close_redis
 from utils.runtime import check_dependencies
 from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
+from api.auth_routes import setup_auth_routes
+from api.chat_routes import setup_chat_routes
 
 
 async def main():
@@ -34,6 +36,8 @@ async def main():
     web_app = web.Application()
     web_app.router.add_get("/health", lambda request: web.json_response({"ok": True}))
     web_app.router.add_post(config.PAYMENT_WEBHOOK_PATH, handle_yookassa_webhook)
+    setup_auth_routes(web_app)
+    setup_chat_routes(web_app)
     web_runner = web.AppRunner(web_app)
     await web_runner.setup()
     web_site = web.TCPSite(web_runner, config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT)

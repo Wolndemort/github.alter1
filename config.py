@@ -45,6 +45,8 @@ class Setting(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CACHE_TTL: int = 3600
     SESSION_TIMEOUT: int = 1800
+    # Required for the independent app API. Keep it separate from BOT_TOKEN.
+    APP_AUTH_SECRET: SecretStr | None = None
 
     DAILY_REQUEST_LIMIT: int = 100
     SPAM_REQUEST_LIMIT: int = 5

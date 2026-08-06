@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "ALTER",
+    "slug": "alter-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "alter",
+    "userInterfaceStyle": "dark",
+    "android": { "package": "ru.alterai.mobile" },
+    "ios": { "bundleIdentifier": "ru.alterai.mobile" }
+  }
+}

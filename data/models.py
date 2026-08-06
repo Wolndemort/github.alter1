@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import BigInteger, String, Float, func, ForeignKey, DateTime
+from sqlalchemy import BigInteger, String, Float, func, ForeignKey, DateTime, Sequence
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
@@ -11,7 +11,12 @@ from data.database import Base
 class User(Base):
     __tablename__ = 'users'
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    # Telegram users keep their explicit Telegram id. Web-only users receive
+    # ids from this sequence, so both adapters can use the existing domain
+    # tables without inventing negative-id conventions.
+    id: Mapped[int] = mapped_column(
+        BigInteger, Sequence("users_id_seq"), primary_key=True, autoincrement=True
+    )
     username: Mapped[Optional[str]] = mapped_column(String(32))
     first_name: Mapped[str] = mapped_column(String(64))
 
@@ -34,6 +39,26 @@ class User(Base):
     important_events: Mapped[List["ImportantEvent"]] = relationship(
         back_populates='user', cascade='all, delete-orphan'
     )
+    web_account: Mapped[Optional["WebAccount"]] = relationship(back_populates="user", uselist=False)
+
+
+class WebAccount(Base):
+    """Credentials for the independent application client.
+
+    Telegram identity is deliberately not stored here. Linking Telegram is a
+    separate, authenticated flow that can be added without coupling adapters.
+    """
+
+    __tablename__ = "web_accounts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="web_account")
 
 
 class Session(Base):
