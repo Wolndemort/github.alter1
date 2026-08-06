@@ -82,22 +82,24 @@ def test_complex_request_starts_with_reasoning_model():
     route = ap_logic.select_model_route([
         {"role": "user", "content": "Сравни архитектуры и составь подробный план миграции."},
     ])
-    assert route[:3] == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
-    assert route[3] == ap_logic.config.OPENROUTER_REASONING_MODEL
+    free = [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3, ap_logic.config.OPENROUTER_FREE_MODEL_4, ap_logic.config.OPENROUTER_FREE_MODEL_5]
+    assert route[:5] == free
+    assert route[5] == ap_logic.config.OPENROUTER_REASONING_MODEL
     ap_logic.config.OPENROUTER_ALLOW_PAID_FALLBACK = False
 
 
 def test_paid_fallback_is_disabled_by_default(monkeypatch):
     monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", False)
     route = ap_logic.select_model_route([{"role": "user", "content": "сравни два варианта"}])
-    assert route == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
+    assert route == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3, ap_logic.config.OPENROUTER_FREE_MODEL_4, ap_logic.config.OPENROUTER_FREE_MODEL_5]
 
 
 def test_paid_models_are_last_resort(monkeypatch):
     monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
     route = ap_logic.select_model_route([{"role": "user", "content": "Привет"}])
-    assert route[:3] == [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3]
-    assert route[3] == ap_logic.config.OPENROUTER_MODEL
+    free = [ap_logic.config.OPENROUTER_FREE_MODEL, ap_logic.config.OPENROUTER_FREE_MODEL_2, ap_logic.config.OPENROUTER_FREE_MODEL_3, ap_logic.config.OPENROUTER_FREE_MODEL_4, ap_logic.config.OPENROUTER_FREE_MODEL_5]
+    assert route[:5] == free
+    assert route[5] == ap_logic.config.OPENROUTER_MODEL
 
 
 def test_simple_request_uses_fast_model_first():

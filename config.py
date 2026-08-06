@@ -13,6 +13,8 @@ class Setting(BaseSettings):
     OPENROUTER_FREE_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_MODEL_2: str = "inclusionai/ling-3.0-flash:free"
     OPENROUTER_FREE_MODEL_3: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    OPENROUTER_FREE_MODEL_4: str = "google/gemma-4-26b-a4b-it:free"
+    OPENROUTER_FREE_MODEL_5: str = "openai/gpt-oss-20b:free"
     OPENROUTER_FREE_VISION_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_VISION_MODEL_2: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     OPENROUTER_REASONING_MODEL: str = "google/gemini-2.5-pro"
