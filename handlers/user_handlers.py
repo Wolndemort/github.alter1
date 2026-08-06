@@ -23,7 +23,7 @@ from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
-from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
+from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price
@@ -702,6 +702,15 @@ async def cmd_clear_memory(message: types.Message, db_session: AsyncSession):
     await message.answer("Долгосрочная память очищена.", reply_markup=memory_keyboard())
 
 
+@router.message(Command("clear_context"))
+async def cmd_clear_context(message: types.Message, db_session: AsyncSession):
+    """Remove recalled conversation snippets without deleting user facts."""
+    user = await get_or_create_user(message, db_session)
+    await db_session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user.id))
+    await db_session.commit()
+    await message.answer("Контекст старых разговоров очищен. Факты о тебе сохранены.", reply_markup=memory_keyboard())
+
+
 @router.message(Command("new_session"))
 async def cmd_new_session(message: types.Message, db_session: AsyncSession):
     user = await get_or_create_user(message, db_session)
@@ -896,7 +905,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     # queries. Recalling old vector memories for them makes the bot inject
     # unrelated topics into an otherwise normal reply.
     recalled = []
-    if len(message.text.strip()) >= 20:
+    if len(message.text.strip()) >= 20 and should_recall_context(message.text):
         recalled = await recall(db_session, user.id, message.text)
     if recalled:
         memory_for_reply["related_previous_context"] = recalled
@@ -932,7 +941,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         reply += "\n\n🛒 Поиск товара:\n" + format_marketplace_links(message.text)
     await answer_reply(message, reply, user)
     append_session_message(session, "assistant", reply)
-    await remember(db_session, user.id, f"Пользователь: {message.text}\nALTER: {reply}")
+    # Vector memory is for the user's own durable context, not AI prose or
+    # temporary research about third parties.
+    await remember(db_session, user.id, message.text, source="user_message")
 
     try:
         await db_session.commit()

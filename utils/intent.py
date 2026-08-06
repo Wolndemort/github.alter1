@@ -47,6 +47,18 @@ def should_search_web(text):
     """
     return is_web_request(text)
 
+
+CONTEXT_REFERENCE_PATTERNS = (
+    r"\b(?:\u044d\u0442\u043e\u0442|\u044d\u0442\u0430|\u044d\u0442\u043e|\u0442\u043e\u0442|\u0442\u0430\u043c|\u043e\u043d|\u043e\u043d\u0430|\u043e\u043d\u0438|\u043d\u0438\u043c|\u043d\u0435\u0439|\u0441\u043d\u0438\u043c|\u0441\u043d\u0435\u0439)\b",
+    r"\b(?:\u043f\u043e\u043c\u043d\u0438\u0448\u044c|\u043d\u0430\u043f\u043e\u043c\u043d\u0438|\u043a\u0430\u043a\s+\u0442\u0430\u043c|\u0447\u0442\u043e\s+\u0441|\u043f\u043e\s+\u043f\u043e\u0432\u043e\u0434\u0443|\u043d\u0430\u0441\u0447\u0451\u0442|\u043d\u0430\u0441\u0447\u0435\u0442|\u0432\u0435\u0440\u043d\u0451\u043c\u0441\u044f|\u0432\u0435\u0440\u043d\u0435\u043c\u0441\u044f|\u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u043c)\b",
+    r"\b(?:remember|that|this|him|her|them|what\s+about|back\s+to)\b",
+)
+
+
+def should_recall_context(text):
+    """Recall long-term context only for an explicit conversational reference."""
+    return _matches(text, CONTEXT_REFERENCE_PATTERNS)
+
 def explicit_memory_fact(text):
     match = re.search(r"(?:\u0437\u0430\u043f\u043e\u043c\u043d\u0438|\u0437\u0430\u043f\u0438\u0448\u0438|\u0441\u043e\u0445\u0440\u0430\u043d\u0438)\s*(?:[,!:;-]\s*)?(?:\u0447\u0442\u043e\s+)?(.+)", text or "", re.I)
     return match.group(1).strip(" .,!\\n") if match else None
