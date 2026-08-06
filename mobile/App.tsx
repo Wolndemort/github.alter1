@@ -157,7 +157,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
+  const listRef = React.useRef<FlatList<{ id: string; role: string; text: string }>>(null);
   useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
+  useEffect(() => { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [items]);
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
@@ -195,7 +197,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => setMenuVisible(true)}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
-    <FlatList data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text><Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
   </KeyboardAvoidingView>
