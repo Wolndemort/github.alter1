@@ -37,6 +37,9 @@ jobs:
           BOT_TOKEN=0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           GEMINI_API_KEY=test-key
           OPENROUTER_API_KEY=test-key
+          APP_AUTH_SECRET=ci-only-test-secret
+          APP_EMAIL_MODE=console
+          DB_PASSWORD=postgres
           YOUTUBE_API_KEY=test-key
           DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/alter_project_db
           EOF
@@ -47,8 +50,17 @@ jobs:
           OPENROUTER_API_KEY: test-key
           GEMINI_API_KEY: test-key
           YOUTUBE_API_KEY: test-key
+          APP_AUTH_SECRET: ci-only-test-secret
+          APP_EMAIL_MODE: console
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/alter_project_db
         run: python -m pytest -q
+
+      - name: Run mobile checks
+        working-directory: mobile
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm test -- --runInBand
 
       - name: Validate Compose
         run: docker compose config --quiet
