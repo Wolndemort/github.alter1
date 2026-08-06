@@ -1,11 +1,12 @@
 """HTTP adapter for the shared chat use case."""
 
 from aiohttp import web
+from sqlalchemy import select
 from config import config
 
 from data.database import async_session
 from services.chat_service import ChatService
-from utils.billing import has_active_subscription, is_owner
+from utils.billing import has_active_subscription, has_owner_access
 from services.media_chat_service import reply as media_reply
 from api.auth_routes import _bearer, _json
 
@@ -14,11 +15,14 @@ async def chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
     async with async_session() as session:
-        from data.models import User
+        from data.models import User, WebAccount
         user = await session.get(User, user_id)
+        account = None
+        if hasattr(session, "execute"):
+            account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        if not is_owner(user_id) and not has_active_subscription(user):
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
         try:
             result = await ChatService().reply(session, user_id, payload.get("message", ""))
@@ -30,11 +34,14 @@ async def chat_route(request: web.Request) -> web.Response:
 async def media_chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
-        from data.models import User
+        from data.models import User, WebAccount
         user = await session.get(User, user_id)
+        account = None
+        if hasattr(session, "execute"):
+            account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        if not is_owner(user_id) and not has_active_subscription(user):
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
         if not request.content_type.startswith("multipart/"):
             raise web.HTTPBadRequest(text="multipart form required")

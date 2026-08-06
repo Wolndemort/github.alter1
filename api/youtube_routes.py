@@ -9,7 +9,9 @@ from api.auth_routes import _bearer, _json
 from data.database import async_session
 from data.models import User
 from utils.audio_search import download_audio, remove_audio
-from utils.billing import has_active_subscription, is_owner
+from utils.billing import has_active_subscription, has_owner_access
+from data.models import WebAccount
+from sqlalchemy import select
 from utils.youtube_search import search_youtube
 
 
@@ -26,7 +28,10 @@ async def _require_access(request: web.Request):
     async with async_session() as session:
         user = await session.get(User, user_id)
         if user is None: raise web.HTTPUnauthorized(text="account not found")
-        if not is_owner(user_id) and not has_active_subscription(user): raise web.HTTPPaymentRequired(text="active subscription required")
+        account = None
+        if hasattr(session, "execute"):
+            account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user): raise web.HTTPPaymentRequired(text="active subscription required")
     return user_id
 
 

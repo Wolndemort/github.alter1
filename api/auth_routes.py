@@ -13,7 +13,7 @@ from config import config
 from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from services.account_linking import resolve_telegram_user
-from utils.billing import create_payment, configured as billing_configured, has_active_subscription, is_owner, price
+from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price
 from utils.redis_store import close_redis, create_link_token, create_redis
 
 
@@ -109,12 +109,13 @@ async def memory_route(request: web.Request) -> web.Response:
 async def subscription_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
-        from data.models import User
+        from data.models import User, WebAccount
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         return web.json_response({
-            "active": is_owner(user.id) or has_active_subscription(user),
+            "active": has_owner_access(user.id, account.email if account else None) or has_active_subscription(user),
             "price_rub": str(price()), "days": config.SUBSCRIPTION_DAYS,
             "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,

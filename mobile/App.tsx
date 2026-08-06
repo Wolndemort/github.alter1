@@ -79,7 +79,7 @@ export function VoiceButton({ onRecorded }: { onRecorded: (uri: string) => void 
     setRecording(null);
     if (uri) onRecorded(uri);
   };
-  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null, { transform: [{ scale: pulse }] }]}><Text style={mediaStyles.voiceIcon}>●</Text></Animated.View></Pressable>;
+  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>MIC</Text></Animated.View></Animated.View></Pressable>;
 }
 
 export function AuthScreen({ onAuthenticated }: AuthProps) {
@@ -194,24 +194,24 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={styles.menuButton} onPress={() => setMenuVisible(true)}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
+    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => setMenuVisible(true)}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
     <FlatList data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text><Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
   </KeyboardAvoidingView>
   <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={styles.modalBackdrop} onPress={() => setMenuVisible(false)}>
-      <Pressable style={styles.menuCard} onPress={(event) => event.stopPropagation()}>
-        <Text style={styles.menuTitle}>{account?.name || "Кабинет"}</Text>
-        <Text style={styles.menuEmail}>{account?.email || ""}</Text>
+      <Pressable style={[styles.menuCard, premiumStyles.menuCard]} onPress={(event) => event.stopPropagation()}>
+        <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
+        <Text style={[styles.menuEmail, premiumStyles.menuEmail]}>{account?.email || ""}</Text>
         <View style={styles.menuDivider} />
-        <Text style={styles.menuStatus}>{account?.telegram_linked ? "Telegram подключён" : "Telegram не подключён"}</Text>
-        {account?.subscription_expires_at ? <Text style={styles.menuStatus}>Подписка до {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={styles.menuStatus}>Подписка не активна</Text>}
+        <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>{account?.telegram_linked ? "Telegram подключён" : "Telegram не подключён"}</Text>
+        {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>Подписка до {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>Подписка не активна</Text>}
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
-        <Button title="Память" onPress={openMemory} />
-        {!account?.telegram_linked ? <Button title="Подключить Telegram" onPress={openTelegramLink} /> : null}
-        <Button title="Оплатить подписку" onPress={buySubscription} />
-        <Button title="Выйти" onPress={() => { setMenuVisible(false); onLogout(); }} />
+        <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
+        {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Синхронизировать память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
+        <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Подписка</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
+        <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
     </Pressable>
   </Modal>
@@ -238,10 +238,22 @@ const styles = StyleSheet.create({
   intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 },
 });
 
+const premiumStyles = StyleSheet.create({
+  menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
+  menuCard: { width: 310, backgroundColor: "#101016", borderRadius: 24, padding: 22, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
+  menuActionArrow: { color: "#fff", fontSize: 20 },
+  menuTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 },
+  menuEmail: { color: "#fff", fontSize: 13, letterSpacing: 0.4 },
+  menuStatus: { color: "#fff", fontSize: 14, letterSpacing: 0.2 },
+  menuLogout: { backgroundColor: "transparent", borderColor: "#292632" },
+});
+
 const mediaStyles = StyleSheet.create({
   attachmentChip: { marginHorizontal: 12, marginBottom: 2, padding: 9, borderRadius: 10, backgroundColor: "#1d1d1d", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   attachmentText: { color: "#ddd", fontSize: 13 }, removeAttachment: { color: "#fff", fontSize: 20, paddingLeft: 12 },
-  attachButton: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: "#444", alignItems: "center", justifyContent: "center" }, attachIcon: { color: "#fff", fontSize: 21, lineHeight: 22 },
-  voiceButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }, voiceButtonActive: { backgroundColor: "#c9ff4a" }, voiceIcon: { color: "#050505", fontSize: 11 },
+  attachButton: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: "#4b416d", backgroundColor: "#15121f", alignItems: "center", justifyContent: "center" }, attachIcon: { color: "#d8ceff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
+  voiceHalo: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(145, 110, 255, 0.16)", borderWidth: 1, borderColor: "rgba(161, 132, 255, 0.55)" }, voiceHaloActive: { backgroundColor: "rgba(145, 110, 255, 0.32)", borderColor: "#a990ff", shadowColor: "#956dff", shadowOpacity: 0.9, shadowRadius: 12, shadowOffset: { width: 0, height: 0 }, elevation: 10 }, voiceButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#f7f4ff", alignItems: "center", justifyContent: "center" }, voiceButtonActive: { backgroundColor: "#b9a4ff" }, voiceIcon: { color: "#24163f", fontSize: 8, fontWeight: "800", letterSpacing: 0.8 },
   sendButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }, sendIcon: { color: "#050505", fontSize: 21, fontWeight: "700" },
 });

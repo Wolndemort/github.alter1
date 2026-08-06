@@ -23,6 +23,7 @@ class Setting(BaseSettings):
     # Safety switch: never spend money unless this is explicitly enabled.
     OPENROUTER_ALLOW_PAID_FALLBACK: bool = False
     OWNER_TELEGRAM_IDS: str = "1271717628"
+    OWNER_EMAILS: str = ""
     SUPPORT_USERNAME: str = "Adam_Omarov"
     SUPPORT_TELEGRAM_ID: int = 1271717628
     TELEGRAM_BOT_USERNAME: str = "alter_ai_bot"

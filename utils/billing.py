@@ -25,6 +25,14 @@ def is_owner(user_id: int) -> bool:
     return user_id in owner_ids()
 
 
+def owner_emails() -> set[str]:
+    return {value.strip().casefold() for value in (config.OWNER_EMAILS or "").split(",") if value.strip()}
+
+
+def has_owner_access(user_id: int, email: str | None = None) -> bool:
+    return is_owner(user_id) or bool(email and email.strip().casefold() in owner_emails())
+
+
 def price() -> Decimal:
     try:
         value = Decimal(config.SUBSCRIPTION_PRICE_RUB).quantize(Decimal("0.01"))
