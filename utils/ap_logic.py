@@ -59,6 +59,28 @@ def normalize_memory(value):
         result[category] = facts
     return result
 
+
+def _bounded_memory(value, max_chars: int = 4500) -> dict:
+    """Keep the serialized memory small enough for free OpenRouter models."""
+    normalized = normalize_memory(value or {})
+    serialized = json.dumps(normalized, ensure_ascii=False)
+    if len(serialized) <= max_chars:
+        return normalized
+    # Preserve the newest/most useful categories while bounding every value.
+    bounded = {}
+    remaining = max_chars
+    for category, facts in normalized.items():
+        if remaining <= 0:
+            break
+        text = json.dumps({category: facts}, ensure_ascii=False)
+        if len(text) <= remaining:
+            bounded[category] = facts
+            remaining -= len(text)
+        else:
+            bounded[category] = str(facts)[:max(200, remaining - len(category) - 20)]
+            break
+    return bounded
+
 GOLDEN_PROMT = ("Извлекай факты только если пользователь явно сообщил их сам — о себе или своих планах. Не извлекай предположения, настроение, диагнозы или сведения о третьих лицах как факты пользователя. Если пользователь исправил старую информацию, используй новую. Отдельно сохраняй будущие события, обещания ALTER вернуться к теме и незавершённые дела в open_loops; для них указывай title, follow_up_question и follow_up_at. follow_up_at заполняй только если время понятно, в ISO 8601 с часовым поясом; иначе оставляй пустым. Верни строгий JSON, ключи snake_case; "
                 "категории: identity:; health_sport:; food_drinks:; skills_career:; interests_hobbies:; goals_habits:; "
                 "psycho_vibe:; relationships:; worldview:; politics:; preferences:; important_events:; open_loops:. "
@@ -358,6 +380,7 @@ async def summarize_session(messages):
 
 async def generate_reply(messages, memory=None, search_results=None):
     try:
+        memory = _bounded_memory(memory)
         sources = ""
         if search_results:
             sources = "\nАктуальные результаты поиска (используй их, не выдумывай факты; сравнивай несколько источников, отмечай противоречия и не считай один сниппет доказательством):\n" + "\n".join(
