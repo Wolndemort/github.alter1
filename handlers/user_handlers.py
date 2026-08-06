@@ -27,6 +27,7 @@ from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price
+from utils.metrics import increment
 import logging
 
 router = Router()
@@ -38,7 +39,15 @@ def voice_enabled(user: User) -> bool:
 
 async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False):
     """Send text and, when enabled, a voice copy. TTS failure never hides the text."""
-    await message.answer(reply)
+    feedback_markup = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="👍 Полезно", callback_data="reply_feedback:positive"),
+        InlineKeyboardButton(text="👎 Мимо", callback_data="reply_feedback:negative"),
+    ]])
+    try:
+        await message.answer(reply, reply_markup=feedback_markup)
+    except TypeError:
+        # Keeps lightweight/offline Message doubles and older adapters working.
+        await message.answer(reply)
     if force_voice or voice_enabled(user):
         try:
             audio = await synthesize_speech(reply)
@@ -47,6 +56,24 @@ async def answer_reply(message: types.Message, reply: str, user: User, force_voi
             audio = None
         if audio:
             await message.answer_voice(BufferedInputFile(audio, filename="alter.ogg"))
+
+
+@router.callback_query(F.data.startswith("reply_feedback:"))
+async def handle_reply_feedback(callback: types.CallbackQuery, db_session: AsyncSession):
+    rating = callback.data.rsplit(":", 1)[-1]
+    if rating not in {"positive", "negative"} or not callback.from_user:
+        await callback.answer()
+        return
+    user = await db_session.get(User, callback.from_user.id)
+    if user:
+        settings = dict(user.tech_stack or {})
+        feedback = list(settings.get("reply_feedback") or [])
+        feedback.append({"rating": rating, "at": datetime.now(timezone.utc).isoformat()})
+        settings["reply_feedback"] = feedback[-100:]
+        user.tech_stack = settings
+        await db_session.commit()
+    increment("ai.reply.feedback", rating=rating)
+    await callback.answer("Спасибо, учту." if rating == "positive" else "Понял, буду точнее.")
 
 
 @router.message(Command("voice_on"))
