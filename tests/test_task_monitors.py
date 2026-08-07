@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from data.models import User, WebAccount
+from data.models import Session, User, WebAccount
 from utils import tasks
 
 
@@ -75,6 +75,26 @@ async def test_personality_monitor_processes_sessions(monkeypatch):
     monkeypatch.setattr(tasks.asyncio, "sleep", stop)
     with pytest.raises(StopLoop): await tasks.monitor_personality_imprint()
     assert processed == [] and db.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_personality_monitor_refetches_sessions_after_rollback(monkeypatch):
+    first = Session(id=11, user_id=1, raw_messages=[])
+    second = Session(id=12, user_id=1, raw_messages=[])
+    db = Db(values=[first, second])
+    monkeypatch.setattr(tasks, "async_session", lambda: Context(db))
+    processed = []
+    async def process(session, session_db):
+        processed.append(session.id)
+        if len(processed) == 1:
+            raise RuntimeError("simulated failure")
+        return False
+    async def stop(seconds): raise StopLoop()
+    monkeypatch.setattr(tasks, "process_session", process)
+    monkeypatch.setattr(tasks.asyncio, "sleep", stop)
+    with pytest.raises(StopLoop): await tasks.monitor_personality_imprint()
+    assert processed == [11, 12]
+    assert db.rollbacks == 2
 
 
 @pytest.mark.asyncio

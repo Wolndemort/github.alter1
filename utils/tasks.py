@@ -170,9 +170,15 @@ async def monitor_personality_imprint():
                     .with_for_update(skip_locked=True)
                     .options(selectinload(Session.user))
                 )
-                sessions = result.scalars().all()
+                session_ids = [session.id for session in result.scalars().all()]
 
-                for session in sessions:
+                # Rollback expires ORM instances. Never reuse the original
+                # list after a rollback: re-fetch each row explicitly so a
+                # column access cannot trigger hidden async IO (MissingGreenlet).
+                for session_id in session_ids:
+                    session = await db.get(Session, session_id)
+                    if session is None:
+                        continue
                     try:
                         if not await process_session(session, db):
                             await db.rollback()
