@@ -191,6 +191,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
+  const drawerX = React.useRef(new Animated.Value(-420)).current;
   const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
   useEffect(() => {
     refreshAccount();
@@ -203,6 +204,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     });
     return () => subscription.remove();
   }, [token]);
+  useEffect(() => {
+    if (menuVisible) {
+      drawerX.setValue(-420);
+      Animated.spring(drawerX, { toValue: 0, damping: 22, stiffness: 220, mass: 0.8, useNativeDriver: true }).start();
+    }
+  }, [drawerX, menuVisible]);
   const playVoiceReply = async (text: string) => {
     try {
       const blob = await api.voiceReply(token, text);
@@ -333,9 +340,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={permissionOfferVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
   </Modal>
-  <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
-    <Pressable style={styles.modalBackdrop} onPress={() => setMenuVisible(false)}>
-      <Pressable style={[styles.menuCard, premiumStyles.menuCard]} onPress={(event) => event.stopPropagation()}>
+  <Modal visible={menuVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>
+    <Pressable style={premiumStyles.drawerBackdrop} onPress={() => setMenuVisible(false)}>
+      <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}>
+      <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
         <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
         <Text style={[styles.menuEmail, premiumStyles.menuEmail]}>{account?.email || ""}</Text>
         <View style={styles.menuDivider} />
@@ -354,6 +362,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Открыть подписку</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
+      </Animated.View>
     </Pressable>
   </Modal>
   <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
@@ -403,11 +412,11 @@ const answerActionStyles = StyleSheet.create({
 
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.68)" },
-  sheet: { backgroundColor: "#101016", borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderColor: "#3b315f", padding: 20, gap: 10 },
+  sheet: { backgroundColor: "#101016", borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderColor: "#3b315f", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 0 },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#5d5670", alignSelf: "center", marginBottom: 7 },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
   action: { minHeight: 54, borderRadius: 14, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#191720" },
-  actionIcon: { fontSize: 19, color: "#d6c9ff", width: 24, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  actionIcon: { fontSize: 18, color: "#d6c9ff", width: 38, height: 38, lineHeight: 38, textAlign: "center", borderRadius: 19, backgroundColor: "#28213e", overflow: "hidden" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#bbaaff", fontWeight: "700" },
 });
 
@@ -431,8 +440,10 @@ const permissionStyles = StyleSheet.create({
 });
 
 const premiumStyles = StyleSheet.create({
+  drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.58)", alignItems: "flex-start" },
   menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
-  menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderRadius: 0, padding: 22, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderTopRightRadius: 28, borderBottomRightRadius: 28, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 8, height: 0 }, elevation: 12 },
+  drawerContent: { flex: 1, padding: 22, gap: 12 },
   menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
   menuActionArrow: { color: "#fff", fontSize: 20 },
