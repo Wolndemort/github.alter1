@@ -290,17 +290,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
         <Text style={[styles.menuEmail, premiumStyles.menuEmail]}>{account?.email || ""}</Text>
         <View style={styles.menuDivider} />
-        <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>{account?.telegram_linked ? "Telegram подключён" : "Telegram не подключён"}</Text>
-        {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>Подписка до {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>Подписка не активна</Text>}
+        <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>{account?.telegram_linked ? "TELEGRAM · ПОДКЛЮЧЁН" : "TELEGRAM · НЕ ПОДКЛЮЧЁН"}</Text>
+        {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · НЕ АКТИВИРОВАН</Text>}
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
-        {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Синхронизировать память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
+        {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         {account?.payment_method_saved ? <>
           <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
           <Pressable style={[premiumStyles.menuAction, premiumStyles.dangerAction]} onPress={removePaymentMethod}><Text style={premiumStyles.menuActionText}>Удалить карту</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable>
         </> : null}
-        {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Подписка</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
+        {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Открыть подписку</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
     </Pressable>
