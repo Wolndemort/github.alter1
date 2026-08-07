@@ -152,7 +152,9 @@ async def button_cabinet(message: types.Message, db_session: AsyncSession):
         f"👤 Это твой кабинет ALTER\n\n{status}\n\n"
         f"Стоимость доступа: {price()} ₽ / {config.SUBSCRIPTION_DAYS} дней\n\n"
         "ALTER рядом и не забудет напомнить о важных вещах.",
-        reply_markup=cabinet_keyboard(bool(user and user.auto_renew), bool(user and user.payment_method_id)),
+        # Temporary owner preview: show the disable state for YooKassa review
+        # even before a real payment method has been linked. No DB state changes.
+        reply_markup=cabinet_keyboard(bool(user and user.auto_renew) or is_owner(message.from_user.id), bool(user and user.payment_method_id)),
     )
 
 
