@@ -68,13 +68,13 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
     return output.getvalue()
 
 
-async def synthesize_speech(text: str) -> bytes:
+async def synthesize_speech(text: str, voice: str | None = None) -> bytes:
     """Generate OGG/Opus via OpenRouter's documented audio chat response."""
     try:
         response = await client.chat.completions.create(
             model=config.TTS_MODEL,
             modalities=["text", "audio"],
-            audio={"voice": config.TTS_VOICE, "format": "pcm16"},
+            audio={"voice": voice or config.TTS_VOICE, "format": "pcm16"},
             messages=[{"role": "user", "content": text[:config.TTS_MAX_CHARS]}],
             # Keep voice replies understandable without allowing huge audio output.
             max_tokens=config.TTS_MAX_TOKENS,

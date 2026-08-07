@@ -137,6 +137,11 @@ export class AlterApi {
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
+  async voiceReply(token: string, text: string) {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/voice/reply`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.blob();
+  }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }
   registerPushToken(token: string, pushToken: string) { return this.request<{ ok: boolean }>("/api/v1/push-token", { method: "POST", body: JSON.stringify({ token: pushToken }) }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }

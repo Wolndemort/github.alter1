@@ -7,12 +7,15 @@ import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
+import * as Clipboard from "expo-clipboard";
+import * as DocumentPicker from "expo-document-picker";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
+type ChatItem = { id: string; role: string; text: string; mediaUri?: string; feedback?: "positive" | "negative" };
 
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
 
@@ -169,7 +172,7 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
 
 export function ChatScreen({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [message, setMessage] = useState("");
-  const [items, setItems] = useState<{ id: string; role: string; text: string; mediaUri?: string }[]>([]);
+  const [items, setItems] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
@@ -179,25 +182,41 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [permissionOfferVisible, setPermissionOfferVisible] = useState(true);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [menuError, setMenuError] = useState("");
+  const [voiceReplies, setVoiceReplies] = useState(false);
+  const [ttsVoice, setTtsVoice] = useState("alloy");
+  const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
+  const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
-  const listRef = React.useRef<FlatList<{ id: string; role: string; text: string; mediaUri?: string }>>(null);
+  const listRef = React.useRef<FlatList<ChatItem>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
   const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
   useEffect(() => {
     refreshAccount();
+    api.settings(token).then(({ settings }) => {
+      setVoiceReplies(settings.voice_replies === true);
+      if (typeof settings.tts_voice === "string") setTtsVoice(settings.tts_voice);
+    }).catch(() => undefined);
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") refreshAccount();
     });
     return () => subscription.remove();
   }, [token]);
+  const playVoiceReply = async (text: string) => {
+    try {
+      const blob = await api.voiceReply(token, text);
+      const uri = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+      const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+      loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) loaded.sound.unloadAsync(); });
+    } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
+  };
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
     autoScrollAfterUpdate.current = true;
     setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); if (voiceReplies) playVoiceReply(result.reply); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -279,11 +298,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
     }
   };
-  const pickMedia = () => Alert.alert("Добавить вложение", "", [
-    { text: "Сфотографировать", onPress: takePhoto },
-    { text: "Выбрать из медиатеки", onPress: pickMediaLibrary },
-    { text: "Отмена", style: "cancel" },
-  ]);
+  const pickFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*"], copyToCacheDirectory: true });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const mime = asset.mimeType || "";
+      setAttachment({ uri: asset.uri, type: mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "image" });
+    }
+  };
+  const pickMedia = () => setMediaPickerVisible(true);
   const takePhoto = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
@@ -291,10 +314,18 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
+  const setFeedback = async (id: string, feedback: "positive" | "negative") => {
+    setItems((old) => old.map((item) => item.id === id ? { ...item, feedback } : item)); setFeedbackFor(null);
+    try {
+      const { settings } = await api.settings(token);
+      const previous = Array.isArray(settings.reply_feedback) ? settings.reply_feedback : [];
+      await api.updateSettings(token, { reply_feedback: [...previous, { rating: feedback, at: new Date().toISOString() }].slice(-100) });
+    } catch { /* Rating is optional; keep the local acknowledgement. */ }
+  };
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
+    <View style={styles.header}><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={styles.menuIcon}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><View style={{ width: 42 }} /></View>
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={() => Clipboard.setStringAsync(item.text)} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>⧉</Text></Pressable><Pressable onPress={() => playVoiceReply(item.text)} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>◖))</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
@@ -314,6 +345,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
+        <Pressable style={premiumStyles.menuAction} onPress={async () => { const next = !voiceReplies; setVoiceReplies(next); try { await api.updateSettings(token, { voice_replies: next }); } catch (err) { setVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Голосовые ответы</Text><Text style={premiumStyles.menuActionArrow}>{voiceReplies ? "✓" : "○"}</Text></Pressable>
+        {voiceReplies ? <Pressable style={premiumStyles.menuAction} onPress={async () => { const voices = ["alloy", "echo", "nova", "shimmer"]; const next = voices[(voices.indexOf(ttsVoice) + 1) % voices.length]; setTtsVoice(next); try { await api.updateSettings(token, { tts_voice: next }); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось выбрать голос"); } }}><Text style={premiumStyles.menuActionText}>Голос · {ttsVoice}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable> : null}
         {account?.payment_method_saved ? <>
           <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
           <Pressable style={[premiumStyles.menuAction, premiumStyles.dangerAction]} onPress={removePaymentMethod}><Text style={premiumStyles.menuActionText}>Удалить карту</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable>
@@ -322,6 +355,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
     </Pressable>
+  </Modal>
+  <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
+    <Pressable style={sheetStyles.backdrop} onPress={() => setMediaPickerVisible(false)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Добавить вложение</Text><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); takePhoto(); }}><Text style={sheetStyles.actionIcon}>◉</Text><Text style={sheetStyles.actionText}>Камера</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickMediaLibrary(); }}><Text style={sheetStyles.actionIcon}>▧</Text><Text style={sheetStyles.actionText}>Выбрать из медиатеки</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickFile(); }}><Text style={sheetStyles.actionIcon}>▤</Text><Text style={sheetStyles.actionText}>Файлы</Text></Pressable><Pressable style={sheetStyles.cancel} onPress={() => setMediaPickerVisible(false)}><Text style={sheetStyles.cancelText}>Отмена</Text></Pressable></Pressable></Pressable>
+  </Modal>
+  <Modal visible={feedbackFor !== null} transparent animationType="fade" onRequestClose={() => setFeedbackFor(null)}>
+    <Pressable style={sheetStyles.backdrop} onPress={() => setFeedbackFor(null)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Насколько полезен ответ?</Text><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "positive")}><Text style={sheetStyles.actionIcon}>👍</Text><Text style={sheetStyles.actionText}>Полезно</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "negative")}><Text style={sheetStyles.actionIcon}>👎</Text><Text style={sheetStyles.actionText}>Мимо</Text></Pressable></Pressable></Pressable>
   </Modal>
   <Modal visible={memoryVisible} animationType="slide" onRequestClose={() => setMemoryVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}>
@@ -357,6 +396,21 @@ const linkStyles = StyleSheet.create({
   link: { color: "#b8a2ff", textDecorationLine: "underline" },
 });
 
+const answerActionStyles = StyleSheet.create({
+  row: { flexDirection: "row", gap: 18, marginTop: 10, alignItems: "center" },
+  icon: { color: "#a99bce", fontSize: 16, paddingVertical: 2 }, selected: { color: "#d9cbff" },
+});
+
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.68)" },
+  sheet: { backgroundColor: "#101016", borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderColor: "#3b315f", padding: 20, gap: 10 },
+  handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#5d5670", alignSelf: "center", marginBottom: 7 },
+  title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
+  action: { minHeight: 54, borderRadius: 14, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#191720" },
+  actionIcon: { fontSize: 19, color: "#d6c9ff", width: 24, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#bbaaff", fontWeight: "700" },
+});
+
 const authStyles = StyleSheet.create({
   primary: { backgroundColor: "#f7f4ff", borderRadius: 12, paddingVertical: 14, alignItems: "center" },
   primaryText: { color: "#17121f", fontWeight: "800", letterSpacing: 0.4 },
@@ -378,7 +432,7 @@ const permissionStyles = StyleSheet.create({
 
 const premiumStyles = StyleSheet.create({
   menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
-  menuCard: { width: 310, backgroundColor: "#101016", borderRadius: 24, padding: 22, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderRadius: 0, padding: 22, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
   menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
   menuActionArrow: { color: "#fff", fontSize: 20 },

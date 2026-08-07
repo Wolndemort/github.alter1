@@ -12,6 +12,7 @@ from utils.billing import has_active_subscription, has_owner_access
 from services.media_chat_service import reply as media_reply
 from services.media_generation import MediaGenerationError, generate_image, generate_video
 from api.auth_routes import _bearer, _json
+from utils.tts import synthesize_speech
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -129,7 +130,30 @@ async def media_generate_route(request: web.Request) -> web.Response:
     })
 
 
+async def voice_reply_route(request: web.Request) -> web.Response:
+    """Synthesize a short, explicitly requested mobile voice reply."""
+    user_id = _bearer(request)
+    payload = await _json(request)
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise web.HTTPBadRequest(text="text required")
+    async with async_session() as session:
+        from data.models import User, WebAccount
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+            raise web.HTTPPaymentRequired(text="active subscription required")
+        voice = (user.tech_stack or {}).get("tts_voice")
+    audio = await synthesize_speech(text, voice=voice)
+    if not audio:
+        raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
+    return web.Response(body=audio, content_type="audio/ogg")
+
+
 def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/messages", chat_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
+    app.router.add_post("/api/v1/voice/reply", voice_reply_route)
