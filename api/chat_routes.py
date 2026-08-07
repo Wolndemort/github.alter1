@@ -13,6 +13,7 @@ from services.media_chat_service import reply as media_reply
 from services.media_generation import MediaGenerationError, generate_image, generate_video
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
+from utils.tasks import process_session
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -34,6 +35,27 @@ async def chat_route(request: web.Request) -> web.Response:
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
     return web.json_response({"reply": result.reply, "session_id": result.session_id})
+
+
+async def new_session_route(request: web.Request) -> web.Response:
+    """Close the active conversation, persist its summary, and start fresh."""
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import User, Session as ChatSession, WebAccount
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+            raise web.HTTPPaymentRequired(text="active subscription required")
+        active = (await session.execute(select(ChatSession).where(
+            ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)
+        ).order_by(ChatSession.started_at.desc()))).scalar_one_or_none()
+        if active is not None and active.raw_messages:
+            await process_session(active, session)
+        else:
+            await session.commit()
+    return web.json_response({"ok": True})
 
 
 async def media_chat_route(request: web.Request) -> web.Response:
@@ -156,6 +178,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
 
 def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/messages", chat_route)
+    app.router.add_post("/api/v1/chat/new", new_session_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
     app.router.add_post("/api/v1/voice/reply", voice_reply_route)

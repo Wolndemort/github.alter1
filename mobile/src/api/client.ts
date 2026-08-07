@@ -92,6 +92,7 @@ export class AlterApi {
       body: JSON.stringify({ message, ...(location ? { location } : {}) }),
     }, token);
   }
+  newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
 
   async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio") {
     const mime = mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a";
