@@ -64,8 +64,9 @@ jobs:
 
       - name: Run mobile checks
         working-directory: mobile
+        timeout-minutes: 6
         run: |
-          npm ci --registry=https://registry.npmjs.org --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=120000
+          npm ci --registry=https://registry.npmjs.org --prefer-offline --no-audit --no-fund --fetch-retries=2 --fetch-retry-factor=2 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=30000
           npx tsc --noEmit
           npm test -- --runInBand --testTimeout=30000
 
