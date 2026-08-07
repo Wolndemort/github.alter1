@@ -1,7 +1,9 @@
 """Shared Redis primitives: FSM storage, short-lived cache and billing counters."""
 import json
 import secrets
+from datetime import datetime, timezone
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from config import config
 
@@ -67,6 +69,33 @@ async def charge_request(redis: Redis, user_id: int, limit: int) -> bool:
         await redis.decr(key)
         return False
     return True
+
+
+def _credits_key(user_id: int) -> str:
+    return f"alter:credits:{user_id}:{datetime.now(timezone.utc):%Y-%m}"
+
+
+async def charge_credits(redis: Redis, user_id: int, cost: int, limit: int) -> bool:
+    """Atomically reserve monthly AI credits; refunds the reservation on overflow."""
+    key = _credits_key(user_id)
+    try:
+        count = await redis.incrby(key, max(1, int(cost)))
+    except RedisError:
+        return True
+    if count == cost:
+        await redis.expire(key, 35 * 86400)
+    if count > limit:
+        await redis.decrby(key, max(1, int(cost)))
+        return False
+    return True
+
+
+async def credits_used(redis: Redis, user_id: int) -> int:
+    value = await redis.get(_credits_key(user_id))
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 async def allow_request(redis: Redis, user_id: int, limit: int, window: int) -> bool:

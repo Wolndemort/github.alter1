@@ -131,6 +131,7 @@ export class AlterApi {
 
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
+  usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
   removePaymentMethod(token: string) { return this.request<{ ok: boolean; auto_renew: boolean; payment_method_saved: boolean }>("/api/v1/subscription/payment-method", { method: "DELETE" }, token); }

@@ -15,7 +15,7 @@ from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price
-from utils.redis_store import close_redis, create_link_token, create_redis
+from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
 
 _resolved_telegram_username: str | None = None
 
@@ -129,6 +129,16 @@ async def memory_route(request: web.Request) -> web.Response:
         return web.json_response({"memory": user.memory or {}, "tech_stack": user.tech_stack or {}})
 
 
+async def usage_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    redis = create_redis()
+    try:
+        used = await credits_used(redis, user_id)
+    finally:
+        await close_redis(redis)
+    return web.json_response({"used": used, "limit": config.MONTHLY_CREDITS, "remaining": max(0, config.MONTHLY_CREDITS - used)})
+
+
 async def subscription_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
@@ -232,6 +242,7 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/auth/resend-verification", resend_verification_route)
     app.router.add_get("/api/v1/account", account_route)
     app.router.add_get("/api/v1/memory", memory_route)
+    app.router.add_get("/api/v1/usage", usage_route)
     app.router.add_get("/api/v1/subscription", subscription_route)
     app.router.add_patch("/api/v1/subscription/auto-renew", auto_renew_route)
     app.router.add_delete("/api/v1/subscription/payment-method", remove_payment_method_route)

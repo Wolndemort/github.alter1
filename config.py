@@ -59,6 +59,7 @@ class Setting(BaseSettings):
     SMTP_USE_TLS: bool = True
 
     DAILY_REQUEST_LIMIT: int = 100
+    MONTHLY_CREDITS: int = 1000
     SPAM_REQUEST_LIMIT: int = 5
     SPAM_WINDOW_SECONDS: int = 60
     MAX_OUTPUT_TOKENS: int = 600

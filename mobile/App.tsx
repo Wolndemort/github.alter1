@@ -190,6 +190,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
   const [emailVisible, setEmailVisible] = useState(false);
   const [openSection, setOpenSection] = useState<"connections" | "tools" | "app" | null>(null);
+  const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number } | null>(null);
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
@@ -216,6 +217,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
   useEffect(() => {
     refreshAccount();
+    api.usage(token).then(setUsage).catch(() => undefined);
     api.settings(token).then(({ settings }) => {
       setVoiceReplies(settings.voice_replies === true);
       setAutoVoiceReplies(settings.voice_auto_replies === true);
@@ -404,6 +406,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "app" ? null : "app")}><Text style={premiumStyles.sectionLabel}>ПРИЛОЖЕНИЕ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "app" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "app" ? <View style={premiumStyles.sectionBody}>
+        <View style={premiumStyles.usageRow}><Text style={premiumStyles.menuActionText}>Лимиты</Text><Text style={premiumStyles.usageText}>{usage ? `${usage.remaining} из ${usage.limit}` : "…"}</Text></View>
         <Pressable style={premiumStyles.menuAction} onPress={() => { const values = ["Русский", "English", "Español", "Deutsch", "中文"]; setLanguage(values[(values.indexOf(language) + 1) % values.length]); }}><Text style={premiumStyles.menuActionText}>Язык · {language}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable>
         {account?.payment_method_saved ? <>
           <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
@@ -502,6 +505,7 @@ const premiumStyles = StyleSheet.create({
   drawerLogo: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: 7, marginBottom: 2 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
   sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#a99bce", fontSize: 18 }, sectionBody: { gap: 8 },
+  usageRow: { minHeight: 42, borderRadius: 11, backgroundColor: "#17151e", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, usageText: { color: "#c7baff", fontSize: 13, fontWeight: "700" },
   submenu: { marginTop: -4, marginLeft: 10, gap: 6, borderLeftWidth: 1, borderLeftColor: "#40355f", paddingLeft: 10 }, submenuAction: { minHeight: 42, borderRadius: 11, backgroundColor: "#14121b", borderWidth: 1, borderColor: "#242031", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },

@@ -8,7 +8,7 @@ from redis.exceptions import RedisError
 
 from config import config
 from data.models import User
-from utils.redis_store import charge_request, allow_request
+from utils.redis_store import charge_request, allow_request, charge_credits
 from utils.billing import has_active_subscription, is_owner
 from services.account_linking import resolve_telegram_user
 
@@ -54,6 +54,11 @@ class GuardMiddleware(BaseMiddleware):
                 if not data["billing_allowed"]:
                     if answer:
                         await answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
+                    return None
+                data["credits_allowed"] = await charge_credits(self.redis, user.id, 1, config.MONTHLY_CREDITS)
+                if not data["credits_allowed"]:
+                    if answer:
+                        await answer("Месячный лимит AI-запросов исчерпан. Лимит обновится в начале следующего месяца.")
                     return None
             db_session = data.get("db_session")
             if db_session is not None:
