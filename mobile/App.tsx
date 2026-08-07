@@ -19,8 +19,8 @@ Notifications.setNotificationHandler({ handleNotification: async () => ({ should
 async function registerPushNotifications(token: string) {
   if (Platform.OS === "web") return;
   let status = await Notifications.getPermissionsAsync();
-  if (status !== Notifications.PermissionStatus.GRANTED) status = await Notifications.requestPermissionsAsync();
-  if (status !== Notifications.PermissionStatus.GRANTED) return;
+  if (!status.granted) status = await Notifications.requestPermissionsAsync();
+  if (!status.granted) return;
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   const pushToken = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
   await api.registerPushToken(token, pushToken);
