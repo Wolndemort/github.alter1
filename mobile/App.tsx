@@ -201,6 +201,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const listRef = React.useRef<FlatList<ChatItem>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
   const drawerX = React.useRef(new Animated.Value(-420)).current;
+  const logoPulse = React.useRef(new Animated.Value(0.72)).current;
   const idleShade = React.useRef(new Animated.Value(0)).current;
   const idleTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetIdle = React.useCallback(() => {
@@ -231,6 +232,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       Animated.spring(drawerX, { toValue: 0, damping: 22, stiffness: 220, mass: 0.8, useNativeDriver: true }).start();
     }
   }, [drawerX, menuVisible]);
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(logoPulse, { toValue: 1, duration: 1400, useNativeDriver: true }),
+      Animated.timing(logoPulse, { toValue: 0.72, duration: 1400, useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [logoPulse]);
   useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [resetIdle]);
   const playVoiceReply = async (text: string, id?: string) => {
     if (playingVoiceId) return;
@@ -374,7 +383,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}> 
       <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={premiumStyles.drawerScroll}>
-        <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
+        <Animated.Text style={[premiumStyles.drawerLogo, { opacity: logoPulse }]}>ALTER</Animated.Text>
         <Text style={premiumStyles.sectionLabel}>ПРОФИЛЬ</Text>
         <Pressable style={premiumStyles.accountRow} onPress={() => setEmailVisible((value) => !value)}><Text style={premiumStyles.menuEmail}>{emailVisible ? (account?.email || "Почта не указана") : maskedEmail}</Text><Text style={premiumStyles.menuActionArrow}>{emailVisible ? "⌃" : "⌄"}</Text></Pressable>
         <View style={styles.menuDivider} />
@@ -488,6 +497,7 @@ const premiumStyles = StyleSheet.create({
   menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
   menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderTopRightRadius: 28, borderBottomRightRadius: 28, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 8, height: 0 }, elevation: 12 },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
+  drawerLogo: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: 7, marginBottom: 2 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
   sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#a99bce", fontSize: 18 }, sectionBody: { gap: 8 },
   submenu: { marginTop: -4, marginLeft: 10, gap: 6, borderLeftWidth: 1, borderLeftColor: "#40355f", paddingLeft: 10 }, submenuAction: { minHeight: 42, borderRadius: 11, backgroundColor: "#14121b", borderWidth: 1, borderColor: "#242031", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
