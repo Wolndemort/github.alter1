@@ -1,4 +1,4 @@
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 MEMORY_BUTTON = "\U0001f9e0 \u041f\u0430\u043c\u044f\u0442\u044c"
 NEW_SESSION_BUTTON = "\U0001f195 \u041d\u043e\u0432\u044b\u0439 \u0440\u0430\u0437\u0433\u043e\u0432\u043e\u0440"
@@ -69,3 +69,12 @@ def voice_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="\u2b05\ufe0f \u041d\u0430\u0437\u0430\u0434")],
         ], resize_keyboard=True,
     )
+
+
+def media_actions_keyboard() -> InlineKeyboardMarkup:
+    """Human-readable actions shown under every Telegram media turn."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔎 Разобрать", callback_data="media:analyze")],
+        [InlineKeyboardButton(text="✨ Улучшить фото", callback_data="media:improve")],
+        [InlineKeyboardButton(text="🎬 Оживить видео", callback_data="media:animate")],
+    ])

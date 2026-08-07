@@ -37,6 +37,7 @@ describe("ALTER mobile critical screens", () => {
     const { getByPlaceholderText, getByText } = render(<AuthScreen onAuthenticated={jest.fn()} />);
     fireEvent.changeText(getByPlaceholderText("Email"), "user@example.com");
     fireEvent.press(getByText("Создать аккаунт"));
+    fireEvent.press(getByText(/Принимаю/));
     fireEvent.press(getByText("Создать аккаунт"));
     await waitFor(() => expect(register).toHaveBeenCalledWith("user@example.com", ""));
   });

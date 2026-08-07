@@ -109,9 +109,11 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   const submit = async () => {
     if (registerMode && !email.trim()) { setError("Введите email"); return; }
+    if (registerMode && !legalAccepted) { setError("Прими документы ALTER, чтобы продолжить регистрацию"); return; }
     setBusy(true); setError("");
     try {
       if (registerMode) {
@@ -150,8 +152,8 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
     <Text style={styles.subtitle}>Код отправлен на {verificationEmail}. Он действует 10 минут.</Text>
     <TextInput autoFocus keyboardType="number-pad" maxLength={6} placeholder="6-значный код" placeholderTextColor="#78809a" style={styles.input} value={code} onChangeText={(value) => setCode(value.replace(/\D/g, ""))} />
     {error ? <Text style={styles.error}>{error}</Text> : null}
-    {busy ? <ActivityIndicator color="#9b8cff" /> : <Button title="Подтвердить email" onPress={verify} />}
-    <Button title={resending ? "Отправляем..." : "Отправить код ещё раз"} onPress={resend} disabled={busy || resending} />
+    {busy ? <ActivityIndicator color="#9b8cff" /> : <Pressable style={authStyles.primary} onPress={verify}><Text style={authStyles.primaryText}>Подтвердить email</Text></Pressable>}
+    <Pressable style={authStyles.secondary} onPress={resend} disabled={busy || resending}><Text style={authStyles.secondaryText}>{resending ? "Отправляем…" : "Отправить код ещё раз"}</Text></Pressable>
   </View><StatusBar style="light" /></SafeAreaView>;
 
   return <SafeAreaView style={styles.container}><View style={styles.card}>
@@ -159,8 +161,9 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
     <TextInput autoCapitalize="none" keyboardType="email-address" placeholder="Email" placeholderTextColor="#78809a" style={styles.input} value={email} onChangeText={setEmail} />
     <TextInput secureTextEntry placeholder="Пароль" placeholderTextColor="#78809a" style={styles.input} value={password} onChangeText={setPassword} />
     {error ? <Text style={styles.error}>{error}</Text> : null}
-    {busy ? <ActivityIndicator color="#9b8cff" /> : <Button title={registerMode ? "Создать аккаунт" : "Войти"} onPress={submit} />}
-    <Button title={registerMode ? "У меня уже есть аккаунт" : "Создать аккаунт"} onPress={() => setRegisterMode(!registerMode)} />
+    {registerMode ? <Pressable style={authStyles.legalRow} onPress={() => setLegalAccepted(!legalAccepted)}><Text style={authStyles.check}>{legalAccepted ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Принимаю <Text style={linkStyles.link} onPress={() => Linking.openURL("https://alterai.ru/legal/privacy.html")}>политику конфиденциальности</Text> и <Text style={linkStyles.link} onPress={() => Linking.openURL("https://alterai.ru/legal/offer.html")}>условия ALTER</Text></Text></Pressable> : null}
+    {busy ? <ActivityIndicator color="#9b8cff" /> : <Pressable style={authStyles.primary} onPress={submit}><Text style={authStyles.primaryText}>{registerMode ? "Создать аккаунт" : "Войти"}</Text></Pressable>}
+    <Pressable style={authStyles.secondary} onPress={() => { setRegisterMode(!registerMode); setLegalAccepted(false); }}><Text style={authStyles.secondaryText}>{registerMode ? "У меня уже есть аккаунт" : "Создать аккаунт"}</Text></Pressable>
   </View><StatusBar style="light" /></SafeAreaView>;
 }
 
@@ -173,6 +176,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [memoryVisible, setMemoryVisible] = useState(false);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [permissionOfferVisible, setPermissionOfferVisible] = useState(true);
+  const [permissionBusy, setPermissionBusy] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
@@ -226,6 +231,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, city: first?.city || first?.district || undefined, region: first?.region || undefined, country: first?.country || undefined });
     } catch { setMenuError("Не удалось определить местоположение."); }
   };
+  const acceptPermissionOffer = async () => {
+    setPermissionBusy(true);
+    try {
+      await registerPushNotifications(token);
+      await requestLocation(false);
+    } finally { setPermissionBusy(false); setPermissionOfferVisible(false); }
+  };
   const chooseLocationMode = () => Alert.alert("Геолокация", "Выбери, как ALTER может использовать местоположение.", [
     { text: "Только при использовании", onPress: () => requestLocation(false) },
     { text: "Всегда, если разрешит iPhone", onPress: () => requestLocation(true) },
@@ -269,6 +281,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
   </KeyboardAvoidingView>
+  <Modal visible={permissionOfferVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
+    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
+  </Modal>
   <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={styles.modalBackdrop} onPress={() => setMenuVisible(false)}>
       <Pressable style={[styles.menuCard, premiumStyles.menuCard]} onPress={(event) => event.stopPropagation()}>
@@ -311,7 +326,6 @@ export default function App() {
     });
     return () => subscription.remove();
   }, []);
-  useEffect(() => { if (token) registerPushNotifications(token).catch(() => undefined); }, [token]);
   if (!introDone) return <IntroScreen onFinished={() => setIntroDone(true)} />;
   if (loading) return <SafeAreaView style={styles.container}><ActivityIndicator color="#9b8cff" /></SafeAreaView>;
   return <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>{token ? <Stack.Screen name="Chat">{() => <ChatScreen token={token} onLogout={() => { AsyncStorage.removeItem("alter_access_token"); setToken(null); }} />}</Stack.Screen> : <Stack.Screen name="Auth">{() => <AuthScreen onAuthenticated={setToken} />}</Stack.Screen>}</Stack.Navigator></NavigationContainer>;
@@ -323,6 +337,25 @@ const styles = StyleSheet.create({
 
 const linkStyles = StyleSheet.create({
   link: { color: "#b8a2ff", textDecorationLine: "underline" },
+});
+
+const authStyles = StyleSheet.create({
+  primary: { backgroundColor: "#f7f4ff", borderRadius: 12, paddingVertical: 14, alignItems: "center" },
+  primaryText: { color: "#17121f", fontWeight: "800", letterSpacing: 0.4 },
+  secondary: { borderWidth: 1, borderColor: "#3b315f", borderRadius: 12, paddingVertical: 13, alignItems: "center" },
+  secondaryText: { color: "#d8ceff", fontWeight: "700" },
+  legalRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 }, check: { color: "#b9a4ff", fontSize: 22, lineHeight: 22 }, legalText: { color: "#aaa", flex: 1, fontSize: 12, lineHeight: 18 },
+});
+
+const permissionStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", padding: 24 },
+  card: { backgroundColor: "#101016", borderRadius: 26, borderWidth: 1, borderColor: "#493b78", padding: 24, shadowColor: "#8d6cff", shadowOpacity: 0.3, shadowRadius: 24, elevation: 12 },
+  kicker: { color: "#aa93ff", fontSize: 11, letterSpacing: 2, fontWeight: "800", marginBottom: 14 },
+  title: { color: "#fff", fontSize: 28, fontWeight: "800", letterSpacing: 0.4, marginBottom: 12 },
+  body: { color: "#c9c5d4", fontSize: 15, lineHeight: 23, marginBottom: 22 },
+  primary: { backgroundColor: "#f7f4ff", borderRadius: 14, paddingVertical: 15, alignItems: "center" },
+  primaryText: { color: "#17121f", fontWeight: "800" },
+  later: { color: "#aaa", textAlign: "center", paddingTop: 16, fontSize: 14 },
 });
 
 const premiumStyles = StyleSheet.create({

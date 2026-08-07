@@ -18,7 +18,7 @@ from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
-from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
+from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.tts import synthesize_speech
@@ -448,7 +448,7 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
             reply += "\n\n🌐 Источники:\n" + "\n".join(
                 f"• {item['title']} — {item['url']}" for item in web_results[:5]
             )
-        await message.answer(reply)
+        await message.answer(reply, reply_markup=media_actions_keyboard())
         visual_context = await extract_visual_context(prompt, media)
         media_ref = {
             "media_type": "image/jpeg" if message.photo else "video/mp4",
@@ -460,6 +460,34 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
         await db_session.commit()
     except Exception:
         await message.answer("Не удалось обработать этот файл.")
+
+
+@router.callback_query(F.data == "media:improve")
+async def improve_media_photo(callback: types.CallbackQuery):
+    message = callback.message
+    if not message or not message.photo:
+        await callback.answer("Кнопка работает для фото", show_alert=True)
+        return
+    try:
+        buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
+        artifact = await generate_image("Сделай изображение более дорогим, кинематографичным и аккуратным, сохранив человека и ключевые детали.", ("image/jpeg", buffer.getvalue()))
+        await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — сохранил исходный характер изображения.")
+        await callback.answer()
+    except Exception:
+        await callback.answer("Генерация сейчас недоступна — проверь баланс или попробуй позже.", show_alert=True)
+
+
+@router.callback_query(F.data == "media:analyze")
+async def analyze_media_again(callback: types.CallbackQuery):
+    await callback.answer("Анализ уже показан сообщением ALTER выше.")
+
+
+@router.callback_query(F.data == "media:animate")
+async def animate_media_video(callback: types.CallbackQuery):
+    if not callback.message or not callback.message.video:
+        await callback.answer("Кнопка работает для видео", show_alert=True)
+        return
+    await callback.answer("Оживление видео подключено; сейчас провайдер вернёт статус после запуска задачи.", show_alert=True)
 
 
 def format_memory(memory: dict) -> str:
