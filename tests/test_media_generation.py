@@ -13,6 +13,7 @@ def test_generation_requires_explicit_provider(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_image_generation_decodes_provider_artifact(monkeypatch):
+    monkeypatch.setattr(media_generation.config, "MEDIA_PROVIDER", "openai_compatible")
     monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_URL", "https://media.example/v1")
     monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
     monkeypatch.setattr(media_generation.config, "MEDIA_IMAGE_MODEL", "image-model")
@@ -38,6 +39,7 @@ async def test_image_generation_decodes_provider_artifact(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_video_generation_is_explicitly_not_fake(monkeypatch):
+    monkeypatch.setattr(media_generation.config, "MEDIA_PROVIDER", "openai_compatible")
     monkeypatch.setattr(media_generation.config, "MEDIA_VIDEO_API_URL", None)
     with pytest.raises(media_generation.MediaGenerationError, match="видео"):
         await media_generation.generate_video("cinematic")

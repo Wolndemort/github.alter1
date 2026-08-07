@@ -70,7 +70,7 @@ class Setting(BaseSettings):
     MEDIA_GENERATION_API_URL: str | None = None
     MEDIA_GENERATION_API_KEY: SecretStr | None = None
     MEDIA_PROVIDER: str = "openai_compatible"
-    FAL_BASE_URL: str = "https://queue.fal.run"
+    FAL_BASE_URL: str = "https://fal.run"
     FAL_IMAGE_MODEL: str | None = None
     FAL_VIDEO_MODEL: str | None = None
     MEDIA_IMAGE_MODEL: str | None = None
