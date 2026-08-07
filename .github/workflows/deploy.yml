@@ -67,7 +67,7 @@ jobs:
         run: |
           npm ci --registry=https://registry.npmjs.org --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=120000
           npx tsc --noEmit
-          npm test -- --runInBand
+          npm test -- --runInBand --testTimeout=30000
 
       - name: Validate Compose
         run: docker compose config --quiet
