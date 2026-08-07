@@ -115,39 +115,44 @@ async def save_unique_event(event: dict, user_id: int, db) -> None:
 async def process_session(session: Session, db) -> bool:
     """Summarize one inactive session and persist its durable memory."""
     facts = await summarize_session(session.raw_messages)
-    if not facts or not session.user:
+    if not facts:
         return False
-    current = dict(session.user.memory or {})
-    session.user.memory = merge_memory(current, facts)
-    flag_modified(session.user, "memory")
+    # Resolve the owner explicitly. Accessing ``session.user`` can trigger a
+    # lazy async query after a rollback and raise MissingGreenlet.
+    user = await db.get(User, session.user_id) if hasattr(db, "get") else session.user
+    if user is None:
+        return False
+    current = dict(user.memory or {})
+    user.memory = merge_memory(current, facts)
+    flag_modified(user, "memory")
     for event in extract_important_events(facts):
-        await save_unique_event(event, session.user.id, db)
+        await save_unique_event(event, user.id, db)
     for followup in extract_followups(facts):
         # Idempotency: a repeated session summary must not schedule duplicates.
         existing = await db.execute(select(Reminder).where(
-            Reminder.user_id == session.user.id,
+            Reminder.user_id == user.id,
             Reminder.kind == "followup",
             Reminder.text == followup["text"],
             Reminder.remind_at == followup["remind_at"],
         ))
         if existing.scalar_one_or_none() is None:
-            db.add(Reminder(user_id=session.user.id, kind="followup", **followup))
+            db.add(Reminder(user_id=user.id, kind="followup", **followup))
     health_followup = extract_health_followup(session.raw_messages)
-    if health_followup and session.user.checkins_enabled:
-        hours = max(1, min(48, int(user_setting(session.user, "health_followup_hours", DEFAULT_HEALTH_FOLLOWUP_HOURS))))
+    if health_followup and user.checkins_enabled:
+        hours = max(1, min(48, int(user_setting(user, "health_followup_hours", DEFAULT_HEALTH_FOLLOWUP_HOURS))))
         health_followup["remind_at"] = datetime.now(timezone.utc) + timedelta(hours=hours)
         # Do not create a second health check-in while one is still pending.
         if hasattr(db, "execute"):
             existing = await db.execute(select(Reminder).where(
-                Reminder.user_id == session.user.id,
+                Reminder.user_id == user.id,
                 Reminder.kind == "health_checkin",
                 Reminder.is_sent.is_(False),
                 Reminder.remind_at > datetime.now(timezone.utc),
             ))
             if existing.scalar_one_or_none() is None:
-                db.add(Reminder(user_id=session.user.id, kind="health_checkin", **health_followup))
+                db.add(Reminder(user_id=user.id, kind="health_checkin", **health_followup))
         else:
-            db.add(Reminder(user_id=session.user.id, kind="health_checkin", **health_followup))
+            db.add(Reminder(user_id=user.id, kind="health_checkin", **health_followup))
     session.is_processed = True
     await db.commit()
     return True
