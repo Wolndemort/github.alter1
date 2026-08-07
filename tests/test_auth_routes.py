@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -78,5 +79,6 @@ async def test_start_link_returns_deep_link(monkeypatch):
     async def close(redis): pass
     monkeypatch.setattr(auth_routes, "create_link_token", create_link)
     monkeypatch.setattr(auth_routes, "close_redis", close)
+    monkeypatch.setattr(auth_routes, "telegram_bot_username", lambda: asyncio.sleep(0, result="alter_ai_bot"))
     response = await auth_routes.start_telegram_link_route(Request())
     assert "start=link_one-time" in response.text

@@ -452,10 +452,10 @@ async def generate_reply(messages, memory=None, search_results=None):
         system = f"Ты — ALTER, живой и внимательный собеседник. Отвечай по-русски естественно и кратко. Не выдумывай факты. Не повторяй факты из памяти дословно. Используй память только по теме. Если есть важная или незавершённая тема, иногда бережно возвращайся к ней. Задавай максимум один уместный уточняющий вопрос, не превращая разговор в анкету. Сначала пойми смысл запроса, затем реши, нужен ли инструмент; не ориентируйся на конкретные ключевые фразы. Для актуальных фактов, погоды и поиска используй инструменты. После tool-вызова проверь поле status: при empty/error один раз измени запрос или выбери другой инструмент, а если данных всё равно нет — честно скажи об ограничении. Память: {json.dumps(normalize_memory(memory or {}), ensure_ascii=False)}{sources}"
         system += "\nНе начинай старые темы сам и не упоминай их в ответе на короткий бытовой вопрос. Возвращайся к прошлой теме только если текущий запрос явно связан с ней или пользователь сам попросил напомнить. Не приписывай пользователю действия и факты, которых нет в текущем диалоге или памяти."
         system += (
-            "\nSTRICT RELEVANCE RULE: answer the latest user message only. Do not revive an old person, "
+            "\nRELEVANCE RULE: answer the latest user message naturally. Do not force old topics into a reply. "
             "story, reminder, or topic merely because it appears in memory or conversation history. "
-            "Use old context only when the latest message clearly refers to it. A question about a "
-            "third party is not a fact about the user and must not become a recurring subject."
+            "Use old context when it clearly helps. If a fact is uncertain, say so briefly and offer "
+            "the most useful next step instead of turning an ordinary conversation into an interview."
         )
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."

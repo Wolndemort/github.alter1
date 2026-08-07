@@ -94,6 +94,7 @@ def configured_yookassa(monkeypatch):
     monkeypatch.setattr(config, "YUKASSA_SHOP_ID", "shop-1")
     monkeypatch.setattr(config, "YUKASSA_SECRET_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
     monkeypatch.setattr(config, "YUKASSA_RECEIPT_EMAIL", None)
+    monkeypatch.setattr(config, "YUKASSA_SAVE_PAYMENT_METHOD", True)
     monkeypatch.setattr(billing.httpx, "AsyncClient", FakeClient)
     FakeClient.requests = []
 

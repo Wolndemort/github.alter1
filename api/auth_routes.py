@@ -7,6 +7,7 @@ services.auth_service, so a future mobile client does not change the domain.
 from __future__ import annotations
 
 from aiohttp import web
+from aiogram import Bot
 from sqlalchemy import select
 
 from config import config
@@ -15,6 +16,26 @@ from services.auth_service import authenticate, issue_token, register, resend_ve
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price
 from utils.redis_store import close_redis, create_link_token, create_redis
+
+_resolved_telegram_username: str | None = None
+
+
+async def telegram_bot_username() -> str:
+    """Resolve the username from BOT_TOKEN so stale env values cannot link to another bot."""
+    global _resolved_telegram_username
+    if _resolved_telegram_username:
+        return _resolved_telegram_username
+    fallback = (config.TELEGRAM_BOT_USERNAME or "").lstrip("@").strip()
+    try:
+        bot = Bot(token=config.BOT_TOKEN.get_secret_value())
+        try:
+            me = await bot.get_me()
+        finally:
+            await bot.session.close()
+        _resolved_telegram_username = me.username or fallback
+    except Exception:
+        _resolved_telegram_username = fallback
+    return _resolved_telegram_username
 
 
 def _auth_secret() -> str:
@@ -91,6 +112,7 @@ async def account_route(request: web.Request) -> web.Response:
         return web.json_response({
             "id": user.id, "name": user.first_name, "email": account.email,
             "telegram_linked": account.telegram_user_id is not None,
+            "owner": has_owner_access(user.id, account.email),
             "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
         })
@@ -132,7 +154,7 @@ async def create_app_payment_route(request: web.Request) -> web.Response:
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         try:
-            url = await create_payment(session, user, config.TELEGRAM_BOT_USERNAME, "bank_card")
+            url = await create_payment(session, user, await telegram_bot_username(), "bank_card")
         except RuntimeError as exc:
             raise web.HTTPBadGateway(text=str(exc))
         return web.json_response({"payment_url": url, "price_rub": str(price()), "days": config.SUBSCRIPTION_DAYS})
@@ -145,7 +167,7 @@ async def start_telegram_link_route(request: web.Request) -> web.Response:
         token = await create_link_token(redis, user_id)
     finally:
         await close_redis(redis)
-    return web.json_response({"url": f"https://t.me/{config.TELEGRAM_BOT_USERNAME}?start=link_{token}"})
+    return web.json_response({"url": f"https://t.me/{await telegram_bot_username()}?start=link_{token}"})
 
 
 def _bearer(request: web.Request) -> int:

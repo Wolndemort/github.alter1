@@ -7,7 +7,7 @@ export type MeResponse = {
 export type ChatResponse = { reply: string; session_id: number };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean;
 };
 export type MemoryResponse = { memory: Record<string, unknown>; tech_stack: Record<string, unknown> };
 export type SubscriptionResponse = { active: boolean; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
@@ -28,14 +28,24 @@ export class AlterApi {
   constructor(private readonly baseUrl: string) {}
 
   private async request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init.headers || {}),
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(init.headers || {}),
+        },
+      });
+    } catch (error) {
+      throw new ApiError(0, (error as { name?: string })?.name === "AbortError" ? "Сервер отвечает слишком долго. Попробуй ещё раз." : "Сетевая ошибка. Проверь интернет и повтори попытку.");
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       const message = await response.text();
       throw new ApiError(response.status, readableErrorBody(message, response.status));
@@ -87,9 +97,18 @@ export class AlterApi {
     const form = new FormData();
     form.append("message", message);
     form.append("file", { uri, type: mime, name: `alter.${mediaType === "audio" ? "m4a" : mediaType === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/media`, {
-      method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/media`, {
+        method: "POST", signal: controller.signal, headers: { Authorization: `Bearer ${token}` }, body: form,
+      });
+    } catch (error) {
+      throw new ApiError(0, (error as { name?: string })?.name === "AbortError" ? "Вложение обрабатывается слишком долго." : "Сетевая ошибка при отправке вложения.");
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<ChatResponse>;
   }

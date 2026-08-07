@@ -31,6 +31,7 @@ class Setting(BaseSettings):
     YUKASSA_SHOP_ID: str | None = None
     YUKASSA_SECRET_KEY: SecretStr | None = None
     YUKASSA_RECEIPT_EMAIL: str | None = None
+    YUKASSA_SAVE_PAYMENT_METHOD: bool = False
     SUBSCRIPTION_PRICE_RUB: str = "490.00"
     SUBSCRIPTION_DAYS: int = 30
     SUBSCRIPTION_RENEWAL_CHECK_SECONDS: int = 3600

@@ -72,7 +72,10 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
     }
     if payment_method_type == "sbp":
         payload["payment_method_data"] = {"type": "sbp"}
-    else:
+    elif config.YUKASSA_SAVE_PAYMENT_METHOD:
+        # Saving a card enables recurring charges but some cards/stores reject
+        # the initial payment entirely when this flag is present. One-time
+        # payment is the safe default; recurring billing is opt-in.
         payload["save_payment_method"] = True
     if config.YUKASSA_RECEIPT_EMAIL:
         payload["receipt"] = {

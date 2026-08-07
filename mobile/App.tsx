@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Animated, Button, Easing, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
@@ -51,7 +51,8 @@ function TypingText({ text }: { text: string }) {
     }, 24);
     return () => clearInterval(timer);
   }, [text]);
-  return <Text style={styles.message}>{visible}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
+  const parts = visible.split(/(https?:\/\/[^\s]+)/g);
+  return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => Linking.openURL(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
 }
 
 export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (uri: string) => void; onRecordingChange?: (active: boolean) => void }) {
@@ -81,7 +82,7 @@ export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (ur
     onRecordingChange?.(false);
     if (uri) onRecorded(uri);
   };
-  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>MIC</Text></Animated.View></Animated.View></Pressable>;
+  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>🎙</Text></Animated.View></Animated.View></Pressable>;
 }
 
 export function AuthScreen({ onAuthenticated }: AuthProps) {
@@ -161,13 +162,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const listRef = React.useRef<FlatList<{ id: string; role: string; text: string }>>(null);
+  const autoScrollAfterUpdate = React.useRef(false);
   useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
-  useEffect(() => { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [items]);
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
+    autoScrollAfterUpdate.current = true;
     setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text); setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -199,8 +201,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => setMenuVisible(true)}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
+    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); setMenuVisible(true); }}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text><Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
@@ -216,7 +218,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Синхронизировать память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
-        <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Подписка</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
+        {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Подписка</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
     </Pressable>
@@ -244,6 +246,10 @@ const styles = StyleSheet.create({
   intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 },
 });
 
+const linkStyles = StyleSheet.create({
+  link: { color: "#b8a2ff", textDecorationLine: "underline" },
+});
+
 const premiumStyles = StyleSheet.create({
   menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
   menuCard: { width: 310, backgroundColor: "#101016", borderRadius: 24, padding: 22, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
@@ -254,6 +260,7 @@ const premiumStyles = StyleSheet.create({
   menuEmail: { color: "#fff", fontSize: 13, letterSpacing: 0.4 },
   menuStatus: { color: "#fff", fontSize: 14, letterSpacing: 0.2 },
   menuLogout: { backgroundColor: "transparent", borderColor: "#292632" },
+  ownerBadge: { color: "#c7baff", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, textAlign: "center", paddingVertical: 8 },
 });
 
 const activityStyles = StyleSheet.create({
