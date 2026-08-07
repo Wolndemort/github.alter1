@@ -16,6 +16,14 @@ describe("AlterApi", () => {
     }));
   });
 
+  it("sends consented location only with the chat payload", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "weather", session_id: 3 }) });
+    await new AlterApi("https://alter.example").sendMessage("token", "weather", { latitude: 55.75, longitude: 37.62, city: "Moscow", region: "Moscow" });
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/chat/messages", expect.objectContaining({
+      body: JSON.stringify({ message: "weather", location: { latitude: 55.75, longitude: 37.62, city: "Moscow", region: "Moscow" } }),
+    }));
+  });
+
   it("turns HTTP failures into ApiError", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: false, status: 401, text: async () => "unauthorized" });
     await expect(new AlterApi("https://alter.example").me("bad"))

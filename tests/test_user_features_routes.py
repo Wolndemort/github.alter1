@@ -43,6 +43,16 @@ async def test_invalid_settings_and_checkins_are_rejected(monkeypatch, user):
     with pytest.raises(web.HTTPBadRequest): await routes.update_settings_route(Request({"quiet_start": 99}))
     with pytest.raises(web.HTTPBadRequest): await routes.checkins_route(Request({"enabled": "yes"}))
 
+
+@pytest.mark.asyncio
+async def test_push_token_is_validated_and_persisted(monkeypatch, user):
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    response = await routes.push_token_route(Request({"token": "ExponentPushToken[abc]"}))
+    assert response.status == 200
+    assert user.tech_stack["expo_push_token"] == "ExponentPushToken[abc]"
+    with pytest.raises(web.HTTPBadRequest):
+        await routes.push_token_route(Request({"token": "not-a-push-token"}))
+
 @pytest.mark.asyncio
 async def test_create_reminder_requires_future_timezone_aware_date(monkeypatch, user):
     db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
