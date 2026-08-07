@@ -146,10 +146,12 @@ async def voice_reply_route(request: web.Request) -> web.Response:
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
         voice = (user.tech_stack or {}).get("tts_voice")
-    audio = await synthesize_speech(text, voice=voice)
+    # WAV is supported by AVFoundation on iOS; OGG/Opus is Telegram's format
+    # but is not reliably playable by the native mobile audio stack.
+    audio = await synthesize_speech(text, voice=voice, output_format="wav")
     if not audio:
         raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
-    return web.Response(body=audio, content_type="audio/ogg")
+    return web.Response(body=audio, content_type="audio/wav")
 
 
 def setup_chat_routes(app: web.Application) -> None:

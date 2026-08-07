@@ -9,8 +9,9 @@ import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
@@ -213,7 +214,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const playVoiceReply = async (text: string) => {
     try {
       const blob = await api.voiceReply(token, text);
-      const uri = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+      const base64 = dataUrl.split(",", 2)[1];
+      if (!base64 || !FileSystem.cacheDirectory) throw new Error("Аудиофайл пустой");
+      const uri = `${FileSystem.cacheDirectory}alter-reply-${Date.now()}.wav`;
+      await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
       loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) loaded.sound.unloadAsync(); });
     } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
@@ -342,8 +347,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={menuVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={premiumStyles.drawerBackdrop} onPress={() => setMenuVisible(false)}>
-      <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}>
+      <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}> 
       <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={premiumStyles.drawerScroll}>
         <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
         <Text style={[styles.menuEmail, premiumStyles.menuEmail]}>{account?.email || ""}</Text>
         <View style={styles.menuDivider} />
@@ -361,6 +367,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         </> : null}
         {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Открыть подписку</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
+        </ScrollView>
       </Pressable>
       </Animated.View>
     </Pressable>
@@ -443,7 +450,8 @@ const premiumStyles = StyleSheet.create({
   drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.58)", alignItems: "flex-start" },
   menuButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#111", borderWidth: 1, borderColor: "#302950", alignItems: "center", justifyContent: "center" },
   menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderTopRightRadius: 28, borderBottomRightRadius: 28, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 8, height: 0 }, elevation: 12 },
-  drawerContent: { flex: 1, padding: 22, gap: 12 },
+  drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
+  drawerScroll: { paddingBottom: 34, gap: 12 },
   menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
   menuActionArrow: { color: "#fff", fontSize: 20 },

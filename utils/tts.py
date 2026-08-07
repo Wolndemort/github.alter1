@@ -68,7 +68,7 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
     return output.getvalue()
 
 
-async def synthesize_speech(text: str, voice: str | None = None) -> bytes:
+async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
     """Generate OGG/Opus via OpenRouter's documented audio chat response."""
     try:
         response = await client.chat.completions.create(
@@ -82,7 +82,7 @@ async def synthesize_speech(text: str, voice: str | None = None) -> bytes:
         )
         pcm = await _get_stream_audio_data(response)
         wav = _pcm16_to_wav(pcm) if pcm else b""
-        result = await _wav_to_ogg(wav) if wav else b""
+        result = (await _wav_to_ogg(wav) if output_format == "ogg" else wav) if wav else b""
         increment("voice.tts.success" if result else "voice.tts.empty")
         return result
     except Exception:
