@@ -188,6 +188,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [ttsVoice, setTtsVoice] = useState("alloy");
   const [language, setLanguage] = useState("Русский");
   const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+  const [emailVisible, setEmailVisible] = useState(false);
+  const [openSection, setOpenSection] = useState<"connections" | "tools" | "app" | null>(null);
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
@@ -356,6 +358,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch { /* Rating is optional; keep the local acknowledgement. */ }
   };
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
+  const maskedEmail = account?.email ? account.email.replace(/^(.{2}).*(@.*)$/, "$1•••$2") : "Почта не указана";
   return <SafeAreaView style={styles.container} onTouchStart={resetIdle}><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={styles.menuIcon}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><View style={{ width: 42 }} /></View>
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
@@ -373,26 +376,31 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={premiumStyles.drawerScroll}>
         <Text style={[styles.menuTitle, premiumStyles.menuTitle]}>{account?.name || "Кабинет"}</Text>
         <Text style={premiumStyles.sectionLabel}>ПРОФИЛЬ</Text>
-        <Text style={premiumStyles.menuEmail}>Личный профиль</Text>
+        <Pressable style={premiumStyles.accountRow} onPress={() => setEmailVisible((value) => !value)}><Text style={premiumStyles.menuEmail}>{emailVisible ? (account?.email || "Почта не указана") : maskedEmail}</Text><Text style={premiumStyles.menuActionArrow}>{emailVisible ? "⌃" : "⌄"}</Text></Pressable>
         <View style={styles.menuDivider} />
-        <Text style={premiumStyles.sectionLabel}>ПОДКЛЮЧЕНИЯ</Text>
+        <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "connections" ? null : "connections")}><Text style={premiumStyles.sectionLabel}>ПОДКЛЮЧЕНИЯ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "connections" ? "⌃" : "⌄"}</Text></Pressable>
+        {openSection === "connections" ? <View style={premiumStyles.sectionBody}>
         <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>{account?.telegram_linked ? "TELEGRAM · ПОДКЛЮЧЁН" : "TELEGRAM · НЕ ПОДКЛЮЧЁН"}</Text>
         {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · НЕ АКТИВИРОВАН</Text>}
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
-        <Text style={premiumStyles.sectionLabel}>ИНСТРУМЕНТЫ</Text>
+        </View> : null}
+        <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "tools" ? null : "tools")}><Text style={premiumStyles.sectionLabel}>ИНСТРУМЕНТЫ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "tools" ? "⌃" : "⌄"}</Text></Pressable>
+        {openSection === "tools" ? <View style={premiumStyles.sectionBody}>
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={async () => { const next = !voiceReplies; setVoiceReplies(next); setVoiceMenuOpen(next); try { await api.updateSettings(token, { voice_replies: next }); } catch (err) { setVoiceReplies(!next); setVoiceMenuOpen(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Голосовые ответы</Text><Text style={premiumStyles.menuActionArrow}>{voiceReplies ? (voiceMenuOpen ? "⌃" : "⌄") : "○"}</Text></Pressable>
         {voiceReplies && voiceMenuOpen ? <View style={premiumStyles.submenu}><Pressable style={premiumStyles.submenuAction} onPress={async () => { const next = !autoVoiceReplies; setAutoVoiceReplies(next); try { await api.updateSettings(token, { voice_auto_replies: next }); } catch (err) { setAutoVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Озвучивать автоматически</Text><Text style={premiumStyles.menuActionArrow}>{autoVoiceReplies ? "✓" : "○"}</Text></Pressable><Pressable style={premiumStyles.submenuAction} onPress={async () => { const voices = ["alloy", "echo", "nova", "shimmer"]; const next = voices[(voices.indexOf(ttsVoice) + 1) % voices.length]; setTtsVoice(next); try { await api.updateSettings(token, { tts_voice: next }); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось выбрать голос"); } }}><Text style={premiumStyles.menuActionText}>Голос · {ttsVoice}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable></View> : null}
-        <Text style={premiumStyles.sectionLabel}>ПРИЛОЖЕНИЕ</Text>
+        </View> : null}
+        <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "app" ? null : "app")}><Text style={premiumStyles.sectionLabel}>ПРИЛОЖЕНИЕ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "app" ? "⌃" : "⌄"}</Text></Pressable>
+        {openSection === "app" ? <View style={premiumStyles.sectionBody}>
         <Pressable style={premiumStyles.menuAction} onPress={() => { const values = ["Русский", "English", "Español", "Deutsch", "中文"]; setLanguage(values[(values.indexOf(language) + 1) % values.length]); }}><Text style={premiumStyles.menuActionText}>Язык · {language}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable>
         {account?.payment_method_saved ? <>
           <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
           <Pressable style={[premiumStyles.menuAction, premiumStyles.dangerAction]} onPress={removePaymentMethod}><Text style={premiumStyles.menuActionText}>Удалить карту</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable>
         </> : null}
         {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Открыть подписку</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
-        <Text style={premiumStyles.version}>ALTER · 0.1.0</Text><Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
+        <Text style={premiumStyles.version}>ALTER · 0.1.0</Text><Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable></View> : null}
         </ScrollView>
       </Pressable>
       </Animated.View>
@@ -481,6 +489,7 @@ const premiumStyles = StyleSheet.create({
   menuCard: { width: "84%", height: "100%", backgroundColor: "#101016", borderTopRightRadius: 28, borderBottomRightRadius: 28, borderColor: "#3b315f", shadowColor: "#7d5cff", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 8, height: 0 }, elevation: 12 },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
+  sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#a99bce", fontSize: 18 }, sectionBody: { gap: 8 },
   submenu: { marginTop: -4, marginLeft: 10, gap: 6, borderLeftWidth: 1, borderLeftColor: "#40355f", paddingLeft: 10 }, submenuAction: { minHeight: 42, borderRadius: 11, backgroundColor: "#14121b", borderWidth: 1, borderColor: "#242031", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
@@ -492,6 +501,7 @@ const premiumStyles = StyleSheet.create({
   dangerAction: { borderColor: "#5b3042" },
   ownerBadge: { color: "#c7baff", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, textAlign: "center", paddingVertical: 8 },
   sectionLabel: { color: "#8e82ae", fontSize: 10, fontWeight: "800", letterSpacing: 1.6, marginTop: 6 }, version: { color: "#665d7e", fontSize: 11, letterSpacing: 1.2, textAlign: "center", paddingVertical: 4 },
+  accountRow: { minHeight: 38, borderRadius: 10, backgroundColor: "#15131d", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });
 
 const activityStyles = StyleSheet.create({
