@@ -1,15 +1,29 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
+
+Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
+
+async function registerPushNotifications(token: string) {
+  if (Platform.OS === "web") return;
+  let status = await Notifications.getPermissionsAsync();
+  if (status !== Notifications.PermissionStatus.GRANTED) status = await Notifications.requestPermissionsAsync();
+  if (status !== Notifications.PermissionStatus.GRANTED) return;
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  const pushToken = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+  await api.registerPushToken(token, pushToken);
+}
 
 export function IntroScreen({ onFinished }: { onFinished: () => void }) {
   const opacity = React.useRef(new Animated.Value(0)).current;
@@ -254,7 +268,15 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [introDone, setIntroDone] = useState(false);
+  const [, setForegroundTick] = useState(0);
   useEffect(() => { AsyncStorage.getItem("alter_access_token").then((value) => { setToken(value); setLoading(false); }); }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setTimeout(() => setForegroundTick((value) => value + 1), 0);
+    });
+    return () => subscription.remove();
+  }, []);
+  useEffect(() => { if (token) registerPushNotifications(token).catch(() => undefined); }, [token]);
   if (!introDone) return <IntroScreen onFinished={() => setIntroDone(true)} />;
   if (loading) return <SafeAreaView style={styles.container}><ActivityIndicator color="#9b8cff" /></SafeAreaView>;
   return <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>{token ? <Stack.Screen name="Chat">{() => <ChatScreen token={token} onLogout={() => { AsyncStorage.removeItem("alter_access_token"); setToken(null); }} />}</Stack.Screen> : <Stack.Screen name="Auth">{() => <AuthScreen onAuthenticated={setToken} />}</Stack.Screen>}</Stack.Navigator></NavigationContainer>;

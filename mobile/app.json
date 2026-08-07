@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "alter",
     "userInterfaceStyle": "dark",
+    "plugins": ["expo-notifications"],
     "android": { "package": "ru.alterai.mobile" },
     "ios": { "bundleIdentifier": "ru.alterai.mobile" }
   }

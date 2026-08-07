@@ -62,6 +62,23 @@ async def checkins_route(request: web.Request) -> web.Response:
         return web.json_response({"checkins_enabled": user.checkins_enabled})
 
 
+async def push_token_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    push_token = str(payload.get("token", "")).strip()
+    if not push_token.startswith(("ExponentPushToken[", "ExpoPushToken[")) or len(push_token) > 300:
+        raise web.HTTPBadRequest(text="valid Expo push token required")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        settings = dict(user.tech_stack or {})
+        settings["expo_push_token"] = push_token
+        user.tech_stack = settings
+        await session.commit()
+    return web.json_response({"ok": True})
+
+
 async def reminders_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
@@ -98,6 +115,7 @@ def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/settings", settings_route)
     app.router.add_patch("/api/v1/settings", update_settings_route)
     app.router.add_post("/api/v1/checkins", checkins_route)
+    app.router.add_post("/api/v1/push-token", push_token_route)
     app.router.add_get("/api/v1/reminders", reminders_route)
     app.router.add_post("/api/v1/reminders", create_reminder_route)
     app.router.add_delete("/api/v1/reminders/{reminder_id}", delete_reminder_route)

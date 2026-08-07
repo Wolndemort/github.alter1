@@ -19,6 +19,7 @@ from utils.helpers import merge_memory
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
 from utils.vector_memory import purge_expired
+from utils.push_notifications import send_push
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -207,8 +208,11 @@ async def monitor_reminders(bot: Bot):
                                     user.memory or {},
                                 )
                                 await bot.send_message(reminder.user_id, question)
+                                await send_push(user, "ALTER", question)
                             else:
-                                await bot.send_message(reminder.user_id, f"⏰ Напоминание: {reminder.text}")
+                                notification = f"Напоминание: {reminder.text}"
+                                await bot.send_message(reminder.user_id, f"⏰ {notification}")
+                                await send_push(user, "ALTER · Напоминание", notification)
                             reminder.is_sent = True
                         elif reminder.follow_up_at and not reminder.follow_up_sent and reminder.follow_up_at <= datetime.now(timezone.utc):
                             session_result = await db.execute(select(Session).where(
@@ -222,6 +226,7 @@ async def monitor_reminders(bot: Bot):
                                 user.memory or {},
                             )
                             await bot.send_message(reminder.user_id, question)
+                            await send_push(user, "ALTER · Check-in", question)
                             reminder.follow_up_sent = True
                     except Exception:
                         logging.exception("Failed to send reminder %s", reminder.id)
@@ -274,6 +279,7 @@ async def monitor_checkins(bot: Bot):
                         memory,
                     )
                     await bot.send_message(user.id, question)
+                    await send_push(user, "ALTER · Check-in", question)
                     user.last_checkin_at = now
                 await db.commit()
         except Exception:
