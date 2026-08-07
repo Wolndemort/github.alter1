@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from data.models import ImportantEvent, MemoryChunk, Payment, Reminder, Session, User, WebAccount
@@ -70,7 +70,11 @@ async def link_telegram_identity(
         target.legal_accepted_at = target.legal_accepted_at or legacy.legal_accepted_at
         for model in (Session, ImportantEvent, Reminder, MemoryChunk, Payment):
             await session.execute(update(model).where(model.user_id == legacy.id).values(user_id=target.id))
-        await session.delete(legacy)
+        # Do not use ``AsyncSession.delete`` here: the ORM may lazy-load the
+        # user's relationship collections for cascade processing and raise
+        # MissingGreenlet in an async request. All dependent rows were moved
+        # explicitly above, so a bulk delete is deterministic and IO-free.
+        await session.execute(delete(User).where(User.id == legacy.id))
     account.telegram_user_id = telegram_user_id
     if username and not target.username:
         target.username = username

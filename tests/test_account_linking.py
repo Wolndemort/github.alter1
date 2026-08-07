@@ -16,9 +16,13 @@ class SessionDouble:
         self.legacy = legacy
         self.execute_calls = 0
         self.deleted = None
+        self.bulk_deleted = False
 
     async def execute(self, statement):
         self.execute_calls += 1
+        if self.execute_calls == 8:
+            self.bulk_deleted = True
+            return Result(None)
         if self.execute_calls == 1:
             return Result(self.account)
         if self.execute_calls == 2:
@@ -32,7 +36,6 @@ class SessionDouble:
             return self.legacy
         return None
 
-    async def delete(self, value): self.deleted = value
     async def flush(self): pass
 
 
@@ -54,5 +57,5 @@ async def test_linking_merges_legacy_telegram_profile():
     assert account.telegram_user_id == 777
     assert target.memory["goals"] == ["learn", "launch"]
     assert target.tech_stack == {"voice_replies": True}
-    assert db.deleted is legacy
-    assert db.execute_calls == 7  # account, existing link, and five child-table updates
+    assert db.bulk_deleted
+    assert db.execute_calls == 8  # account, existing link, five updates, and legacy delete

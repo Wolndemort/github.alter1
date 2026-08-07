@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from data.models import User
+from data.models import User, WebAccount
 from utils import tasks
 
 
@@ -31,6 +31,24 @@ class Db:
     async def rollback(self): self.rollbacks += 1
     async def get(self, model, user_id, **kwargs):
         return next((item for item in self.values if getattr(item, "id", None) == user_id), None)
+
+
+def test_telegram_chat_id_never_uses_app_database_id():
+    app_only = User(id=101, first_name="App", memory={}, tech_stack={})
+    app_only.web_account = WebAccount(
+        id="account", user_id=101, email="app@example.com", password_hash="hash"
+    )
+    assert tasks.telegram_chat_id(app_only) is None
+
+    linked = User(id=101, first_name="App", memory={}, tech_stack={})
+    linked.web_account = WebAccount(
+        id="account", user_id=101, email="app@example.com", password_hash="hash",
+        telegram_user_id=777,
+    )
+    assert tasks.telegram_chat_id(linked) == 777
+
+    legacy = User(id=777, first_name="Telegram", memory={}, tech_stack={})
+    assert tasks.telegram_chat_id(legacy) == 777
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,19 @@ from utils.vector_memory import purge_expired
 from utils.push_notifications import send_push
 
 
+def telegram_chat_id(user: User) -> int | None:
+    """Return the Telegram destination, or None for an app-only account.
+
+    Legacy Telegram profiles use their User.id as the chat id. App accounts
+    must use the explicitly linked id; their internal database id is not a
+    Telegram chat and sending to it produces ``chat not found``.
+    """
+    account = user.web_account
+    if account is not None:
+        return account.telegram_user_id
+    return user.id
+
+
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
     """Create one gentle follow-up when a user mentions a health problem."""
     for message in messages or []:
@@ -192,7 +205,11 @@ async def monitor_reminders(bot: Bot):
                 ).with_for_update(skip_locked=True))
                 for reminder in result.scalars().all():
                     try:
-                        user = await db.get(User, reminder.user_id)
+                        user = (await db.execute(
+                            select(User).options(selectinload(User.web_account)).where(
+                                User.id == reminder.user_id
+                            )
+                        )).scalar_one_or_none()
                         if user and is_quiet_time(user, now):
                             continue
                         if not reminder.is_sent:
@@ -207,11 +224,15 @@ async def monitor_reminders(bot: Bot):
                                     session.raw_messages if session else [],
                                     user.memory or {},
                                 )
-                                await bot.send_message(reminder.user_id, question)
+                                chat_id = telegram_chat_id(user)
+                                if chat_id is not None:
+                                    await bot.send_message(chat_id, question)
                                 await send_push(user, "ALTER", question)
                             else:
                                 notification = f"Напоминание: {reminder.text}"
-                                await bot.send_message(reminder.user_id, f"⏰ {notification}")
+                                chat_id = telegram_chat_id(user)
+                                if chat_id is not None:
+                                    await bot.send_message(chat_id, f"⏰ {notification}")
                                 await send_push(user, "ALTER · Напоминание", notification)
                             reminder.is_sent = True
                         elif reminder.follow_up_at and not reminder.follow_up_sent and reminder.follow_up_at <= datetime.now(timezone.utc):
@@ -225,7 +246,9 @@ async def monitor_reminders(bot: Bot):
                                 session.raw_messages if session else [],
                                 user.memory or {},
                             )
-                            await bot.send_message(reminder.user_id, question)
+                            chat_id = telegram_chat_id(user)
+                            if chat_id is not None:
+                                await bot.send_message(chat_id, question)
                             await send_push(user, "ALTER · Check-in", question)
                             reminder.follow_up_sent = True
                     except Exception:
@@ -242,7 +265,9 @@ async def monitor_checkins(bot: Bot):
             async with async_session() as db:
                 now = datetime.now(timezone.utc)
                 result = await db.execute(
-                    select(User).where(User.checkins_enabled.is_(True)).with_for_update(skip_locked=True)
+                    select(User).options(selectinload(User.web_account)).where(
+                        User.checkins_enabled.is_(True)
+                    ).with_for_update(skip_locked=True)
                 )
                 for user in result.scalars().all():
                     memory = user.memory or {}
@@ -278,7 +303,9 @@ async def monitor_checkins(bot: Bot):
                         session.raw_messages if session else [],
                         memory,
                     )
-                    await bot.send_message(user.id, question)
+                    chat_id = telegram_chat_id(user)
+                    if chat_id is not None:
+                        await bot.send_message(chat_id, question)
                     await send_push(user, "ALTER · Check-in", question)
                     user.last_checkin_at = now
                 await db.commit()
@@ -293,7 +320,7 @@ async def monitor_subscription_renewals(bot: Bot):
         try:
             async with async_session() as db:
                 now = datetime.now(timezone.utc)
-                result = await db.execute(select(User).where(
+                result = await db.execute(select(User).options(selectinload(User.web_account)).where(
                     User.auto_renew.is_(True),
                     User.payment_method_id.is_not(None),
                     User.next_charge_at <= now,
@@ -301,10 +328,11 @@ async def monitor_subscription_renewals(bot: Bot):
                 for user in result.scalars().all():
                     try:
                         result_code = await charge_recurring_payment(db, user)
-                        if result_code == "succeeded":
-                            await bot.send_message(user.id, "Подписка ALTER продлена ещё на 30 дней.")
-                        elif result_code == "failed":
-                            await bot.send_message(user.id, "Не удалось продлить подписку. Автопродление отключено — проверь карту и продли подписку вручную через кабинет.")
+                        chat_id = telegram_chat_id(user)
+                        if chat_id is not None and result_code == "succeeded":
+                            await bot.send_message(chat_id, "Подписка ALTER продлена ещё на 30 дней.")
+                        elif chat_id is not None and result_code == "failed":
+                            await bot.send_message(chat_id, "Не удалось продлить подписку. Автопродление отключено — проверь карту и продли подписку вручную через кабинет.")
                     except Exception:
                         await db.rollback()
                         logging.exception("Subscription renewal failed for user %s", user.id)
@@ -342,7 +370,7 @@ async def monitor_subscription_expiry_reminders(bot: Bot):
             async with async_session() as db:
                 now = datetime.now(timezone.utc)
                 result = await db.execute(
-                    select(User).where(User.subscription_expires_at > now).with_for_update(skip_locked=True)
+                    select(User).options(selectinload(User.web_account)).where(User.subscription_expires_at > now).with_for_update(skip_locked=True)
                 )
                 bot_user = await bot.get_me()
                 for user in result.scalars().all():
@@ -357,10 +385,13 @@ async def monitor_subscription_expiry_reminders(bot: Bot):
                     reminders = dict(user.subscription_reminders or {})
                     if reminders.get(marker):
                         continue
+                    chat_id = telegram_chat_id(user)
+                    if chat_id is None:
+                        continue
                     try:
                         payment_url = await create_payment(db, user, bot_user.username or "", "bank_card")
                         await bot.send_message(
-                            user.id,
+                            chat_id,
                             subscription_expiry_reminder(days_left, user.first_name, bool(user.auto_renew)),
                             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                                 [InlineKeyboardButton(text="💳 Продлить подписку", url=payment_url)],
