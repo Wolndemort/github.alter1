@@ -42,7 +42,7 @@ def validate_message(text: str) -> str:
 class ChatService:
     """Coordinates persistence and AI; it has no knowledge of Telegram or HTTP."""
 
-    async def reply(self, db: AsyncSession, user_id: int, text: str) -> ChatResult:
+    async def reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None) -> ChatResult:
         text = validate_message(text)
         user = await db.get(User, user_id)
         if user is None:
@@ -80,6 +80,8 @@ class ChatService:
 
         if is_weather_request(text):
             city = parse_weather_city(text)
+            if not city and isinstance(location, dict):
+                city = str(location.get("city") or location.get("region") or "").strip()
             reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
         else:
             reply = await generate_reply(list(session.raw_messages), memory)

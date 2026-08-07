@@ -25,7 +25,8 @@ async def chat_route(request: web.Request) -> web.Response:
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
         try:
-            result = await ChatService().reply(session, user_id, payload.get("message", ""))
+            location = payload.get("location")
+            result = await ChatService().reply(session, user_id, payload.get("message", ""), location) if location else await ChatService().reply(session, user_id, payload.get("message", ""))
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
     return web.json_response({"reply": result.reply, "session_id": result.session_id})

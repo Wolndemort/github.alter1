@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as Location from "expo-location";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Notifications from "expo-notifications";
@@ -8,7 +9,7 @@ import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
-import { AccountResponse, MemoryResponse, api } from "./src/api/client";
+import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
@@ -175,6 +176,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [menuError, setMenuError] = useState("");
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
+  const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<{ id: string; role: string; text: string }>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
   useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
@@ -183,7 +185,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const currentAttachment = attachment;
     autoScrollAfterUpdate.current = true;
     setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -197,6 +199,26 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { const result = await api.createPayment(token); await Linking.openURL(result.payment_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Оплата пока недоступна"); }
   };
+  const requestLocation = async (background: boolean) => {
+    setMenuError("");
+    const foreground = await Location.requestForegroundPermissionsAsync();
+    if (foreground.status !== Location.PermissionStatus.GRANTED) { setMenuError("Геолокация не разрешена."); return; }
+    if (background) {
+      const backgroundPermission = await Location.requestBackgroundPermissionsAsync();
+      if (backgroundPermission.status !== Location.PermissionStatus.GRANTED) setMenuError("Фоновая геолокация не разрешена. Оставляю режим только при использовании.");
+    }
+    try {
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const place = await Location.reverseGeocodeAsync({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      const first = place[0];
+      setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, city: first?.city || first?.district || undefined, region: first?.region || undefined, country: first?.country || undefined });
+    } catch { setMenuError("Не удалось определить местоположение."); }
+  };
+  const chooseLocationMode = () => Alert.alert("Геолокация", "Выбери, как ALTER может использовать местоположение.", [
+    { text: "Только при использовании", onPress: () => requestLocation(false) },
+    { text: "Всегда, если разрешит iPhone", onPress: () => requestLocation(true) },
+    { text: "Отмена", style: "cancel" },
+  ]);
   const toggleAutoRenew = async () => {
     if (!account?.payment_method_saved) { setMenuError("Сначала нужна обычная оплата с сохранением карты."); return; }
     try {
@@ -246,6 +268,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Синхронизировать память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
+        <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         {account?.payment_method_saved ? <>
           <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
           <Pressable style={[premiumStyles.menuAction, premiumStyles.dangerAction]} onPress={removePaymentMethod}><Text style={premiumStyles.menuActionText}>Удалить карту</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable>

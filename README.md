@@ -64,6 +64,9 @@ TypeScript passes too. The SafeAreaView output is only a deprecation warning.
 - AppState foreground recovery after returning from background.
 - Readable network timeouts and clickable HTTPS links in assistant replies.
 - Separate card controls for auto-renewal and removing the saved payment method.
+- Explicit foreground geolocation choice with optional iOS background permission;
+  an approved city/coordinate context is sent only with chat requests and is
+  not persisted as a precise location in the database.
 - Expo push permission/token registration; production remote push requires a
   development build or TestFlight, while Expo Go is suitable for basic tests.
 

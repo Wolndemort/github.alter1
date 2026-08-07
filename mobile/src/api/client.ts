@@ -12,6 +12,7 @@ export type AccountResponse = {
 export type MemoryResponse = { memory: Record<string, unknown>; tech_stack: Record<string, unknown> };
 export type SubscriptionResponse = { active: boolean; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
+export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -85,10 +86,10 @@ export class AlterApi {
     return this.request<MeResponse>("/api/v1/auth/me", {}, token);
   }
 
-  sendMessage(token: string, message: string) {
+  sendMessage(token: string, message: string, location?: LocationContext | null) {
     return this.request<ChatResponse>("/api/v1/chat/messages", {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, ...(location ? { location } : {}) }),
     }, token);
   }
 

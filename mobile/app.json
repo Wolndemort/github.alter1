@@ -6,7 +6,13 @@
     "orientation": "portrait",
     "scheme": "alter",
     "userInterfaceStyle": "dark",
-    "plugins": ["expo-notifications"],
+    "plugins": [
+      "expo-notifications",
+      ["expo-location", {
+        "locationWhenInUsePermission": "ALTER использует геолокацию только с твоего разрешения — для погоды и подсказок рядом.",
+        "locationAlwaysAndWhenInUsePermission": "ALTER может использовать геолокацию в фоне только если ты отдельно включишь этот режим."
+      }]
+    ],
     "android": { "package": "ru.alterai.mobile" },
     "ios": { "bundleIdentifier": "ru.alterai.mobile" }
   }

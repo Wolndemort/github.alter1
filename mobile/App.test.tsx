@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./src/api/client";
 
 jest.mock("expo-av", () => ({ Audio: { requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: false }), setAudioModeAsync: jest.fn(), Sound: { createAsync: jest.fn() }, Recording: { createAsync: jest.fn() }, RecordingOptionsPresets: { HIGH_QUALITY: {} } } }));
+jest.mock("expo-location", () => ({ PermissionStatus: { GRANTED: "granted", DENIED: "denied" }, requestForegroundPermissionsAsync: jest.fn(), requestBackgroundPermissionsAsync: jest.fn(), getCurrentPositionAsync: jest.fn(), reverseGeocodeAsync: jest.fn(), Accuracy: { Balanced: 3 } }));
 jest.mock("@react-native-async-storage/async-storage", () => ({
   getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn(),
 }));
