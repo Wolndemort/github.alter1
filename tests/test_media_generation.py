@@ -41,3 +41,24 @@ async def test_video_generation_is_explicitly_not_fake(monkeypatch):
     monkeypatch.setattr(media_generation.config, "MEDIA_VIDEO_API_URL", None)
     with pytest.raises(media_generation.MediaGenerationError, match="видео"):
         await media_generation.generate_video("cinematic")
+
+
+@pytest.mark.asyncio
+async def test_fal_zero_balance_is_safe_error(monkeypatch):
+    monkeypatch.setattr(media_generation.config, "MEDIA_PROVIDER", "fal")
+    monkeypatch.setattr(media_generation.config, "FAL_IMAGE_MODEL", "fal-ai/test-image")
+    monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
+
+    class Response:
+        status_code = 402
+        def json(self): return {}
+
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs): return Response()
+
+    monkeypatch.setattr(media_generation.httpx, "AsyncClient", Client)
+    with pytest.raises(media_generation.MediaGenerationError, match="баланс"):
+        await media_generation.generate_image("cinematic")

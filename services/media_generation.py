@@ -7,6 +7,7 @@ error, never a fake text success.
 from __future__ import annotations
 
 import base64
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,10 +50,82 @@ def _decode_image(payload: dict[str, Any]) -> MediaArtifact:
     raise MediaGenerationError("Провайдер вернул временную ссылку вместо файла.")
 
 
+def _fal_key() -> str:
+    if not config.MEDIA_GENERATION_API_KEY:
+        raise MediaGenerationError("Ключ fal.ai не настроен на сервере.")
+    return config.MEDIA_GENERATION_API_KEY.get_secret_value()
+
+
+async def _fal_result(model: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    headers = {"Authorization": f"Key {_fal_key()}", "Content-Type": "application/json"}
+    base = config.FAL_BASE_URL.rstrip("/")
+    timeout = httpx.Timeout(config.MEDIA_GENERATION_TIMEOUT_SECONDS)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(f"{base}/{model}", headers=headers, json=arguments)
+            if response.status_code in {402, 403}:
+                raise MediaGenerationError("fal.ai отклонил запрос: проверь баланс и API-ключ.")
+            if response.status_code >= 400:
+                raise MediaGenerationError("fal.ai временно недоступен или модель указана неверно.")
+            payload = response.json()
+            request_id = payload.get("request_id")
+            if not request_id:
+                return payload
+            status_url = payload.get("status_url") or f"{base}/{model}/requests/{request_id}/status"
+            result_url = payload.get("response_url") or f"{base}/{model}/requests/{request_id}"
+            deadline = asyncio.get_running_loop().time() + config.MEDIA_GENERATION_TIMEOUT_SECONDS
+            while asyncio.get_running_loop().time() < deadline:
+                status = await client.get(status_url, headers=headers)
+                if status.status_code in {402, 403}:
+                    raise MediaGenerationError("fal.ai отклонил запрос: проверь баланс и API-ключ.")
+                if status.status_code >= 400:
+                    raise MediaGenerationError("fal.ai не смог проверить статус задачи.")
+                state = status.json().get("status")
+                if state == "COMPLETED":
+                    result = await client.get(result_url, headers=headers)
+                    if result.status_code >= 400:
+                        raise MediaGenerationError("fal.ai не вернул результат задачи.")
+                    return result.json()
+                if state in {"FAILED", "CANCELLED"}:
+                    raise MediaGenerationError("fal.ai не смог обработать запрос.")
+                await asyncio.sleep(1)
+            raise MediaGenerationError("fal.ai обрабатывает запрос слишком долго.")
+    except MediaGenerationError:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        raise MediaGenerationError("Не удалось связаться с fal.ai.") from exc
+
+
+async def _download_artifact(url: str, filename: str) -> MediaArtifact:
+    try:
+        async with httpx.AsyncClient(timeout=config.MEDIA_GENERATION_TIMEOUT_SECONDS) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            media_type = response.headers.get("content-type", "image/png").split(";", 1)[0]
+            return MediaArtifact(media_type, response.content, filename)
+    except httpx.HTTPError as exc:
+        raise MediaGenerationError("fal.ai вернул недоступный файл.") from exc
+
+
 async def generate_image(prompt: str, source: tuple[str, bytes] | None = None) -> MediaArtifact:
     """Generate or edit an image through an OpenAI-compatible endpoint."""
     if not prompt.strip():
         raise MediaGenerationError("Опиши, как изменить изображение.")
+    if config.MEDIA_PROVIDER.casefold() == "fal":
+        model = config.FAL_IMAGE_MODEL
+        if not model:
+            raise MediaGenerationError("Модель fal.ai для изображений не настроена.")
+        arguments: dict[str, Any] = {"prompt": prompt}
+        if source:
+            mime, data = source
+            arguments["image_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+        payload = await _fal_result(model, arguments)
+        item = (payload.get("images") or payload.get("data") or [{}])[0]
+        if item.get("url"):
+            return await _download_artifact(item["url"], "alter-generated.png")
+        if item.get("b64_json"):
+            return MediaArtifact("image/png", base64.b64decode(item["b64_json"]), "alter-generated.png")
+        raise MediaGenerationError("fal.ai не вернул изображение.")
     model = config.MEDIA_IMAGE_MODEL
     if not model:
         raise MediaGenerationError("Модель генерации изображений не настроена на сервере.")
@@ -90,6 +163,15 @@ async def generate_video(prompt: str, source: tuple[str, bytes] | None = None) -
     Video generation needs a provider-specific job/polling protocol; silently
     treating a text-only vision response as a video would be incorrect.
     """
+    if config.MEDIA_PROVIDER.casefold() == "fal":
+        if not config.FAL_VIDEO_MODEL:
+            raise MediaGenerationError("Модель fal.ai для видео не настроена.")
+        arguments: dict[str, Any] = {"prompt": prompt}
+        if source:
+            mime, data = source
+            arguments["video_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+        await _fal_result(config.FAL_VIDEO_MODEL, arguments)
+        raise MediaGenerationError("Видео поставлено в очередь; async-выдача ещё подключается.")
     if not config.MEDIA_VIDEO_API_URL or not config.MEDIA_VIDEO_MODEL:
         raise MediaGenerationError("Генерация видео пока не подключена на сервере.")
     raise MediaGenerationError("Генератор видео требует отдельного job-процесса.")

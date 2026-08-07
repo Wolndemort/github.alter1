@@ -69,6 +69,10 @@ class Setting(BaseSettings):
     # OpenRouter chat key is intentionally not reused for binary generation.
     MEDIA_GENERATION_API_URL: str | None = None
     MEDIA_GENERATION_API_KEY: SecretStr | None = None
+    MEDIA_PROVIDER: str = "openai_compatible"
+    FAL_BASE_URL: str = "https://queue.fal.run"
+    FAL_IMAGE_MODEL: str | None = None
+    FAL_VIDEO_MODEL: str | None = None
     MEDIA_IMAGE_MODEL: str | None = None
     MEDIA_VIDEO_API_URL: str | None = None
     MEDIA_VIDEO_MODEL: str | None = None
