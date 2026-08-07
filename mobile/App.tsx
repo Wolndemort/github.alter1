@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Animated, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
@@ -183,6 +183,20 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { const result = await api.createPayment(token); await Linking.openURL(result.payment_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Оплата пока недоступна"); }
   };
+  const toggleAutoRenew = async () => {
+    if (!account?.payment_method_saved) { setMenuError("Сначала нужна обычная оплата с сохранением карты."); return; }
+    try {
+      const result = await api.setAutoRenew(token, !account.auto_renew);
+      setAccount({ ...account, auto_renew: result.auto_renew });
+    } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось изменить автопродление"); }
+  };
+  const removePaymentMethod = () => Alert.alert("Удалить карту?", "Автопродление будет выключено. Следующую оплату можно будет провести заново.", [
+    { text: "Отмена", style: "cancel" },
+    { text: "Удалить", style: "destructive", onPress: async () => {
+      try { await api.removePaymentMethod(token); setAccount(account ? { ...account, auto_renew: false, payment_method_saved: false } : account); }
+      catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось удалить карту"); }
+    } },
+  ]);
   const openMemory = async () => {
     setMemoryVisible(true); setMemoryLoading(true); setMenuVisible(false);
     try { setMemoryData(await api.memory(token)); }
@@ -218,6 +232,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Синхронизировать память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
+        {account?.payment_method_saved ? <>
+          <Pressable style={premiumStyles.menuAction} onPress={toggleAutoRenew}><Text style={premiumStyles.menuActionText}>{account.auto_renew ? "Выключить автопродление" : "Включить автопродление"}</Text><Text style={premiumStyles.menuActionArrow}>↔</Text></Pressable>
+          <Pressable style={[premiumStyles.menuAction, premiumStyles.dangerAction]} onPress={removePaymentMethod}><Text style={premiumStyles.menuActionText}>Удалить карту</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable>
+        </> : null}
         {!account?.owner ? <Pressable style={premiumStyles.menuAction} onPress={buySubscription}><Text style={premiumStyles.menuActionText}>Подписка</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : <Text style={premiumStyles.ownerBadge}>OWNER · FULL ACCESS</Text>}
         <Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
       </Pressable>
@@ -260,6 +278,7 @@ const premiumStyles = StyleSheet.create({
   menuEmail: { color: "#fff", fontSize: 13, letterSpacing: 0.4 },
   menuStatus: { color: "#fff", fontSize: 14, letterSpacing: 0.2 },
   menuLogout: { backgroundColor: "transparent", borderColor: "#292632" },
+  dangerAction: { borderColor: "#5b3042" },
   ownerBadge: { color: "#c7baff", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, textAlign: "center", paddingVertical: 8 },
 });
 

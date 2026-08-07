@@ -7,7 +7,7 @@ export type MeResponse = {
 export type ChatResponse = { reply: string; session_id: number };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean;
 };
 export type MemoryResponse = { memory: Record<string, unknown>; tech_stack: Record<string, unknown> };
 export type SubscriptionResponse = { active: boolean; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
@@ -116,6 +116,8 @@ export class AlterApi {
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
+  setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
+  removePaymentMethod(token: string) { return this.request<{ ok: boolean; auto_renew: boolean; payment_method_saved: boolean }>("/api/v1/subscription/payment-method", { method: "DELETE" }, token); }
   createPayment(token: string) { return this.request<{ payment_url: string; price_rub: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST" }, token); }
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }

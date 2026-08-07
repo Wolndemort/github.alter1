@@ -113,6 +113,7 @@ async def account_route(request: web.Request) -> web.Response:
             "id": user.id, "name": user.first_name, "email": account.email,
             "telegram_linked": account.telegram_user_id is not None,
             "owner": has_owner_access(user.id, account.email),
+            "payment_method_saved": bool(user.payment_method_id),
             "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
         })
@@ -142,6 +143,38 @@ async def subscription_route(request: web.Request) -> web.Response:
             "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
         })
+
+
+async def auto_renew_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    if not isinstance(payload.get("enabled"), bool):
+        raise web.HTTPBadRequest(text="enabled must be boolean")
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if payload["enabled"] and not user.payment_method_id:
+            raise web.HTTPBadRequest(text="payment method is not saved")
+        user.auto_renew = payload["enabled"]
+        user.next_charge_at = user.subscription_expires_at if user.auto_renew else None
+        await session.commit()
+        return web.json_response({"auto_renew": user.auto_renew})
+
+
+async def remove_payment_method_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        user.payment_method_id = None
+        user.auto_renew = False
+        user.next_charge_at = None
+        await session.commit()
+    return web.json_response({"ok": True, "auto_renew": False, "payment_method_saved": False})
 
 
 async def create_app_payment_route(request: web.Request) -> web.Response:
@@ -200,6 +233,8 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/account", account_route)
     app.router.add_get("/api/v1/memory", memory_route)
     app.router.add_get("/api/v1/subscription", subscription_route)
+    app.router.add_patch("/api/v1/subscription/auto-renew", auto_renew_route)
+    app.router.add_delete("/api/v1/subscription/payment-method", remove_payment_method_route)
     app.router.add_post("/api/v1/subscription/create-payment", create_app_payment_route)
     app.router.add_post("/api/v1/telegram/link", start_telegram_link_route)
     app.router.add_post("/api/v1/auth/login", login_route)
