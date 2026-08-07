@@ -68,6 +68,11 @@ class ChatService:
             .order_by(ImportantEvent.occurred_at.desc()).limit(20)
         )
         memory = dict(user.memory or {})
+        if isinstance(location, dict):
+            memory["current_location"] = {
+                key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
+                if location.get(key) not in (None, "")
+            }
         events = [{"title": event.title, "event_type": event.event_type,
                    "importance": event.importance, "description": event.description}
                   for event in events_result.scalars()]

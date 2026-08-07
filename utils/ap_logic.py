@@ -457,6 +457,8 @@ async def generate_reply(messages, memory=None, search_results=None):
             "Use old context when it clearly helps. If a fact is uncertain, say so briefly and offer "
             "the most useful next step instead of turning an ordinary conversation into an interview."
         )
+        if memory.get("current_location"):
+            system += "\nCURRENT DEVICE LOCATION (permission granted): " + json.dumps(memory["current_location"], ensure_ascii=False) + ". If the user asks where they are, answer from this location instead of claiming you have no access."
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
         if config.AI_DEEP_REVIEW_ENABLED and _needs_deep_review(messages, search_results):
