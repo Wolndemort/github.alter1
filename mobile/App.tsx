@@ -8,7 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
@@ -166,7 +166,7 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
 
 export function ChatScreen({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [message, setMessage] = useState("");
-  const [items, setItems] = useState<{ id: string; role: string; text: string }[]>([]);
+  const [items, setItems] = useState<{ id: string; role: string; text: string; mediaUri?: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
@@ -177,7 +177,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
-  const listRef = React.useRef<FlatList<{ id: string; role: string; text: string }>>(null);
+  const listRef = React.useRef<FlatList<{ id: string; role: string; text: string; mediaUri?: string }>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
   useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
   const send = async () => {
@@ -187,6 +187,18 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
     try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
+    finally { setBusy(false); setActivity(""); }
+  };
+  const generateAttachment = async () => {
+    if (!attachment || attachment.type === "audio" || busy) return;
+    const current = attachment;
+    const kind = current.type as "image" | "video";
+    setBusy(true); setActivity("analyzing");
+    try {
+      const result = await api.generateMedia(token, message.trim(), current.uri, kind);
+      setItems((old) => [...old, { id: `${Date.now()}g`, role: "assistant", text: "Готово.", mediaUri: `data:${result.media_type};base64,${result.data_base64}` }]);
+      setMessage(""); setAttachment(null); autoScrollAfterUpdate.current = true;
+    } catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Не удалось изменить медиа" }]); }
     finally { setBusy(false); setActivity(""); }
   };
   const openTelegramLink = async () => {
@@ -252,9 +264,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); setMenuVisible(true); }}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
-    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text><Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
+    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
   </KeyboardAvoidingView>
   <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
@@ -334,7 +346,7 @@ const activityStyles = StyleSheet.create({
 });
 
 const mediaStyles = StyleSheet.create({
-  attachmentChip: { marginHorizontal: 12, marginBottom: 2, padding: 9, borderRadius: 10, backgroundColor: "#1d1d1d", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  attachmentChip: { marginHorizontal: 12, marginBottom: 2, padding: 9, borderRadius: 10, backgroundColor: "#1d1d1d", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, generateAction: { color: "#b9a4ff", fontSize: 12, fontWeight: "700" },
   attachmentText: { color: "#ddd", fontSize: 13 }, removeAttachment: { color: "#fff", fontSize: 20, paddingLeft: 12 },
   attachButton: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: "#4b416d", backgroundColor: "#15121f", alignItems: "center", justifyContent: "center" }, attachIcon: { color: "#d8ceff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
   voiceHalo: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(145, 110, 255, 0.16)", borderWidth: 1, borderColor: "rgba(161, 132, 255, 0.55)" }, voiceHaloActive: { backgroundColor: "rgba(145, 110, 255, 0.32)", borderColor: "#a990ff", shadowColor: "#956dff", shadowOpacity: 0.9, shadowRadius: 12, shadowOffset: { width: 0, height: 0 }, elevation: 10 }, voiceButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#f7f4ff", alignItems: "center", justifyContent: "center" }, voiceButtonActive: { backgroundColor: "#b9a4ff" }, voiceIcon: { color: "#24163f", fontSize: 8, fontWeight: "800", letterSpacing: 0.8 },

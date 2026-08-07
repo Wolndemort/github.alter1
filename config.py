@@ -65,6 +65,14 @@ class Setting(BaseSettings):
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
     MEDIA_MAX_BYTES: int = 20 * 1024 * 1024
+    # Optional OpenAI-compatible media generation provider. The existing
+    # OpenRouter chat key is intentionally not reused for binary generation.
+    MEDIA_GENERATION_API_URL: str | None = None
+    MEDIA_GENERATION_API_KEY: SecretStr | None = None
+    MEDIA_IMAGE_MODEL: str | None = None
+    MEDIA_VIDEO_API_URL: str | None = None
+    MEDIA_VIDEO_MODEL: str | None = None
+    MEDIA_GENERATION_TIMEOUT_SECONDS: int = 180
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 20

@@ -114,6 +114,20 @@ export class AlterApi {
     return response.json() as Promise<ChatResponse>;
   }
 
+  async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video") {
+    const form = new FormData();
+    form.append("message", message);
+    form.append("kind", kind);
+    if (uri) {
+      form.append("file", { uri, type: kind === "image" ? "image/jpeg" : "video/mp4", name: `alter-source.${kind === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
+    }
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/media/generate`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+    });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.json() as Promise<{ media_type: string; filename: string; data_base64: string }>;
+  }
+
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }

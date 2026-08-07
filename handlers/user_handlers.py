@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from data.models import ImportantEvent, Reminder, User, Session, Payment, MemoryChunk
 from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
+from services.media_generation import generate_image, generate_video
 from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
@@ -387,6 +388,22 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
     prompt = message.caption or "Проанализируй это изображение и объясни, что на нём."
     try:
         user = await get_or_create_user(message, db_session)
+        # The mobile client exposes the same explicit "Изменить" action;
+        # Telegram uses a caption starting with /edit or "измени".
+        generation_requested = prompt.casefold().startswith(("/edit", "измени", "сделай"))
+        if generation_requested:
+            if message.photo:
+                buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
+                artifact = await generate_image(prompt, ("image/jpeg", buffer.getvalue()))
+                await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename))
+            else:
+                buffer = await message.bot.download(message.video, destination=BytesIO())
+                artifact = await generate_video(prompt, ("video/mp4", buffer.getvalue()))
+                # Video providers return an async job in the next adapter step.
+                # Never claim a completed video while no artifact exists.
+                if artifact:
+                    await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename))
+            return
         session = await get_active_session(user.id, db_session)
         if session is None:
             session = Session(user_id=user.id, raw_messages=[])

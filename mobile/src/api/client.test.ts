@@ -58,6 +58,14 @@ describe("AlterApi", () => {
     }));
   });
 
+  it("uses the shared generation endpoint for image/video operations", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ media_type: "image/png", data_base64: "aA==" }) });
+    await new AlterApi("https://alter.example").generateMedia("token", "make it cinematic", "file:///photo.jpg", "image");
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/media/generate", expect.objectContaining({
+      method: "POST", headers: { Authorization: "Bearer token" },
+    }));
+  });
+
   it("updates settings and manages reminders", async () => {
     (fetch as jest.Mock)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ settings: { voice_replies: true }, checkins_enabled: true }) })
