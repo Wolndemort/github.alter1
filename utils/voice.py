@@ -11,7 +11,9 @@ async def transcribe_voice(data: bytes) -> str:
     try:
         result = await client.audio.transcriptions.create(
             model=config.TRANSCRIPTION_MODEL,
-            file=("voice.ogg", data),
+            # Expo iOS records AAC in an m4a container. The previous .ogg
+            # filename made the provider reject otherwise valid audio bytes.
+            file=("voice.m4a", data),
             language="ru",
         )
         text = (result.text or "").strip()

@@ -79,7 +79,7 @@ class Setting(BaseSettings):
     PAYMENT_WEBHOOK_PATH: str = "/webhooks/yookassa"
     MEMORY_RECALL_LIMIT: int = 3
     MEMORY_RECALL_MAX_DISTANCE: float = 0.35
-    MEMORY_AUTO_RECALL_MIN_CHARS: int = 40
+    MEMORY_AUTO_RECALL_MIN_CHARS: int = 8
     MEMORY_PROMPT_MAX_CHARS: int = 4500
     MEMORY_SUMMARY_MAX_CHARS: int = 7000
 

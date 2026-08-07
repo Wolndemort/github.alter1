@@ -19,6 +19,11 @@ export class ApiError extends Error {
   }
 }
 
+function readableErrorBody(body: string, status: number): string {
+  const plain = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return plain.length > 240 ? `${plain.slice(0, 237)}...` : plain || `Request failed (HTTP ${status})`;
+}
+
 export class AlterApi {
   constructor(private readonly baseUrl: string) {}
 
@@ -33,7 +38,7 @@ export class AlterApi {
     });
     if (!response.ok) {
       const message = await response.text();
-      throw new ApiError(response.status, message || "Request failed");
+      throw new ApiError(response.status, readableErrorBody(message, response.status));
     }
     return response.json() as Promise<T>;
   }
@@ -85,7 +90,7 @@ export class AlterApi {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/media`, {
       method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
     });
-    if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Request failed");
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<ChatResponse>;
   }
 

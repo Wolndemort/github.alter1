@@ -54,7 +54,7 @@ function TypingText({ text }: { text: string }) {
   return <Text style={styles.message}>{visible}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
 }
 
-export function VoiceButton({ onRecorded }: { onRecorded: (uri: string) => void }) {
+export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (uri: string) => void; onRecordingChange?: (active: boolean) => void }) {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const pulse = React.useRef(new Animated.Value(1)).current;
   const pulseLoop = React.useRef<Animated.CompositeAnimation | null>(null);
@@ -64,6 +64,7 @@ export function VoiceButton({ onRecorded }: { onRecorded: (uri: string) => void 
     await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
     const result = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
     setRecording(result.recording);
+    onRecordingChange?.(true);
     pulseLoop.current = Animated.loop(Animated.sequence([
       Animated.timing(pulse, { toValue: 1.22, duration: 500, useNativeDriver: true }),
       Animated.timing(pulse, { toValue: 1, duration: 500, useNativeDriver: true }),
@@ -77,6 +78,7 @@ export function VoiceButton({ onRecorded }: { onRecorded: (uri: string) => void 
     await current.stopAndUnloadAsync();
     const uri = current.getURI();
     setRecording(null);
+    onRecordingChange?.(false);
     if (uri) onRecorded(uri);
   };
   return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>MIC</Text></Animated.View></Animated.View></Pressable>;
@@ -157,16 +159,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
+  const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const listRef = React.useRef<FlatList<{ id: string; role: string; text: string }>>(null);
   useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
   useEffect(() => { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [items]);
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
-    setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true);
+    setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
     try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text); setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setActivity(""); }
   };
   const openTelegramLink = async () => {
     setMenuError("");
@@ -198,8 +201,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => setMenuVisible(true)}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}</View>} />
+    {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text><Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
-    <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
+    <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
   </KeyboardAvoidingView>
   <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={styles.modalBackdrop} onPress={() => setMenuVisible(false)}>
@@ -250,6 +254,12 @@ const premiumStyles = StyleSheet.create({
   menuEmail: { color: "#fff", fontSize: 13, letterSpacing: 0.4 },
   menuStatus: { color: "#fff", fontSize: 14, letterSpacing: 0.2 },
   menuLogout: { backgroundColor: "transparent", borderColor: "#292632" },
+});
+
+const activityStyles = StyleSheet.create({
+  activityPill: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: "#171326", borderWidth: 1, borderColor: "#3e3264" },
+  activityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#ad91ff" },
+  activityText: { color: "#d8ceff", fontSize: 12, letterSpacing: 0.3 },
 });
 
 const mediaStyles = StyleSheet.create({

@@ -93,3 +93,18 @@ async def test_chat_service_routes_weather_through_shared_backend(monkeypatch):
     monkeypatch.setattr("services.chat_service.remember", remember)
     result = await ChatService().reply(db, 8, "погода в Москве")
     assert result.reply == "weather result"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_saves_vehicle_fact_immediately(monkeypatch):
+    user = User(id=9, first_name="Adam", memory={}, tech_stack={})
+    db = Db(user, active=None, events=[])
+    async def remember(*args, **kwargs): pass
+    async def reply(messages, memory):
+        assert memory["preferences"]["vehicle"] == "BMW X5"
+        return "Запомнил"
+    monkeypatch.setattr("services.chat_service.remember", remember)
+    monkeypatch.setattr("services.chat_service.generate_reply", reply)
+    result = await ChatService().reply(db, 9, "У меня машина BMW X5")
+    assert result.reply == "Запомнил"
+    assert user.memory["preferences"]["vehicle"] == "BMW X5"

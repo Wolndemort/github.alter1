@@ -7,11 +7,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Session, User
 from utils.ap_logic import generate_reply
 from utils.vector_memory import recall, remember
+from utils.helpers import merge_memory
+from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 
 
@@ -54,6 +57,11 @@ class ChatService:
             db.add(session)
             await db.flush()
         _append(session, "user", text)
+
+        new_facts = extract_user_facts(text)
+        if new_facts:
+            user.memory = merge_memory(dict(user.memory or {}), new_facts)
+            flag_modified(user, "memory")
 
         events_result = await db.execute(
             select(ImportantEvent).where(ImportantEvent.user_id == user_id)

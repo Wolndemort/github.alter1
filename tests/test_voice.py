@@ -10,7 +10,7 @@ def run(coro):
 
 def test_transcribe_voice_returns_text(monkeypatch):
     async def create(**kwargs):
-        assert kwargs["file"] == ("voice.ogg", b"audio")
+        assert kwargs["file"] == ("voice.m4a", b"audio")
         return SimpleNamespace(text="Привет, ALTER")
 
     monkeypatch.setattr(voice.client.audio.transcriptions, "create", create)
