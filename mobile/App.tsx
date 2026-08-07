@@ -187,6 +187,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [ttsVoice, setTtsVoice] = useState("alloy");
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
@@ -211,7 +213,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       Animated.spring(drawerX, { toValue: 0, damping: 22, stiffness: 220, mass: 0.8, useNativeDriver: true }).start();
     }
   }, [drawerX, menuVisible]);
-  const playVoiceReply = async (text: string) => {
+  const playVoiceReply = async (text: string, id?: string) => {
+    if (playingVoiceId) return;
+    setPlayingVoiceId(id || "manual");
     try {
       const blob = await api.voiceReply(token, text);
       const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
@@ -220,15 +224,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const uri = `${FileSystem.cacheDirectory}alter-reply-${Date.now()}.wav`;
       await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-      loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) loaded.sound.unloadAsync(); });
-    } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
+      loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) { setPlayingVoiceId(null); loaded.sound.unloadAsync(); } });
+    } catch (err) { setPlayingVoiceId(null); setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
   };
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
     autoScrollAfterUpdate.current = true;
     setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; setItems((old) => [...old, { id: `${Date.now()}a`, role: "assistant", text: result.reply }]); if (voiceReplies) playVoiceReply(result.reply); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (voiceReplies) playVoiceReply(result.reply, answerId); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -337,7 +341,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={styles.menuIcon}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><View style={{ width: 42 }} /></View>
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={() => Clipboard.setStringAsync(item.text)} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>⧉</Text></Pressable><Pressable onPress={() => playVoiceReply(item.text)} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>◖))</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text><Text style={answerActionStyles.hint}>{copiedId === item.id ? "Скопировано" : ""}</Text></Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={pickMedia} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={setMessage} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => setActivity(active ? "recording" : "")} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
@@ -413,8 +417,9 @@ const linkStyles = StyleSheet.create({
 });
 
 const answerActionStyles = StyleSheet.create({
-  row: { flexDirection: "row", gap: 18, marginTop: 10, alignItems: "center" },
+  row: { flexDirection: "row", gap: 12, marginTop: 10, alignItems: "center" }, button: { minWidth: 34, minHeight: 30, borderRadius: 9, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 4 }, pressed: { backgroundColor: "#302653", transform: [{ scale: 0.94 }] }, active: { backgroundColor: "#4a3975" },
   icon: { color: "#a99bce", fontSize: 16, paddingVertical: 2 }, selected: { color: "#d9cbff" },
+  hint: { color: "#d8ceff", fontSize: 11 },
 });
 
 const sheetStyles = StyleSheet.create({
