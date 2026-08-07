@@ -26,8 +26,11 @@ async def resolve_telegram_user(session: AsyncSession, telegram_user_id: int) ->
 def _merge_memory(target: dict | None, source: dict | None) -> dict:
     result = dict(source or {})
     for key, value in (target or {}).items():
-        if isinstance(value, list) and isinstance(result.get(key), list):
-            merged = [*result[key], *value]
+        current = result.get(key)
+        if isinstance(value, dict) and isinstance(current, dict):
+            result[key] = _merge_memory(value, current)
+        elif isinstance(value, list) and isinstance(current, list):
+            merged = [*current, *value]
             result[key] = list({repr(item): item for item in merged}.values())
         else:
             result[key] = value

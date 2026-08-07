@@ -44,6 +44,14 @@ def test_merge_memory_deduplicates_lists_and_preserves_categories():
     assert result == {"goals": ["learn", "launch"], "name": "Adam"}
 
 
+def test_merge_memory_preserves_nested_categories():
+    result = _merge_memory(
+        {"preferences": {"music": ["jazz"], "language": "ru"}},
+        {"preferences": {"food": ["sushi"], "language": "en"}},
+    )
+    assert result == {"preferences": {"music": ["jazz"], "food": ["sushi"], "language": "ru"}}
+
+
 @pytest.mark.asyncio
 async def test_linking_merges_legacy_telegram_profile():
     target = User(id=10, first_name="Web", memory={"goals": ["launch"]}, tech_stack={})
