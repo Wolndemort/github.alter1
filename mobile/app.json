@@ -8,6 +8,10 @@
     "userInterfaceStyle": "dark",
     "plugins": [
       "expo-notifications",
+      ["expo-image-picker", {
+        "photosPermission": "ALTER использует фото только после твоего выбора.",
+        "cameraPermission": "ALTER использует камеру только после твоего разрешения."
+      }],
       ["expo-location", {
         "locationWhenInUsePermission": "ALTER использует геолокацию только с твоего разрешения — для погоды и подсказок рядом.",
         "locationAlwaysAndWhenInUsePermission": "ALTER может использовать геолокацию в фоне только если ты отдельно включишь этот режим."

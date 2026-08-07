@@ -270,7 +270,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить память"); }
     finally { setMemoryLoading(false); }
   };
-  const pickMedia = async () => {
+  const pickMediaLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
@@ -278,6 +278,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const asset = result.assets[0];
       setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
     }
+  };
+  const pickMedia = () => Alert.alert("Добавить вложение", "", [
+    { text: "Сфотографировать", onPress: takePhoto },
+    { text: "Выбрать из медиатеки", onPress: pickMediaLibrary },
+    { text: "Отмена", style: "cancel" },
+  ]);
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+    if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
