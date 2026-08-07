@@ -49,7 +49,8 @@ describe("ALTER mobile critical screens", () => {
     fireEvent.changeText(getByPlaceholderText("Email"), "user@example.com");
     fireEvent.changeText(getByPlaceholderText("Пароль"), "password123");
     fireEvent.press(getByText("Войти"));
-    await waitFor(() => expect(authenticated).toHaveBeenCalledWith("token"));
+    await act(async () => { await Promise.resolve(); });
+    expect(authenticated).toHaveBeenCalledWith("token");
     expect(AsyncStorage.setItem).toHaveBeenCalledWith("alter_access_token", "token");
   });
 
