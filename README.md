@@ -2,6 +2,36 @@
 
 ## Current project state (2026-08-06)
 
+### Latest implementation notes (2026-08-07)
+
+- The mobile app uses a dark premium UI with a one-time-per-session permission card. It explains why notifications and location improve ALTER, then requests system permissions only after the user presses the allow button. “Later” dismisses the card for the current session.
+- Registration includes an explicit legal consent checkbox with links to the privacy policy and offer. Native blue buttons were replaced with the ALTER visual style.
+- Push tokens are validated and stored in the existing user settings JSON. Location is sent with chat only after consent; precise coordinates are not persisted as a separate database record.
+- Telegram media messages show human-readable actions: analyze, improve photo, and animate video. The photo action calls the shared generation pipeline; video remains an asynchronous provider flow and must never claim success before a file exists.
+- fal.ai configuration uses `MEDIA_PROVIDER=fal`, `FAL_BASE_URL=https://fal.run`, `fal-ai/flux-pro/kontext/max` for image editing, and `fal-ai/kling-video/v2.1/master/image-to-video` for video. Keep the API key only in `.env` on the server.
+- The Telegram/app identity merge avoids lazy SQLAlchemy relationship IO; notification monitors never send an app database id as a Telegram chat id.
+
+Latest verification baseline: `243` backend tests, `13` mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` all pass. The Expo Go push warning is expected; production remote push requires a development build/TestFlight.
+
+### Metro / Expo quick start
+
+From `mobile`:
+
+```powershell
+npx expo start --offline --port 8082 -c
+```
+
+Do not combine Expo `--offline` with `--lan`; Expo treats them as mutually exclusive. In offline mode Metro still serves the local bundle on port `8082`. If a QR is needed, run the command in a visible terminal. For the current LAN address the Expo Go URL is usually `exp://<computer-lan-ip>:8082`.
+
+### VPS update
+
+```bash
+cd /root/alter
+git pull --ff-only origin master
+docker compose up -d --build bot alter-nginx
+docker compose logs --since=2m --tail=100 bot
+```
+
 ALTER has an independent Expo mobile client alongside the existing Telegram
 client. Both clients use the same users, memory, sessions, reminders,
 subscriptions, and payments. No duplicate mobile database was introduced.
@@ -129,6 +159,8 @@ docker compose exec bot python -c "from config import config; import httpx; r=ht
 Never paste API keys or passwords into chat, Git, README, or screenshots.
 
 ### Important files
+
+Recent implementation notes are kept in [PROJECT_MAP_ADAM_RECENT.md](PROJECT_MAP_ADAM_RECENT.md).
 
 | Area | Files |
 |---|---|
