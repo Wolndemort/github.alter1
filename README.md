@@ -48,7 +48,7 @@ cmd /c "npx tsc --noEmit"
 cmd /c "npm test -- --runInBand"
 ```
 
-Verified current result: `235` backend tests and `11` mobile tests pass.
+Verified current result: `236` backend tests and `11` mobile tests pass.
 TypeScript passes too. The SafeAreaView output is only a deprecation warning.
 
 ### Completed mobile work
@@ -61,6 +61,11 @@ TypeScript passes too. The SafeAreaView output is only a deprecation warning.
   picker, multipart image/video upload, and press-and-hold violet microphone.
 - Minimal account cabinet with white ALTER-style typography, memory screen,
   subscription/payment action, logout, and `Synchronize memory with Telegram`.
+- AppState foreground recovery after returning from background.
+- Readable network timeouts and clickable HTTPS links in assistant replies.
+- Separate card controls for auto-renewal and removing the saved payment method.
+- Expo push permission/token registration; production remote push requires a
+  development build or TestFlight, while Expo Go is suitable for basic tests.
 
 ### Completed backend work
 
@@ -71,6 +76,12 @@ TypeScript passes too. The SafeAreaView output is only a deprecation warning.
 - SMTP and console email modes; console mode is useful for testing only.
 - `OWNER_TELEGRAM_IDS` and `OWNER_EMAILS` bypass subscription checks for the
   owner without adding a database field or migration.
+- `POST /api/v1/push-token` stores an Expo token in the existing `tech_stack`
+  JSON. Reminder and check-in monitors send to Telegram and mobile push.
+- `PATCH /api/v1/subscription/auto-renew` toggles recurring charges.
+- `DELETE /api/v1/subscription/payment-method` disables recurring charges and
+  removes the saved payment method reference.
+- YooKassa card saving is opt-in through `YUKASSA_SAVE_PAYMENT_METHOD=false`.
 
 ### VPS update after a push
 
@@ -86,6 +97,7 @@ Ensure the server `.env` contains:
 ```dotenv
 OWNER_EMAILS=kid.cudi.1995@mail.ru
 OPENROUTER_ALLOW_PAID_FALLBACK=true
+YUKASSA_SAVE_PAYMENT_METHOD=false
 ```
 
 Rebuild and verify:
