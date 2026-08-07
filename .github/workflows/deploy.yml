@@ -24,6 +24,13 @@ jobs:
           python-version: '3.11'
           cache: pip
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
 
@@ -58,7 +65,7 @@ jobs:
       - name: Run mobile checks
         working-directory: mobile
         run: |
-          npm ci
+          npm ci --registry=https://registry.npmjs.org --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=120000
           npx tsc --noEmit
           npm test -- --runInBand
 

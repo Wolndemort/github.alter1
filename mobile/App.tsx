@@ -184,7 +184,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<{ id: string; role: string; text: string; mediaUri?: string }>>(null);
   const autoScrollAfterUpdate = React.useRef(false);
-  useEffect(() => { api.account(token).then(setAccount).catch(() => undefined); }, [token]);
+  const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
+  useEffect(() => {
+    refreshAccount();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshAccount();
+    });
+    return () => subscription.remove();
+  }, [token]);
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
@@ -275,7 +282,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const memoryEntries = Object.entries(memoryData?.memory || {}).filter(([, value]) => value);
   return <SafeAreaView style={styles.container}><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); setMenuVisible(true); }}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
+    <View style={styles.header}><Text style={styles.headerTitle}>ALTER</Text><Pressable style={[styles.menuButton, premiumStyles.menuButton]} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }}><Text style={styles.menuIcon}>•••</Text></Pressable></View>
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <TypingText text={item.text} /> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
