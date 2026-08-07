@@ -1,5 +1,15 @@
 # ALTER
 
+## UX and usage baseline
+
+Mobile and Telegram share the same session rule: starting a new chat closes the active session and persists its summary; clearing memory is explicit and is never performed by starting a new chat. Metro only serves JavaScript locally; the mobile `.env` points to the production API.
+
+The mobile profile uses collapsible groups (profile, connections, tools, application). Email is masked and revealed only on tap. Voice replies and automatic playback are independent settings. Assistant answers expose copy, manual playback, and feedback actions.
+
+Monthly usage is stored in Redis and shared by API and Telegram. Current costs are: text 1 credit, voice 5, media analysis 20, media generation 40. `/api/v1/usage` returns used and remaining credits. Credit top-ups are intentionally disabled until a separate YooKassa package/webhook contract is implemented.
+
+Parity checks: `/new_session` and the mobile New Chat action persist summaries; `/clear_memory` removes only durable memory; Telegram media actions restore the latest media from the session, so Improve Photo does not depend on the reply message containing a photo.
+
 ## Current project state (2026-08-06)
 
 ### Latest implementation notes (2026-08-07)

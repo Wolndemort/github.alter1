@@ -463,14 +463,17 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
 
 
 @router.callback_query(F.data == "media:improve")
-async def improve_media_photo(callback: types.CallbackQuery):
+async def improve_media_photo(callback: types.CallbackQuery, db_session: AsyncSession):
     message = callback.message
-    if not message or not message.photo:
+    user = await get_telegram_user(callback.from_user.id, db_session) if callback.from_user else None
+    session = await get_active_session(user.id, db_session) if user else None
+    media_ref = next((item.get("media") for item in reversed(session.raw_messages if session else []) if item.get("role") == "user" and item.get("media")), None)
+    restored = await restore_session_media(message.bot, media_ref) if message and media_ref else []
+    if not restored or not restored[0][0].startswith("image/"):
         await callback.answer("Кнопка работает для фото", show_alert=True)
         return
     try:
-        buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
-        artifact = await generate_image("Сделай изображение более дорогим, кинематографичным и аккуратным, сохранив человека и ключевые детали.", ("image/jpeg", buffer.getvalue()))
+        artifact = await generate_image("Сделай изображение более дорогим, кинематографичным и аккуратным, сохранив человека и ключевые детали.", restored[0])
         await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — сохранил исходный характер изображения.")
         await callback.answer()
     except Exception:
@@ -484,9 +487,6 @@ async def analyze_media_again(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "media:animate")
 async def animate_media_video(callback: types.CallbackQuery):
-    if not callback.message or not callback.message.video:
-        await callback.answer("Кнопка работает для видео", show_alert=True)
-        return
     await callback.answer("Оживление видео подключено; сейчас провайдер вернёт статус после запуска задачи.", show_alert=True)
 
 
