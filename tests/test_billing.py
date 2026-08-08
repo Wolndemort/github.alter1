@@ -160,6 +160,40 @@ def test_check_and_activate_verifies_provider_and_saves_card(configured_yookassa
     assert user.next_charge_at == user.subscription_expires_at
 
 
+def test_ego_payment_uses_ego_amount_and_persists_plan(configured_yookassa):
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    session = Session(user=user)
+    FakeClient.response = FakeResponse(201, {"id": "ego-pay", "confirmation": {"confirmation_url": "https://pay"}})
+    assert run(create_payment(session, user, "alter_bot", plan="ego")) == "https://pay"
+    payload = FakeClient.requests[0][2]["json"]
+    assert payload["amount"]["value"] == "2990.00"
+    assert payload["metadata"]["plan"] == "ego"
+
+    payment = session.added[-1]
+    session.payment = payment
+    payment.provider_payment_id = "ego-pay"
+    FakeClient.response = FakeResponse(200, {
+        "status": "succeeded", "paid": True,
+        "amount": {"value": "2990.00", "currency": "RUB"},
+        "metadata": {"payment_key": payment.idempotence_key, "user_id": "7", "plan": "ego"},
+    })
+    assert run(check_and_activate(session, payment.idempotence_key)) is True
+    assert user.tech_stack["subscription_plan"] == "ego"
+
+
+def test_successful_payment_is_idempotent_after_first_activation(configured_yookassa):
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    payment = Payment(user_id=7, provider_payment_id="pay-1", idempotence_key="key-1", amount_rub="990.00", status="succeeded")
+    session = Session(payment=payment, user=user)
+    FakeClient.response = FakeResponse(200, {
+        "status": "succeeded", "paid": True,
+        "amount": {"value": "990.00", "currency": "RUB"},
+        "metadata": {"payment_key": "key-1", "user_id": "7"},
+    })
+    assert run(check_and_activate(session, "key-1")) is True
+    assert user.subscription_expires_at is None
+
+
 @pytest.mark.parametrize("payload", [
     {"status": "pending", "paid": False},
     {"status": "succeeded", "paid": True, "amount": {"value": "1.00", "currency": "RUB"}},
