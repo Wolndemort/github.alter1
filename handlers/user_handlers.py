@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from data.models import ImportantEvent, Reminder, User, Session, Payment, MemoryChunk
+from data.database import async_session
 from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
 from services.media_generation import generate_image, generate_video
