@@ -97,4 +97,6 @@ jobs:
             ./cicd/deploy.sh
             test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
             test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = healthy
+            chmod +x scripts/production-smoke.sh
+            SMOKE_BASE_URL=https://api.alterai.ru ./scripts/production-smoke.sh
             docker compose logs --tail=50 bot
