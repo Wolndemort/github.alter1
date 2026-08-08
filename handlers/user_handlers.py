@@ -26,6 +26,7 @@ from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
+from utils.capabilities import capabilities_reply, is_capabilities_request
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
@@ -267,6 +268,8 @@ async def button_forget_category(message: types.Message, command: CommandObject,
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
+    await message.answer(capabilities_reply())
+    return
     await message.answer(
         "<b>ALTER</b> — просто напиши, что нужно.\n\n"
         "🧠 Память: «запомни, что…» или «забудь, что…»\n"
@@ -397,6 +400,13 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             session = Session(user_id=user.id, raw_messages=[])
             db_session.add(session)
             await db_session.flush()
+        if is_capabilities_request(text):
+            reply = capabilities_reply()
+            await answer_reply(message, reply, user)
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", reply)
+            await db_session.commit()
+            return
         action_source = audio_data
         action_filename = "voice.ogg"
         detected_action = detect_audio_action(text)
@@ -1008,6 +1018,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         return
 
     user = await get_or_create_user(message, db_session)
+    if is_capabilities_request(message.text):
+        await message.answer(capabilities_reply())
+        await db_session.commit()
+        return
     explicit_fact = explicit_memory_fact(message.text)
     if explicit_fact:
         memory = dict(user.memory or {})

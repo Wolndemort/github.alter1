@@ -83,4 +83,12 @@ describe("AlterApi", () => {
     await expect(new AlterApi("https://alter.example").createReminder("token", "call", "2026-08-07T10:00:00+03:00")).resolves.toMatchObject({ id: 1 });
     await expect(new AlterApi("https://alter.example").deleteReminder("token", 1)).resolves.toEqual({ ok: true });
   });
+
+  it("searches YouTube through the protected API", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ results: [{ title: "Rain", url: "https://youtu.be/x" }] }) });
+    await expect(new AlterApi("https://alter.example").youtubeSearch("token", "rain")).resolves.toMatchObject({ results: [{ title: "Rain" }] });
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/youtube/search", expect.objectContaining({
+      method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token" }), body: JSON.stringify({ query: "rain" }),
+    }));
+  });
 });

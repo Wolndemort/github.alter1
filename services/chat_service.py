@@ -16,6 +16,7 @@ from utils.vector_memory import recall, remember
 from utils.helpers import merge_memory
 from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
+from utils.capabilities import capabilities_reply, is_capabilities_request
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,12 @@ class ChatService:
             db.add(session)
             await db.flush()
         _append(session, "user", text)
+
+        if is_capabilities_request(text):
+            reply = capabilities_reply()
+            _append(session, "assistant", reply)
+            await db.commit()
+            return ChatResult(reply=reply, session_id=session.id)
 
         new_facts = extract_user_facts(text)
         if new_facts:

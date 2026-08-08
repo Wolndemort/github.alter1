@@ -31,15 +31,23 @@ POST /api/v1/auth/resend-verification {"email":"..."}
 POST /api/v1/auth/login      {"email":"...", "password":"..."}
 GET  /api/v1/auth/me         Authorization: Bearer <token>
 POST /api/v1/chat/messages   Authorization: Bearer <token>, {"message":"..."}
+POST /api/v1/chat/new        Authorization: Bearer <token>
+GET  /api/v1/chat/history    Authorization: Bearer <token>
 POST /api/v1/chat/media      Authorization: Bearer <token>, multipart `message` + `file`
+POST /api/v1/media/generate  Authorization: Bearer <token>, multipart `message` + `kind` + optional `file`
+POST /api/v1/voice/reply     Authorization: Bearer <token>, {"text":"..."}; returns WAV
 GET  /api/v1/settings        Authorization: Bearer <token>
 PATCH /api/v1/settings       Authorization: Bearer <token>, settings JSON
 POST /api/v1/checkins        Authorization: Bearer <token>, {"enabled":true}
+POST /api/v1/push-token       Authorization: Bearer <token>, {"token":"ExponentPushToken[...]"}
 GET  /api/v1/reminders       Authorization: Bearer <token>
 POST /api/v1/reminders       Authorization: Bearer <token>, {"text":"...","remind_at":"...+03:00"}
 DELETE /api/v1/reminders/:id Authorization: Bearer <token>
 POST /api/v1/youtube/search   Authorization: Bearer <token>, {"query":"..."}
 POST /api/v1/youtube/audio    Authorization: Bearer <token>, {"url":"https://youtube.com/..."}
+POST /api/v1/audio/sound-effects Authorization: Bearer <token>, {"prompt":"rain on glass"}; returns MP3
+POST /api/v1/audio/isolate    Authorization: Bearer <token>, multipart `file`; returns MP3
+POST /api/v1/audio/process    Authorization: Bearer <token>, multipart `prompt` + optional `file`; returns JSON with base64 MP3
 GET  /api/v1/account         Authorization: Bearer <token>
 GET  /api/v1/memory          Authorization: Bearer <token>
 GET  /api/v1/subscription    Authorization: Bearer <token>
@@ -104,3 +112,41 @@ only the nullable Telegram identity link to `web_accounts`.
 The migration is idempotent through Alembic. Do not run `alembic downgrade` on
 production. Backups and the existing Telegram polling process are not changed
 by this slice.
+
+## Quick usage
+
+Protected requests use the token returned by login or email verification:
+
+```bash
+TOKEN='...'
+curl -X POST "$API/api/v1/chat/messages" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"message":"Какая погода сегодня?"}'
+```
+
+For a sound effect, send a normal chat request such as `Создай звук дождя по
+стеклу`. To mix or clean a recording, use multipart; the prompt selects the
+operation:
+
+```bash
+curl -X POST "$API/api/v1/audio/process" -H "Authorization: Bearer $TOKEN" \
+  -F 'prompt=Наложи звук дождя на мое голосовое' -F 'file=@voice.m4a'
+```
+
+The response contains `reply`, `audio_base64`, `audio_filename` and
+`audio_mime`. The same commands work in Telegram: send a voice message with
+a caption, or send a second voice command without a caption to apply it to
+the previous voice message. Mobile and Telegram share services, sessions,
+memory and quotas.
+
+## Fal.ai
+
+Set `MEDIA_PROVIDER=fal`, `MEDIA_GENERATION_API_KEY`, `FAL_IMAGE_MODEL` and,
+for video, `FAL_VIDEO_MODEL`. Image generation/editing uses:
+
+```bash
+curl -X POST "$API/api/v1/media/generate" -H "Authorization: Bearer $TOKEN" \
+  -F 'kind=image' -F 'message=cinematic rain at night' -F 'file=@source.jpg'
+```
+
+The response contains `media_type`, `filename` and `data_base64`; success is
+returned only after fal.ai provides a real artifact.

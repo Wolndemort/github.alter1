@@ -15,6 +15,7 @@ export type MemoryResponse = { sections: MemorySection[] };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
+export type YouTubeResult = { title: string; url: string; channel?: string; thumbnail?: string };
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -159,6 +160,14 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, await response.text());
     return response.blob();
   }
+  async processAudio(token: string, prompt: string, uri?: string) {
+    const form = new FormData();
+    form.append("prompt", prompt);
+    if (uri) form.append("file", { uri, type: "audio/m4a", name: "alter-audio.m4a" } as unknown as Blob);
+    const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/process", { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.json() as Promise<ChatResponse>;
+  }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }
   registerPushToken(token: string, pushToken: string) { return this.request<{ ok: boolean }>("/api/v1/push-token", { method: "POST", body: JSON.stringify({ token: pushToken }) }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
@@ -168,6 +177,11 @@ export class AlterApi {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/youtube/audio`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
     if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Request failed");
     return response.blob();
+  }
+  youtubeSearch(token: string, query: string) {
+    return this.request<{ results: YouTubeResult[] }>("/api/v1/youtube/search", {
+      method: "POST", body: JSON.stringify({ query }),
+    }, token);
   }
 }
 

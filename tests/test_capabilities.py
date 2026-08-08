@@ -1,0 +1,15 @@
+from utils.capabilities import CAPABILITIES_PROMPT, capabilities_reply, is_capabilities_request
+
+
+def test_capabilities_request_is_detected_in_text_and_voice_transcript():
+    assert is_capabilities_request("Что ты умеешь?")
+    assert is_capabilities_request("Расскажи голосом, чем ты можешь помочь")
+    assert is_capabilities_request("/help")
+    assert not is_capabilities_request("Какая погода в Москве?")
+
+
+def test_inventory_does_not_advertise_unavailable_audio_products_as_available():
+    reply = capabilities_reply()
+    assert "звук дождя" in reply
+    assert "Dubbing сейчас не подключены" in reply
+    assert "Music Generation и Dubbing" in CAPABILITIES_PROMPT
