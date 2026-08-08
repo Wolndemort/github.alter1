@@ -11,14 +11,18 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
-type ChatItem = { id: string; role: string; text: string; mediaUri?: string; feedback?: "positive" | "negative" };
+type ChatItem = { id: string; role: string; text: string; createdAt?: number; mediaUri?: string; feedback?: "positive" | "negative" };
 
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 async function registerPushNotifications(token: string) {
   if (Platform.OS === "web") return;
@@ -72,6 +76,19 @@ function TypingText({ text }: { text: string }) {
   }, [text]);
   const parts = visible.split(/(https?:\/\/[^\s]+)/g);
   return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => Linking.openURL(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
+}
+
+function ActivityPulse() {
+  const scale = React.useRef(new Animated.Value(0.72)).current;
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(scale, { toValue: 1.35, duration: 1300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 0.72, duration: 1300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [scale]);
+  return <Animated.View style={[activityStyles.activityDot, { transform: [{ scale }] }]} />;
 }
 
 function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
@@ -271,6 +288,29 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     api.history(token).then((result) => setItems(result.messages.map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content })))).catch(() => undefined);
   }, [token]);
   useEffect(() => {
+    const timer = setInterval(() => {
+      const cutoff = Date.now() - 60000;
+      setItems((current) => {
+        const keep = new Set<string>();
+        for (const role of ["user", "assistant"]) {
+          current.filter((item) => item.role === role).slice(-3).forEach((item) => keep.add(item.id));
+        }
+        const next = current.filter((item) => !item.createdAt || item.createdAt > cutoff || keep.has(item.id));
+        if (next.length === current.length) return current;
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    setItems((current) => {
+      const now = Date.now();
+      const normalized = current.map((item) => item.createdAt ? item : { ...item, createdAt: now });
+      return normalized.some((item, index) => item !== current[index]) ? normalized : current;
+    });
+  }, [items]);
+  useEffect(() => {
     if (menuVisible) {
       drawerX.setValue(-420);
       Animated.spring(drawerX, { toValue: 0, damping: 22, stiffness: 220, mass: 0.8, useNativeDriver: true }).start();
@@ -304,7 +344,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const currentAttachment = attachment;
     const userMessageId = `${Date.now()}u`;
     autoScrollAfterUpdate.current = true;
-    setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
+    Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? " " : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
     try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
@@ -432,7 +472,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {newChatPromptVisible ? <View style={premiumStyles.newChatPrompt}><Text style={premiumStyles.newChatPromptText}>Начать новый чат?</Text><View style={premiumStyles.newChatActions}><Pressable onPress={() => setNewChatPromptVisible(false)} accessibilityLabel="Отменить новый чат"><Text style={premiumStyles.newChatAction}>×</Text></Pressable><Pressable onPress={startNewChat} accessibilityLabel="Подтвердить новый чат"><Text style={premiumStyles.newChatAction}>✓</Text></Pressable></View></View> : null}
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}</View>} />
-    {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
+    {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
@@ -533,6 +573,9 @@ const styles = StyleSheet.create({
 
 // Keep the composer surface pure black while retaining the native field size.
 (styles as Record<string, unknown>).input = { ...StyleSheet.flatten(styles.input), backgroundColor: "#000000", borderColor: "#ffffff", borderWidth: StyleSheet.hairlineWidth };
+(styles as Record<string, unknown>).aiBubble = { ...StyleSheet.flatten(styles.aiBubble), backgroundColor: "#000000", borderWidth: 0, borderColor: "transparent" };
+(styles as Record<string, unknown>).messages = { ...StyleSheet.flatten(styles.messages), padding: 10, gap: 3 };
+(styles as Record<string, unknown>).bubble = { ...StyleSheet.flatten(styles.bubble), padding: 8, maxWidth: "92%" };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
@@ -618,7 +661,7 @@ const premiumStyles = StyleSheet.create({
 });
 
 const activityStyles = StyleSheet.create({
-  activityPill: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: "#171717", borderWidth: 1, borderColor: "#ffffff" },
+  activityPill: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2, paddingHorizontal: 4, paddingVertical: 4, backgroundColor: "transparent" },
   activityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#ffffff" },
   activityText: { color: "#ffffff", fontSize: 12, letterSpacing: 0.3 },
 });
