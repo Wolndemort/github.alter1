@@ -71,6 +71,49 @@ def test_synthesize_uses_openrouter_audio_chat(monkeypatch):
     assert len(calls["messages"][0]["content"]) <= 1200
 
 
+def test_elevenlabs_is_used_only_for_explicit_premium_voice(monkeypatch):
+    calls = []
+
+    class Response:
+        content = b"\x00\x00" * 32
+
+        def raise_for_status(self):
+            pass
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+    monkeypatch.setattr(tts.config, "ELEVENLABS_ENABLED", True)
+    monkeypatch.setattr(tts.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(tts.config, "ELEVENLABS_VOICE_ID", "premium-voice")
+    monkeypatch.setattr(tts.httpx, "AsyncClient", Client)
+
+    async def openrouter_audio(**kwargs):
+        async def stream():
+            if False:
+                yield None
+        return stream()
+
+    monkeypatch.setattr(tts.client.chat.completions, "create", openrouter_audio)
+
+    assert run(tts.synthesize_speech("hello", voice="alloy", output_format="wav")) == b""
+    assert not calls
+    result = run(tts.synthesize_speech("hello", voice="elevenlabs", output_format="wav"))
+    assert result.startswith(b"RIFF")
+    assert calls[0][0].endswith("/premium-voice")
+
+
 def test_synthesize_returns_empty_without_audio(monkeypatch):
     async def create(**kwargs):
         async def stream():
