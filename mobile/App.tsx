@@ -396,7 +396,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     setPlayingVoiceId(id || "audio-action");
     const uri = `${FileSystem.cacheDirectory}alter-audio-${Date.now()}.${extension}`;
     await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-    const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+    // Recording enables the iOS receiver route and can leave subsequent TTS
+    // playback extremely quiet. Explicitly restore speaker playback before
+    // every voice response; this also prevents Android earpiece routing.
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: false,
+      playThroughEarpieceAndroid: false,
+    });
+    const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: 1.0 });
     loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) { setPlayingVoiceId(null); loaded.sound.unloadAsync(); } });
   };
   const send = async () => {
