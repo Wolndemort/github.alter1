@@ -74,6 +74,34 @@ function TypingText({ text }: { text: string }) {
   return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => Linking.openURL(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
 }
 
+function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
+  const pulse = React.useRef(new Animated.Value(0.72)).current;
+  const line = React.useRef(new Animated.Value(0)).current;
+  const drift = React.useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const pulseLoop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.72, duration: 2200, useNativeDriver: true }),
+    ]));
+    const lineLoop = Animated.loop(Animated.sequence([
+      Animated.timing(line, { toValue: 1, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+      Animated.timing(line, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+    ]));
+    const textLoop = Animated.loop(Animated.sequence([
+      Animated.timing(drift, { toValue: -1, duration: 30000, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(drift, { toValue: 0, duration: 1, useNativeDriver: true }),
+    ]));
+    pulseLoop.start(); lineLoop.start(); textLoop.start();
+    return () => { pulseLoop.stop(); lineLoop.stop(); textLoop.stop(); };
+  }, [drift, line, pulse]);
+  const capabilities = "память\nживой диалог\nголосовые ответы\nфото и видео\nпоиск и музыка\nпогода и напоминания\nмягкая забота\nALTER рядом";
+  return <Animated.View pointerEvents="none" style={[idleStyles.overlay, { opacity }]}>
+    <Animated.Text style={[styles.introLogo, idleStyles.logo, { opacity: pulse }]}>ALTER</Animated.Text>
+    <Animated.View style={[styles.introLine, idleStyles.line, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
+    <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-210, 170] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View>
+  </Animated.View>;
+}
+
 export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (uri: string) => void; onRecordingChange?: (active: boolean) => void }) {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const pulse = React.useRef(new Animated.Value(1)).current;
@@ -101,7 +129,7 @@ export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (ur
     onRecordingChange?.(false);
     if (uri) onRecorded(uri);
   };
-  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>🎙</Text></Animated.View></Animated.View></Pressable>;
+  return <Pressable onPressIn={start} onPressOut={stop} accessibilityLabel="Записать голосовое сообщение"><Animated.View style={[mediaStyles.voiceHalo, { transform: [{ scale: pulse }] }, recording ? mediaStyles.voiceHaloActive : null]}><Animated.View style={[mediaStyles.voiceButton, recording ? mediaStyles.voiceButtonActive : null]}><Text style={mediaStyles.voiceIcon}>◉</Text></Animated.View></Animated.View></Pressable>;
 }
 
 export function AuthScreen({ onAuthenticated }: AuthProps) {
@@ -399,7 +427,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const startNewChat = async () => { if (busy || newChatLoading) return; setNewChatPromptVisible(false); setNewChatLoading(true); try { await api.newSession(token); setItems([]); setMessage(""); setAttachment(null); setMenuVisible(false); resetIdle(); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось начать новый чат"); } finally { setNewChatLoading(false); } };
   const memorySections = memoryData?.sections || [];
   const maskedEmail = account?.email ? account.email.replace(/^(.{2}).*(@.*)$/, "$1•••$2") : "Почта не указана";
-  return <SafeAreaView style={styles.container} onTouchStart={resetIdle}><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  return <SafeAreaView style={[styles.container, { backgroundColor: "#000000" }]} onTouchStart={resetIdle}><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><IdleAlterScreen opacity={idleShade} /><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Pressable style={premiumStyles.headerAction} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={premiumStyles.headerActionText}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><Pressable style={premiumStyles.refreshAction} onPress={() => setNewChatPromptVisible((value) => !value)} accessibilityLabel="Новый чат"><Text style={premiumStyles.refreshIcon}>↻</Text></Pressable></View>
     {newChatPromptVisible ? <View style={premiumStyles.newChatPrompt}><Text style={premiumStyles.newChatPromptText}>Начать новый чат?</Text><View style={premiumStyles.newChatActions}><Pressable onPress={() => setNewChatPromptVisible(false)} accessibilityLabel="Отменить новый чат"><Text style={premiumStyles.newChatAction}>×</Text></Pressable><Pressable onPress={startNewChat} accessibilityLabel="Подтвердить новый чат"><Text style={premiumStyles.newChatAction}>✓</Text></Pressable></View></View> : null}
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
@@ -530,7 +558,7 @@ const answerActionStyles = StyleSheet.create({
   hint: { color: "#ffffff", fontSize: 11 },
 });
 
-const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 5 } });
+const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 5 }, overlay: { ...StyleSheet.absoluteFillObject, zIndex: 6, backgroundColor: "#050505", alignItems: "center", justifyContent: "center", overflow: "hidden" }, logo: { fontSize: 52, letterSpacing: 8 }, line: { marginTop: 28 }, capabilityViewport: { width: "100%", overflow: "hidden", marginTop: 34, height: 190, justifyContent: "center" }, capabilities: { color: "#f4f4f4", fontSize: 13, lineHeight: 25, letterSpacing: 1.2, width: "100%", textAlign: "center" }, capabilityFade: { position: "absolute", left: 0, right: 0, height: 55, backgroundColor: "#050505" }, capabilityFadeTop: { top: 0 }, capabilityFadeBottom: { bottom: 0 } });
 
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.68)" },
@@ -538,7 +566,7 @@ const sheetStyles = StyleSheet.create({
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#ffffff", alignSelf: "center", marginBottom: 7 },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
   action: { minHeight: 54, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "transparent" },
-  actionIcon: { fontSize: 18, color: "#ffffff", width: 24, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  actionIcon: { display: "none" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#ffffff", fontWeight: "700" },
 });
 
@@ -566,7 +594,7 @@ const premiumStyles = StyleSheet.create({
   headerAction: { minWidth: 54, height: 40, alignItems: "center", justifyContent: "center" }, headerActionText: { color: "#ffffff", fontSize: 22 }, refreshAction: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }, refreshIcon: { color: "#ffffff", fontSize: 27, fontWeight: "300" },
   newChatPrompt: { position: "absolute", top: 58, right: 14, zIndex: 10, flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: "#050505" }, newChatPromptText: { color: "#ffffff", fontSize: 13 }, newChatActions: { flexDirection: "row", alignItems: "center", gap: 14 }, newChatAction: { color: "#ffffff", fontSize: 23, lineHeight: 24 },
   newChatLoading: { ...StyleSheet.absoluteFillObject, zIndex: 20, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, newChatLoadingLogo: { color: "#ffffff", fontSize: 42, fontWeight: "900", letterSpacing: 8 }, newChatLoadingText: { color: "#888888", fontSize: 12, letterSpacing: 1, marginTop: 14 },
-  menuCard: { width: "84%", height: "100%", backgroundColor: "#050505" },
+  menuCard: { width: "84%", height: "100%", backgroundColor: "#000000" },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
   drawerLogo: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: 7, marginBottom: 2 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
@@ -595,7 +623,7 @@ const activityStyles = StyleSheet.create({
 const mediaStyles = StyleSheet.create({
   attachmentChip: { marginHorizontal: 12, marginBottom: 2, padding: 9, borderRadius: 10, backgroundColor: "#1d1d1d", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, generateAction: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
   attachmentText: { color: "#ddd", fontSize: 13 }, removeAttachment: { color: "#fff", fontSize: 20, paddingLeft: 12 },
-  attachButton: { width: 30, height: 38, alignItems: "center", justifyContent: "center" }, attachIcon: { color: "#ffffff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
+  attachButton: { width: 62, height: 38, alignItems: "center", justifyContent: "center" }, attachLabel: { color: "#ffffff", fontSize: 12 }, attachIcon: { color: "#ffffff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
   voiceHalo: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceHaloActive: { opacity: 0.72 }, voiceButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceButtonActive: { opacity: 0.72 }, voiceIcon: { color: "#ffffff", fontSize: 14, fontWeight: "800", letterSpacing: 0.8 },
   sendButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, sendIcon: { color: "#ffffff", fontSize: 21, fontWeight: "700" },
 });
