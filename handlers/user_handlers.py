@@ -266,6 +266,18 @@ async def button_forget_category(message: types.Message, command: CommandObject,
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     await message.answer(
+        "<b>ALTER</b> — просто напиши, что нужно.\n\n"
+        "🧠 Память: «запомни, что…» или «забудь, что…»\n"
+        "⏰ Напоминание: «напомни мне завтра в 10:00 позвонить…»\n"
+        "💭 Check-in: ALTER сама иногда возвращается к важной теме\n"
+        "🎙 Голос: отправь голосовое или попроси озвучить ответ\n"
+        "📎 Фото и видео: отправь файл и напиши, что сделать\n\n"
+        "Память, напоминания, настройки, подписка и лимиты — в кнопках меню.",
+        parse_mode="HTML",
+    )
+    return
+
+    await message.answer(
         "<b>ALTER умеет:</b>\n\n"
         "🧠 Память — факты о тебе, цели, интересы и незавершённые темы\n"
         "💬 Диалог — объяснения, идеи, планы, тексты и помощь с решениями\n"
