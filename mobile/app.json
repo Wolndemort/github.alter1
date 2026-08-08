@@ -1,23 +1,44 @@
 {
   "expo": {
     "name": "ALTER",
-    "slug": "alter-mobile",
+    "slug": "alter",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "alter",
     "userInterfaceStyle": "dark",
     "plugins": [
       "expo-notifications",
-      ["expo-image-picker", {
-        "photosPermission": "ALTER использует фото только после твоего выбора.",
-        "cameraPermission": "ALTER использует камеру только после твоего разрешения."
-      }],
-      ["expo-location", {
-        "locationWhenInUsePermission": "ALTER использует геолокацию только с твоего разрешения — для погоды и подсказок рядом.",
-        "locationAlwaysAndWhenInUsePermission": "ALTER может использовать геолокацию в фоне только если ты отдельно включишь этот режим."
-      }]
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ALTER использует фото только после твоего выбора.",
+          "cameraPermission": "ALTER использует камеру только после твоего разрешения."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ALTER использует геолокацию только с твоего разрешения — для погоды и подсказок рядом.",
+          "locationAlwaysAndWhenInUsePermission": "ALTER может использовать геолокацию в фоне только если ты отдельно включишь этот режим."
+        }
+      ]
     ],
-    "android": { "package": "ru.alterai.mobile" },
-    "ios": { "bundleIdentifier": "ru.alterai.mobile" }
+    "android": {
+      "package": "ru.alterai.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "ru.alterai.mobile"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8896be93-fa24-492e-8d3a-40ddf7ac9cdc"
+      }
+    },
+    "owner": "wolndemorts-team"
   }
 }

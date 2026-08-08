@@ -15,7 +15,7 @@ def contextual_checkin(name: str, context: str | None = None) -> str:
     """Мягкий вопрос только по фактам, которые пользователь уже сообщил."""
     greeting = f"{name}, " if name else ""
     if not context:
-        return greeting + random.choice(QUESTIONS)
+        return ""
     templates = (
         "Ты недавно говорил про «{context}». Как там всё продвигается?",
         "Как у тебя с «{context}» — получилось сдвинуться с места?",
@@ -32,6 +32,8 @@ async def generate_contextual_checkin(
     memory: dict | None = None,
 ) -> str:
     """Generate one natural follow-up question using the user's actual context."""
+    if not context and not recent_messages and not memory:
+        return ""
     prompt = {
         "name": name or "",
         "topic": (context or "")[:500],
@@ -53,7 +55,10 @@ async def generate_contextual_checkin(
         {"role": "user", "content": str(prompt)},
     ]
     try:
-        response = await chat_with_fallback(messages, max_tokens=120)
+        # Check-ins are background assistance: keep them short and route them
+        # through the free-model path so they cannot silently trigger a paid
+        # reasoning fallback.
+        response = await chat_with_fallback(messages, max_tokens=80)
         result = (response.choices[0].message.content or "").strip().strip('"“”')
         if result:
             return result[:500]
@@ -63,4 +68,4 @@ async def generate_contextual_checkin(
 
 
 def random_checkin() -> str:
-    return contextual_checkin("")
+    return random.choice(QUESTIONS)

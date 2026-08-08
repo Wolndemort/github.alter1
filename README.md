@@ -1,5 +1,15 @@
 # ALTER
 
+## Актуальный production baseline (2026-08-08)
+
+- Backend: 249 тестов проходят локально; mobile TypeScript и тесты проходят.
+- Тарифы: ALTER Personal — 990 ₽/30 дней; ALTER Ego — 2990 ₽/30 дней.
+- Квоты: Personal — 1000 кредитов/месяц, Ego — 5000 кредитов/месяц. Telegram и мобильное приложение используют общий Redis-счётчик.
+- YooKassa: карта и СБП, проверка суммы/status/metadata, idempotency, webhook и автопродление.
+- Production smoke: `scripts/production-smoke.sh`; readiness: `/health` и `/ready`.
+- `gym_nginx` владеет 80/443 и проксирует ALTER через `web_network`; ALTER host-порты не публикует.
+- Expo Go + Metro подходят для базовой локальной проверки. Development Build нужен для нативных модулей и push; Apple Developer Program нужен отдельно для TestFlight/App Store.
+
 Квоты и расчёт себестоимости находятся в [QUOTAS_AND_UNIT_ECONOMICS.md](QUOTAS_AND_UNIT_ECONOMICS.md).
 
 ## UX and usage baseline
@@ -8,7 +18,7 @@ Mobile and Telegram share the same session rule: starting a new chat closes the 
 
 The mobile profile uses collapsible groups (profile, connections, tools, application). Email is masked and revealed only on tap. Voice replies and automatic playback are independent settings. Assistant answers expose copy, manual playback, and feedback actions.
 
-Monthly usage is stored in Redis and shared by API and Telegram. Current costs are: text 1 credit, voice 5, media analysis 20, media generation 40. `/api/v1/usage` returns used and remaining credits. Credit top-ups are intentionally disabled until a separate YooKassa package/webhook contract is implemented.
+Monthly usage is stored in Redis and shared by API and Telegram. Current costs are: text 1 credit, voice 5, media analysis 20, media generation 40. `/api/v1/usage` returns used, limit, and remaining credits. Plans are quota-based; unlimited external-provider operations are not promised.
 
 Parity checks: `/new_session` and the mobile New Chat action persist summaries; `/clear_memory` removes only durable memory; Telegram media actions restore the latest media from the session, so Improve Photo does not depend on the reply message containing a photo.
 
@@ -23,7 +33,7 @@ Parity checks: `/new_session` and the mobile New Chat action persist summaries; 
 - fal.ai configuration uses `MEDIA_PROVIDER=fal`, `FAL_BASE_URL=https://fal.run`, `fal-ai/flux-pro/kontext/max` for image editing, and `fal-ai/kling-video/v2.1/master/image-to-video` for video. Keep the API key only in `.env` on the server.
 - The Telegram/app identity merge avoids lazy SQLAlchemy relationship IO; notification monitors never send an app database id as a Telegram chat id.
 
-Latest verification baseline: `243` backend tests, `13` mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` all pass. The Expo Go push warning is expected; production remote push requires a development build/TestFlight.
+Latest verification baseline: `249` backend tests, mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` pass. Expo Go push limitations are expected; production remote push requires a development build/TestFlight.
 
 ### Metro / Expo quick start
 

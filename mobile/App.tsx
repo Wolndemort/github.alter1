@@ -11,7 +11,7 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Button, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 
 const Stack = createNativeStackNavigator();
@@ -182,6 +182,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [memoryError, setMemoryError] = useState("");
   const [reminders, setReminders] = useState<{ id: number; text: string; remind_at: string }[]>([]);
   const [remindersVisible, setRemindersVisible] = useState(false);
+  // Reminders are created from the main chat (text or voice), not by a fixed
+  // one-hour shortcut. The reminders screen is read/delete only.
   const [reminderText, setReminderText] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
   const [permissionOfferVisible, setPermissionOfferVisible] = useState(true);
@@ -430,7 +432,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "app" ? null : "app")}><Text style={premiumStyles.sectionLabel}>ПРИЛОЖЕНИЕ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "app" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "app" ? <View style={premiumStyles.sectionBody}>
-        <Pressable style={premiumStyles.menuAction} onPress={toggleCheckins}><Text style={premiumStyles.menuActionText}>Check-in</Text><Text style={premiumStyles.menuActionArrow}>{checkinsEnabled ? "✓" : "○"}</Text></Pressable>
+        <Pressable style={premiumStyles.menuAction} onPress={toggleCheckins}><View style={{ flex: 1 }}><Text style={premiumStyles.menuActionText}>Check-in</Text><Text style={{ color: "#777", fontSize: 12, marginTop: 3 }}>Мягко спросить позже, как всё прошло</Text></View><Text style={premiumStyles.menuActionArrow}>{checkinsEnabled ? "✓" : "○"}</Text></Pressable>
         <View style={premiumStyles.usageRow}><Text style={premiumStyles.menuActionText}>Лимиты</Text><Text style={premiumStyles.usageText}>{usage ? `${usage.remaining} из ${usage.limit}` : "…"}</Text></View>
         <Pressable style={premiumStyles.menuAction} onPress={() => { const values = ["Русский", "English", "Español", "Deutsch", "中文"]; setLanguage(values[(values.indexOf(language) + 1) % values.length]); }}><Text style={premiumStyles.menuActionText}>Язык · {language}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable>
         {account?.payment_method_saved ? <>
@@ -451,10 +453,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Pressable onPress={() => setPlansVisible(false)}><Text style={planStyles.cancel}>Закрыть</Text></Pressable>
     </View></View>
   </Modal>
-  <Modal visible={remindersVisible} animationType="slide" onRequestClose={() => setRemindersVisible(false)}>
-    <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Button title="Закрыть" onPress={() => setRemindersVisible(false)} /></View>
-      <View style={reminderComposerStyle}><TextInput style={[styles.input, { flex: 1 }]} placeholder="Напомнить о…" placeholderTextColor="#78809a" value={reminderText} onChangeText={setReminderText} /><Button title="Через час" onPress={createQuickReminder} /></View>
-      {reminders.length === 0 ? <Text style={styles.emptyMemory}>Активных напоминаний пока нет.</Text> : <FlatList data={reminders} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{item.text}</Text><Text style={styles.memoryKey}>{new Date(item.remind_at).toLocaleString()}</Text><Button title="Удалить" onPress={async () => { await api.deleteReminder(token, item.id); setReminders((old) => old.filter((entry) => entry.id !== item.id)); }} /></View>} />}
+  <Modal visible={remindersVisible} animationType="slide" onRequestClose={() => { setRemindersVisible(false); setMenuVisible(true); }}>
+    <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setRemindersVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+      <Text style={{ color: "#999", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 21 }}>Скажи ALTER в основном чате, о чём и к какому времени напомнить. Можно голосом.</Text>
+      {reminders.length === 0 ? <Text style={styles.emptyMemory}>Активных напоминаний пока нет.</Text> : <FlatList data={reminders} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{item.text}</Text><Text style={styles.memoryKey}>{new Date(item.remind_at).toLocaleString()}</Text><Pressable style={premiumStyles.menuAction} onPress={async () => { await api.deleteReminder(token, item.id); setReminders((old) => old.filter((entry) => entry.id !== item.id)); }}><Text style={premiumStyles.menuActionText}>Удалить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable></View>} />}
     </SafeAreaView>
   </Modal>
   <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
@@ -465,7 +467,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={memoryVisible} animationType="slide" onRequestClose={() => setMemoryVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}>
-      <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Button title="Закрыть" onPress={() => setMemoryVisible(false)} /></View>
+      <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setMemoryVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <FlatList data={memorySections} keyExtractor={(item) => item.title} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryKey}>{item.title}</Text>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} />}
     </SafeAreaView>
   </Modal>
@@ -562,7 +564,7 @@ const premiumStyles = StyleSheet.create({
   sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#ffffff", fontSize: 18 }, sectionBody: { gap: 8 },
   usageRow: { minHeight: 42, borderRadius: 11, backgroundColor: "#171717", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, usageText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
   submenu: { marginTop: -4, marginLeft: 10, gap: 6, borderLeftWidth: 1, borderLeftColor: "#ffffff", paddingLeft: 10 }, submenuAction: { minHeight: 42, borderRadius: 11, backgroundColor: "#141414", borderWidth: 1, borderColor: "#333333", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#17151e", borderWidth: 1, borderColor: "#282333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#171717", borderWidth: 1, borderColor: "#333333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
   menuActionArrow: { color: "#fff", fontSize: 20 },
   menuTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 },
@@ -572,7 +574,7 @@ const premiumStyles = StyleSheet.create({
   dangerAction: { borderColor: "#5b3042" },
   ownerBadge: { color: "#ffffff", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, textAlign: "center", paddingVertical: 8 },
   sectionLabel: { color: "#ffffff", fontSize: 10, fontWeight: "800", letterSpacing: 1.6, marginTop: 6 }, version: { color: "#888888", fontSize: 11, letterSpacing: 1.2, textAlign: "center", paddingVertical: 4 },
-  accountRow: { minHeight: 38, borderRadius: 10, backgroundColor: "#15131d", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  accountRow: { minHeight: 38, borderRadius: 10, backgroundColor: "#151515", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });
 
 const activityStyles = StyleSheet.create({
