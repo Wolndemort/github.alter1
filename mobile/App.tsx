@@ -67,7 +67,7 @@ function TypingText({ text }: { text: string }) {
       index += Math.max(1, Math.ceil((text.length - index) / 18));
       setVisible(text.slice(0, index));
       if (index >= text.length) clearInterval(timer);
-    }, 24);
+    }, 42);
     return () => clearInterval(timer);
   }, [text]);
   const parts = visible.split(/(https?:\/\/[^\s]+)/g);
@@ -88,17 +88,17 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
       Animated.timing(line, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
     ]));
     const textLoop = Animated.loop(Animated.sequence([
-      Animated.timing(drift, { toValue: -1, duration: 30000, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(drift, { toValue: -1, duration: 42000, easing: Easing.linear, useNativeDriver: true }),
       Animated.timing(drift, { toValue: 0, duration: 1, useNativeDriver: true }),
     ]));
     pulseLoop.start(); lineLoop.start(); textLoop.start();
     return () => { pulseLoop.stop(); lineLoop.stop(); textLoop.stop(); };
   }, [drift, line, pulse]);
-  const capabilities = "память\nживой диалог\nголосовые ответы\nфото и видео\nпоиск и музыка\nпогода и напоминания\nмягкая забота\nALTER рядом";
+  const capabilities = "память\nживой диалог\nголосовые ответы\nтранскрипция речи\nфото и видео\nсоздание изображений\nпоиск и музыка\nпогода и напоминания\nнапоминания о важном\nмягкая забота\nобщий контекст\nALTER рядом";
   return <Animated.View pointerEvents="none" style={[idleStyles.overlay, { opacity }]}>
     <Animated.Text style={[styles.introLogo, idleStyles.logo, { opacity: pulse }]}>ALTER</Animated.Text>
     <Animated.View style={[styles.introLine, idleStyles.line, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
-    <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-210, 170] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View>
+    <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-320, 230] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View>
   </Animated.View>;
 }
 
@@ -249,8 +249,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     if (idleTimer.current) clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => {
       setIdle(true);
-      Animated.timing(idleShade, { toValue: 1, duration: 1800, useNativeDriver: true }).start();
-    }, 180000);
+      Animated.sequence([Animated.timing(idleShade, { toValue: 0.32, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }), Animated.timing(idleShade, { toValue: 0.68, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }), Animated.timing(idleShade, { toValue: 1, duration: 3600, easing: Easing.inOut(Easing.quad), useNativeDriver: true })]).start();
+    }, 120000);
   }, [idleShade]);
   const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
   useEffect(() => {
@@ -435,6 +435,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {activity ? <View style={activityStyles.activityPill}><View style={activityStyles.activityDot} /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
+    {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
   </KeyboardAvoidingView>
   <Modal visible={permissionOfferVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
@@ -530,6 +531,8 @@ const styles = StyleSheet.create({
   intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 },
 });
 
+// Keep the composer surface pure black while retaining the native field size.
+(styles as Record<string, unknown>).input = { ...StyleSheet.flatten(styles.input), backgroundColor: "#000000", borderColor: "#ffffff", borderWidth: StyleSheet.hairlineWidth };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
@@ -625,5 +628,5 @@ const mediaStyles = StyleSheet.create({
   attachmentText: { color: "#ddd", fontSize: 13 }, removeAttachment: { color: "#fff", fontSize: 20, paddingLeft: 12 },
   attachButton: { width: 62, height: 38, alignItems: "center", justifyContent: "center" }, attachLabel: { color: "#ffffff", fontSize: 12 }, attachIcon: { color: "#ffffff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
   voiceHalo: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceHaloActive: { opacity: 0.72 }, voiceButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceButtonActive: { opacity: 0.72 }, voiceIcon: { color: "#ffffff", fontSize: 14, fontWeight: "800", letterSpacing: 0.8 },
-  sendButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, sendIcon: { color: "#ffffff", fontSize: 21, fontWeight: "700" },
+  sendButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, sendIcon: { color: "#ffffff", fontSize: 21, fontWeight: "700" }, inputMask: { display: "none" }, inputGlow: { height: 0.5, backgroundColor: "#ffffff", opacity: 0.72, shadowColor: "#ffffff", shadowOpacity: 0.45, shadowRadius: 4, elevation: 2 },
 });
