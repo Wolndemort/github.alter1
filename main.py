@@ -18,9 +18,11 @@ from api.auth_routes import setup_auth_routes
 from api.chat_routes import setup_chat_routes
 from api.user_features_routes import setup_user_features_routes
 from api.youtube_routes import setup_youtube_routes
+from utils.sentry_setup import init_sentry
 
 
 async def main():
+    init_sentry()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
     logging.info("ALTER: starting database and background tasks")
     bot = Bot(token=config.BOT_TOKEN.get_secret_value())

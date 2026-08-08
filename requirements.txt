@@ -8,6 +8,7 @@ aiohttp-socks
 pydantic~=2.12.5
 openai~=2.29.0
 httpx~=0.28.1
+sentry-sdk[fastapi]>=2.20.0
 pgvector~=0.4.1
 redis~=5.2.0
 pytest~=8.4.0

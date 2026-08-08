@@ -124,6 +124,7 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
     <Animated.Text style={[styles.introLogo, idleStyles.logo, { opacity: pulse }]}>ALTER</Animated.Text>
     <Animated.View style={[styles.introLine, idleStyles.line, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
     <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-320, 230] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View><View style={{ width: "100%", overflow: "hidden", marginTop: 12, gap: 4 }}><Animated.Text style={{ color: "#777777", fontSize: 9, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [-360, 260] }) }] }}>ALTER · 2026 · ™</Animated.Text><Animated.Text style={{ color: "#666666", fontSize: 8, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [260, -360] }) }] }}>PERSONAL INTELLIGENCE · VERSION 0.1.0</Animated.Text></View>
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 18, height: 28, backgroundColor: "#050505", alignItems: "center", justifyContent: "center", overflow: "hidden" }}><Animated.Text style={{ color: "#777777", fontSize: 9, letterSpacing: 2, width: 900, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [-520, 300] }) }] }}>ALTER · PERSONAL INTELLIGENCE · 2026 · ™ · VERSION 0.1.0</Animated.Text></View>
   </Animated.View>;
 }
 
@@ -243,7 +244,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [menuVisible, setMenuVisible] = useState(false);
   const [newChatPromptVisible, setNewChatPromptVisible] = useState(false);
   const [newChatLoading, setNewChatLoading] = useState(false);
-  const [permissionOfferVisible, setPermissionOfferVisible] = useState(true);
+  const [permissionOfferVisible, setPermissionOfferVisible] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [plansVisible, setPlansVisible] = useState(false);
@@ -281,6 +282,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   }, [idleShade]);
   const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
   useEffect(() => {
+    AsyncStorage.getItem(`alter_permission_offer_seen_${token}`).then((value) => {
+      if (value !== "1") setPermissionOfferVisible(true);
+    }).catch(() => setPermissionOfferVisible(true));
     refreshAccount();
     api.usage(token).then(setUsage).catch(() => undefined);
     api.settings(token).then(({ settings, checkins_enabled }) => {
@@ -409,7 +413,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try {
       await registerPushNotifications(token);
       await requestLocation(false);
-    } finally { setPermissionBusy(false); setPermissionOfferVisible(false); }
+    } finally { await AsyncStorage.setItem(`alter_permission_offer_seen_${token}`, "1"); setPermissionBusy(false); setPermissionOfferVisible(false); }
   };
   const chooseLocationMode = () => Alert.alert("Геолокация", "Выбери, как ALTER может использовать местоположение.", [
     { text: "Только при использовании", onPress: () => requestLocation(false) },
@@ -542,8 +546,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={plansVisible} transparent animationType="fade" onRequestClose={() => setPlansVisible(false)}>
     <View style={planStyles.backdrop}><View style={planStyles.sheet}><Text style={planStyles.title}>Выбери ALTER</Text><Text style={planStyles.subtitle}>Память, Telegram и мобильное приложение входят в оба тарифа.</Text>
-      <Pressable style={planStyles.card} onPress={() => buySubscription("personal")}><Text style={planStyles.name}>ALTER Personal</Text><Text style={planStyles.price}>990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Личный чат · память · голос · медиа · Telegram</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
-      <Pressable style={[planStyles.card, planStyles.featured]} onPress={() => buySubscription("ego")}><Text style={planStyles.badge}>БОЛЬШЕ ВОЗМОЖНОСТЕЙ</Text><Text style={planStyles.name}>ALTER Ego</Text><Text style={planStyles.price}>2 990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Всё из Personal · расширенные квоты · приоритет</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
+      <Pressable style={planStyles.card} onPress={() => buySubscription("personal")}><Text style={planStyles.name}>ALTER Personal</Text><Text style={planStyles.price}>990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Личный чат · память · премиум-голос ElevenLabs · медиа · поиск · Telegram</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
+      <Pressable style={[planStyles.card, planStyles.featured]} onPress={() => buySubscription("ego")}><Text style={planStyles.badge}>БОЛЬШЕ ВОЗМОЖНОСТЕЙ</Text><Text style={planStyles.name}>ALTER Ego</Text><Text style={planStyles.price}>2 990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Всё из Personal · ElevenLabs · изменение и очистка голоса · создание звуков и медиа · расширенные квоты · приоритет</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
       <Pressable onPress={() => setPlansVisible(false)}><Text style={planStyles.cancel}>Закрыть</Text></Pressable>
     </View></View>
   </Modal>

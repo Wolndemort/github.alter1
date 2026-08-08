@@ -1,8 +1,14 @@
 import asyncio
 import base64
+import pytest
 from types import SimpleNamespace
 
 from utils import tts
+
+
+@pytest.fixture(autouse=True)
+def disable_elevenlabs_for_unit_tests(monkeypatch):
+    monkeypatch.setattr(tts.config, "ELEVENLABS_ENABLED", False)
 
 
 def run(coro):

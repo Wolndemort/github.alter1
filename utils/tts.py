@@ -6,6 +6,7 @@ import tempfile
 import wave
 from io import BytesIO
 from pathlib import Path
+import httpx
 
 from config import config
 from utils.ap_logic import client
@@ -70,15 +71,35 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
 
 
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
-    """Generate OGG/Opus via OpenRouter's documented audio chat response."""
+    """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
+    if config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID:
+        try:
+            voice_id = config.ELEVENLABS_VOICE_ID
+            async with httpx.AsyncClient(timeout=45) as eleven_client:
+                response = await eleven_client.post(
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                    headers={"xi-api-key": config.ELEVENLABS_API_KEY.get_secret_value(), "Accept": "audio/pcm"},
+                    params={"output_format": "pcm_24000"},
+                    json={"text": text[:config.TTS_MAX_CHARS], "model_id": config.ELEVENLABS_MODEL},
+                )
+                response.raise_for_status()
+                pcm = response.content
+            wav = _pcm16_to_wav(pcm, 24000)
+            result = await _wav_to_ogg(wav) if output_format == "ogg" else wav
+            if result:
+                increment("voice.tts.elevenlabs.success")
+                return result
+        except Exception:
+            logging.exception("ElevenLabs speech synthesis failed; using OpenRouter fallback")
     try:
+        provider_voice = config.TTS_VOICE if voice == "elevenlabs" else (voice or config.TTS_VOICE)
         # Make the brand pronunciation unambiguous for Russian speech models:
         # ALTER is the assistant's name, pronounced "А́льтер".
         spoken_text = re.sub(r"\bALTER\b", "А́льтер", text, flags=re.IGNORECASE)
         response = await client.chat.completions.create(
             model=config.TTS_MODEL,
             modalities=["text", "audio"],
-            audio={"voice": voice or config.TTS_VOICE, "format": "pcm16"},
+            audio={"voice": provider_voice, "format": "pcm16"},
             messages=[
                 {"role": "system", "content": "Read the user's text exactly as written. ALTER is the assistant's name and must be pronounced in Russian as А́льтер. Do not summarize, paraphrase, add, remove, or reinterpret any words."},
                 {"role": "user", "content": spoken_text[:config.TTS_MAX_CHARS]},

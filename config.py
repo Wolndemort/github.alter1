@@ -45,6 +45,10 @@ class Setting(BaseSettings):
     TTS_VOICE: str = "alloy"
     TTS_MAX_CHARS: int = 1200
     TTS_MAX_TOKENS: int = 1024
+    ELEVENLABS_API_KEY: SecretStr | None = None
+    ELEVENLABS_VOICE_ID: str | None = None
+    ELEVENLABS_MODEL: str = "eleven_multilingual_v2"
+    ELEVENLABS_ENABLED: bool = False
     VOICE_REPLY_DEFAULT: bool = True
 
     # Production must provide DATABASE_URL through .env/docker-compose.

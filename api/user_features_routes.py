@@ -46,7 +46,7 @@ async def update_settings_route(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="invalid voice_replies")
     if "voice_auto_replies" in settings and not isinstance(settings["voice_auto_replies"], bool):
         raise web.HTTPBadRequest(text="invalid voice_auto_replies")
-    if "tts_voice" in settings and settings["tts_voice"] not in {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"}:
+    if "tts_voice" in settings and settings["tts_voice"] not in {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"}:
         raise web.HTTPBadRequest(text="invalid tts_voice")
     if "reply_feedback" in settings and (not isinstance(settings["reply_feedback"], list) or len(settings["reply_feedback"]) > 100):
         raise web.HTTPBadRequest(text="invalid reply_feedback")
