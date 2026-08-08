@@ -4,7 +4,7 @@ export type MeResponse = {
   name: string;
   subscription_expires_at: string | null;
 };
-export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string };
+export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string };
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
@@ -119,10 +119,11 @@ export class AlterApi {
     return response.json() as Promise<ChatResponse>;
   }
 
-  async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video") {
+  async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video", options: Record<string, unknown> = {}) {
     const form = new FormData();
     form.append("message", message);
     form.append("kind", kind);
+    form.append("options", JSON.stringify(options));
     if (uri) {
       form.append("file", { uri, type: kind === "image" ? "image/jpeg" : "video/mp4", name: `alter-source.${kind === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
     }
@@ -131,6 +132,9 @@ export class AlterApi {
     });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<{ media_type: string; filename: string; data_base64: string }>;
+  }
+  mediaCapabilities(token: string) {
+    return this.request<{ provider: string; models: Record<string, { id: string | null; mode: string; requires_source: boolean; options: Record<string, unknown> }> }>("/api/v1/media/capabilities", {}, token);
   }
 
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
@@ -168,6 +172,23 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<ChatResponse>;
   }
+  async speechToText(token: string, uri: string) {
+    const form = new FormData();
+    form.append("file", { uri, type: "audio/m4a", name: "alter-voice.m4a" } as unknown as Blob);
+    const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/speech-to-text", { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.json() as Promise<{ text?: string; language_code?: string; words?: unknown[] }>;
+  }
+  async speechToSpeech(token: string, voiceId: string, uri: string) {
+    const form = new FormData();
+    form.append("file", { uri, type: "audio/m4a", name: "alter-voice.m4a" } as unknown as Blob);
+    const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/speech-to-speech?voice_id=" + encodeURIComponent(voiceId), { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.blob();
+  }
+  voices(token: string) { return this.request<{ voices?: unknown[] }>("/api/v1/audio/voices", {}, token); }
+  models(token: string) { return this.request<{ models: unknown[] }>("/api/v1/audio/models", {}, token); }
+  voiceGeneration(token: string, description: string) { return this.request<Record<string, unknown>>("/api/v1/audio/voice-generation", { method: "POST", body: JSON.stringify({ description }) }, token); }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }
   registerPushToken(token: string, pushToken: string) { return this.request<{ ok: boolean }>("/api/v1/push-token", { method: "POST", body: JSON.stringify({ token: pushToken }) }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }

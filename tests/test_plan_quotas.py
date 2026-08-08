@@ -2,6 +2,8 @@ import asyncio
 
 from data.models import User
 from utils.billing import credits_limit
+from utils.quota import charge_user_id_credits
+from config import config
 from utils.redis_store import charge_credits, credits_used
 
 
@@ -47,3 +49,13 @@ def test_ego_can_use_5000_credits_and_is_rejected_after_that():
     assert run(charge_credits(redis, 2, 1, 5000)) is False
     assert run(credits_used(redis, 2)) == 5000
 
+
+def test_owner_generation_is_free_and_does_not_need_redis():
+    assert run(charge_user_id_credits(None, int(config.OWNER_TELEGRAM_IDS.split(",")[0]), 250)) is True
+
+
+def test_generation_costs_are_higher_for_text_to_media():
+    assert config.MEDIA_GENERATION_CREDITS == 40
+    assert config.FAL_TEXT_IMAGE_CREDITS == 100
+    assert config.FAL_TEXT_VIDEO_CREDITS == 250
+    assert config.FAL_TEXT_VIDEO_CREDITS > config.FAL_TEXT_IMAGE_CREDITS > config.MEDIA_GENERATION_CREDITS

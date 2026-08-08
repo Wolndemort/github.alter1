@@ -99,7 +99,7 @@ function ActivityPulse() {
   return <Animated.View style={[activityStyles.activityDot, { transform: [{ scale }] }]} />;
 }
 
-function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
+function LegacyIdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
   const pulse = React.useRef(new Animated.Value(0.72)).current;
   const line = React.useRef(new Animated.Value(0)).current;
   const drift = React.useRef(new Animated.Value(0)).current;
@@ -125,6 +125,38 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
     <Animated.View style={[styles.introLine, idleStyles.line, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
     <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-320, 230] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View><View style={{ width: "100%", overflow: "hidden", marginTop: 12, gap: 4 }}><Animated.Text style={{ color: "#777777", fontSize: 9, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [-360, 260] }) }] }}>ALTER · 2026 · ™</Animated.Text><Animated.Text style={{ color: "#666666", fontSize: 8, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [260, -360] }) }] }}>PERSONAL INTELLIGENCE · VERSION 0.1.0</Animated.Text></View>
     <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 18, height: 28, backgroundColor: "#050505", alignItems: "center", justifyContent: "center", overflow: "hidden" }}><Animated.Text style={{ color: "#777777", fontSize: 9, letterSpacing: 2, width: 900, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [-520, 300] }) }] }}>ALTER · PERSONAL INTELLIGENCE · 2026 · ™ · VERSION 0.1.0</Animated.Text></View>
+  </Animated.View>;
+}
+
+function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
+  const pulse = React.useRef(new Animated.Value(0.78)).current;
+  const line = React.useRef(new Animated.Value(0)).current;
+  const drift = React.useRef(new Animated.Value(0)).current;
+  const date = new Date().toLocaleDateString("ru-RU");
+  useEffect(() => {
+    const pulseLoop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.78, duration: 2200, useNativeDriver: true }),
+    ]));
+    const lineLoop = Animated.loop(Animated.sequence([
+      Animated.timing(line, { toValue: 1, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+      Animated.timing(line, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+    ]));
+    const driftLoop = Animated.loop(Animated.sequence([
+      Animated.timing(drift, { toValue: -1, duration: 36000, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(drift, { toValue: 0, duration: 1, useNativeDriver: true }),
+    ]));
+    pulseLoop.start(); lineLoop.start(); driftLoop.start();
+    return () => { pulseLoop.stop(); lineLoop.stop(); driftLoop.stop(); };
+  }, [drift, line, pulse]);
+  const capabilities = "память · память фактов · память целей · забыть факт · новый разговор · текстовый чат · голосовой чат · Speech-to-Text · Speech-to-Speech · Text-to-Speech · Voice Generation · голоса · модели · звуковые эффекты · микс голоса и фона · Fal text-to-image · Fal text-to-video · редактирование фото · image-to-video · анализ фото · анализ видео · YouTube · web-поиск · погода · напоминания · check-in · push · подписка · owner access";
+  return <Animated.View pointerEvents="none" style={[idleStyles.cleanOverlay, { opacity }]}>
+    <Animated.Text style={[styles.introLogo, idleStyles.cleanLogo, { opacity: pulse }]}>ALTER</Animated.Text>
+    <Animated.View style={[styles.introLine, idleStyles.cleanLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
+    <View style={idleStyles.cleanCapabilityViewport}><Animated.Text style={[idleStyles.cleanCapabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-70, 70] }) }] }]}>{capabilities}</Animated.Text></View>
+    <View style={idleStyles.cleanMeta}>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={idleStyles.cleanMetaText}>{date} · ALTER · PERSONAL INTELLIGENCE</Text>
+    </View>
   </Animated.View>;
 }
 
@@ -636,6 +668,13 @@ const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject
 // The idle scene uses a soft matte black instead of absolute OLED black.
 (idleStyles as Record<string, unknown>).overlay = { ...StyleSheet.flatten(idleStyles.overlay), backgroundColor: "#0b0b0b" };
 (idleStyles as Record<string, unknown>).capabilityFade = { ...StyleSheet.flatten(idleStyles.capabilityFade), backgroundColor: "#0b0b0b" };
+(idleStyles as Record<string, unknown>).cleanOverlay = { ...StyleSheet.flatten(idleStyles.overlay), backgroundColor: "#0b0b0b", alignItems: "center", justifyContent: "center", overflow: "hidden" };
+(idleStyles as Record<string, unknown>).cleanLogo = { fontSize: 52, letterSpacing: 8 };
+(idleStyles as Record<string, unknown>).cleanLine = { marginTop: 28 };
+(idleStyles as Record<string, unknown>).cleanMeta = { width: "88%", marginTop: 18, alignItems: "center", justifyContent: "center" };
+(idleStyles as Record<string, unknown>).cleanMetaText = { color: "#777777", fontSize: 9, letterSpacing: 1.5, textAlign: "center" };
+(idleStyles as Record<string, unknown>).cleanCapabilityViewport = { width: "88%", height: 78, marginTop: 24, overflow: "hidden", alignItems: "center", justifyContent: "center" };
+(idleStyles as Record<string, unknown>).cleanCapabilities = { color: "#f4f4f4", fontSize: 12, lineHeight: 24, letterSpacing: 0.8, textAlign: "center" };
 const historyStyles = StyleSheet.create({ handle: { position: "absolute", left: 0, top: 92, zIndex: 12, width: 38, height: 68, borderTopRightRadius: 34, borderBottomRightRadius: 34, backgroundColor: "#000000", alignItems: "center", justifyContent: "center", shadowColor: "#ffffff", shadowOpacity: 0.22, shadowRadius: 8, elevation: 5 }, arrow: { color: "#ffffff", fontSize: 36, fontWeight: "300" }, backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "flex-start" }, panel: { width: "86%", height: "72%", marginTop: 92, backgroundColor: "#000000", padding: 22, paddingTop: 24, borderTopRightRadius: 18, borderBottomRightRadius: 18 }, panelClose: { color: "#ffffff", fontSize: 32, fontWeight: "300", paddingVertical: 2 }, title: { color: "#ffffff", fontSize: 24, fontWeight: "700", marginBottom: 18 }, empty: { color: "#ffffff", opacity: 0.6, fontSize: 14 } });
 (historyStyles as Record<string, unknown>).handle = { ...StyleSheet.flatten(historyStyles.handle), shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
 (historyStyles as Record<string, unknown>).panelClose = { ...StyleSheet.flatten(historyStyles.panelClose), position: "absolute", left: undefined, right: 0, top: 0, width: 72, height: 68, paddingHorizontal: 20, textAlign: "center" };

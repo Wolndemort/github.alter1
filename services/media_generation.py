@@ -27,6 +27,69 @@ class MediaArtifact:
     filename: str
 
 
+def fal_capabilities() -> dict[str, Any]:
+    """Return the configured Fal model contracts without exposing credentials."""
+    return {
+        "provider": config.MEDIA_PROVIDER,
+        "models": {
+            "image": {
+                "id": config.FAL_IMAGE_MODEL,
+                "mode": "image-to-image",
+                "requires_source": True,
+                "options": {
+                    "aspect_ratio": ["21:9", "16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "9:21"],
+                    "seed": "integer",
+                    "guidance_scale": "number",
+                    "sync_mode": "boolean",
+                    "num_images": "integer",
+                    "output_format": ["jpeg", "png", "webp"],
+                    "safety_tolerance": ["1", "2", "3", "4", "5"],
+                    "enhance_prompt": "boolean",
+                    "image_prompt_strength": "number",
+                },
+            },
+            "video": {
+                "id": config.FAL_VIDEO_MODEL,
+                "mode": "image-to-video",
+                "requires_source": True,
+                "options": {
+                    "duration": ["5", "10"],
+                    "negative_prompt": "string",
+                    "cfg_scale": "number",
+                    "generate_audio": "boolean",
+                    "shot_type": ["customize", "intelligent"],
+                    "aspect_ratio": ["16:9", "9:16", "1:1"],
+                    "tail_image_url": "url",
+                    "static_mask_url": "url",
+                    "dynamic_masks": "array",
+                    "keep_original_sound": "boolean",
+                    "character_orientation": ["image", "video"],
+                    "elements": "array",
+                    "input_image_urls": "array",
+                    "effect_scene": "string",
+                    "face_id": "string",
+                    "face_image": "url",
+                    "start_time": "number",
+                    "end_time": "number",
+                    "audio_url": "url",
+                    "camera_control": "object",
+                    "advanced_camera_control": "object",
+                    "voice_ids": "array",
+                    "mask_url": "url",
+                    "trajectories": "array",
+                    "sound_start_time": "number",
+                    "sound_end_time": "number",
+                    "sound_insert_time": "number",
+                    "sound_volume": "number",
+                    "original_audio_volume": "number",
+                },
+            },
+            "text_image": {"id": config.FAL_TEXT_IMAGE_MODEL, "mode": "text-to-image", "requires_source": False, "options": {"aspect_ratio": "enum", "seed": "integer", "sync_mode": "boolean", "num_images": "integer", "output_format": ["jpeg", "png", "webp"], "safety_tolerance": ["1", "2", "3", "4", "5"], "enhance_prompt": "boolean", "image_prompt_strength": "number"}},
+            "text_video": {"id": config.FAL_TEXT_VIDEO_MODEL, "mode": "text-to-video", "requires_source": False, "options": {"duration": ["5", "10"], "aspect_ratio": ["16:9", "9:16", "1:1"], "negative_prompt": "string", "cfg_scale": "number", "generate_audio": "boolean", "shot_type": ["customize", "intelligent"], "multi_prompt": "array"}},
+        },
+    }
+
+
 def _api_key() -> str:
     if not config.MEDIA_GENERATION_API_KEY:
         raise MediaGenerationError("Генерация медиа пока не настроена на сервере.")
@@ -107,18 +170,20 @@ async def _download_artifact(url: str, filename: str) -> MediaArtifact:
         raise MediaGenerationError("fal.ai вернул недоступный файл.") from exc
 
 
-async def generate_image(prompt: str, source: tuple[str, bytes] | None = None) -> MediaArtifact:
+async def generate_image(prompt: str, source: tuple[str, bytes] | None = None, options: dict[str, Any] | None = None) -> MediaArtifact:
     """Generate or edit an image through an OpenAI-compatible endpoint."""
     if not prompt.strip():
         raise MediaGenerationError("Опиши, как изменить изображение.")
     if config.MEDIA_PROVIDER.casefold() == "fal":
-        model = config.FAL_IMAGE_MODEL
+        model = config.FAL_IMAGE_MODEL if source else config.FAL_TEXT_IMAGE_MODEL
         if not model:
             raise MediaGenerationError("Модель fal.ai для изображений не настроена.")
         arguments: dict[str, Any] = {"prompt": prompt}
         if source:
             mime, data = source
             arguments["image_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+        if options:
+            arguments.update(options)
         payload = await _fal_result(model, arguments)
         item = (payload.get("images") or payload.get("data") or [{}])[0]
         if item.get("url"):
@@ -157,20 +222,23 @@ async def generate_image(prompt: str, source: tuple[str, bytes] | None = None) -
         raise MediaGenerationError("Не удалось получить изображение от сервиса.") from exc
 
 
-async def generate_video(prompt: str, source: tuple[str, bytes] | None = None) -> MediaArtifact:
+async def generate_video(prompt: str, source: tuple[str, bytes] | None = None, options: dict[str, Any] | None = None) -> MediaArtifact:
     """Reserve the same contract for async video providers.
 
     Video generation needs a provider-specific job/polling protocol; silently
     treating a text-only vision response as a video would be incorrect.
     """
     if config.MEDIA_PROVIDER.casefold() == "fal":
-        if not config.FAL_VIDEO_MODEL:
+        model = config.FAL_VIDEO_MODEL if source else config.FAL_TEXT_VIDEO_MODEL
+        if not model:
             raise MediaGenerationError("Модель fal.ai для видео не настроена.")
         arguments: dict[str, Any] = {"prompt": prompt}
         if source:
             mime, data = source
-            arguments["video_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-        payload = await _fal_result(config.FAL_VIDEO_MODEL, arguments)
+            arguments["image_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+        if options:
+            arguments.update(options)
+        payload = await _fal_result(model, arguments)
         candidates = payload.get("videos") or payload.get("data") or []
         if isinstance(payload.get("video"), dict):
             candidates = [payload["video"], *candidates]

@@ -78,6 +78,9 @@ class Setting(BaseSettings):
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
     MEDIA_MAX_BYTES: int = 20 * 1024 * 1024
+    MEDIA_GENERATION_CREDITS: int = 40
+    FAL_TEXT_IMAGE_CREDITS: int = 100
+    FAL_TEXT_VIDEO_CREDITS: int = 250
     # Optional OpenAI-compatible media generation provider. The existing
     # OpenRouter chat key is intentionally not reused for binary generation.
     MEDIA_GENERATION_API_URL: str | None = None
@@ -86,6 +89,8 @@ class Setting(BaseSettings):
     FAL_BASE_URL: str = "https://fal.run"
     FAL_IMAGE_MODEL: str | None = None
     FAL_VIDEO_MODEL: str | None = None
+    FAL_TEXT_IMAGE_MODEL: str = "fal-ai/flux-pro/v1.1-ultra"
+    FAL_TEXT_VIDEO_MODEL: str = "fal-ai/kling-video/v2.1/master/text-to-video"
     MEDIA_IMAGE_MODEL: str | None = None
     MEDIA_VIDEO_API_URL: str | None = None
     MEDIA_VIDEO_MODEL: str | None = None

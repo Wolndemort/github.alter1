@@ -12,6 +12,8 @@ from services.chat_service import _append, validate_message
 from utils.media import video_preview
 from utils.media_logic import generate_media_reply
 from utils.voice import transcribe_voice
+from utils.generation_intent import generation_kind
+from services.media_generation import generate_image, generate_video
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,9 @@ class MediaChatResult:
     transcript: str | None = None
     audio: bytes | None = None
     audio_filename: str | None = None
+    media_data: bytes | None = None
+    media_filename: str | None = None
+    media_type: str | None = None
 
 
 def validate_media(content_type: str, data: bytes) -> str:
@@ -67,6 +72,24 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not transcript:
             raise ValueError("voice message could not be transcribed")
         prompt = transcript
+        if generation_kind(prompt) == "image":
+            artifact = await generate_image(prompt)
+            _append(session, "user", prompt)
+            _append(session, "assistant", "Создал изображение.")
+            await db.commit()
+            return MediaChatResult(
+                reply="Создал изображение.", session_id=session.id, transcript=transcript,
+                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type,
+            )
+        if generation_kind(prompt) == "video":
+            artifact = await generate_video(prompt)
+            _append(session, "user", prompt)
+            _append(session, "assistant", "Создал видео.")
+            await db.commit()
+            return MediaChatResult(
+                reply="Создал видео.", session_id=session.id, transcript=transcript,
+                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type,
+            )
         from services.chat_service import ChatService
         result = await ChatService().reply(db, user_id, prompt)
         return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)

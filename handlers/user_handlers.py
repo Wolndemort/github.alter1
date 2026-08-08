@@ -27,6 +27,8 @@ from utils.vector_memory import recall, remember
 from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
 from utils.capabilities import capabilities_reply, is_capabilities_request
+from utils.generation_intent import generation_kind
+from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
@@ -42,6 +44,14 @@ router = Router()
 
 def voice_enabled(user: User) -> bool:
     return (user.tech_stack or {}).get("voice_replies", config.VOICE_REPLY_DEFAULT)
+
+
+async def generation_allowed(user: User, cost: int) -> bool:
+    redis = create_redis()
+    try:
+        return await charge_user_id_credits(redis, user.id, cost, async_session)
+    finally:
+        await close_redis(redis)
 
 
 async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False):
@@ -407,6 +417,27 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             append_session_message(session, "assistant", reply)
             await db_session.commit()
             return
+        requested_generation = generation_kind(text)
+        if requested_generation == "image":
+            if not await generation_allowed(user, config.FAL_TEXT_IMAGE_CREDITS):
+                await message.answer("Лимит кредитов для генерации изображения исчерпан.")
+                return
+            artifact = await generate_image(text, options=parse_media_options(text, "image"))
+            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.")
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", "Создал изображение.")
+            await db_session.commit()
+            return
+        if requested_generation == "video":
+            if not await generation_allowed(user, config.FAL_TEXT_VIDEO_CREDITS):
+                await message.answer("Лимит кредитов для генерации видео исчерпан.")
+                return
+            artifact = await generate_video(text, options=parse_media_options(text, "video"))
+            await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал видео.")
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", "Создал видео.")
+            await db_session.commit()
+            return
         action_source = audio_data
         action_filename = "voice.ogg"
         detected_action = detect_audio_action(text)
@@ -465,13 +496,16 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
         # Telegram uses a caption starting with /edit or "измени".
         generation_requested = prompt.casefold().startswith(("/edit", "измени", "сделай"))
         if generation_requested:
+            if not await generation_allowed(user, config.MEDIA_GENERATION_CREDITS):
+                await message.answer("Лимит кредитов для генерации медиа исчерпан.")
+                return
             if message.photo:
                 buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
-                artifact = await generate_image(prompt, ("image/jpeg", buffer.getvalue()))
+                artifact = await generate_image(prompt, ("image/jpeg", buffer.getvalue()), parse_media_options(prompt, "image"))
                 await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename))
             else:
                 buffer = await message.bot.download(message.video, destination=BytesIO())
-                artifact = await generate_video(prompt, ("video/mp4", buffer.getvalue()))
+                artifact = await generate_video(prompt, ("video/mp4", buffer.getvalue()), parse_media_options(prompt, "video"))
                 # Video providers return an async job in the next adapter step.
                 # Never claim a completed video while no artifact exists.
                 if artifact:
@@ -539,6 +573,9 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
 async def improve_media_photo(callback: types.CallbackQuery, db_session: AsyncSession):
     message = callback.message
     user = await get_telegram_user(callback.from_user.id, db_session) if callback.from_user else None
+    if user and not await generation_allowed(user, config.MEDIA_GENERATION_CREDITS):
+        await callback.answer("Лимит кредитов для генерации медиа исчерпан.", show_alert=True)
+        return
     session = await get_active_session(user.id, db_session) if user else None
     media_ref = next((item.get("media") for item in reversed(session.raw_messages if session else []) if item.get("role") == "user" and item.get("media")), None)
     restored = await restore_session_media(message.bot, media_ref) if message and media_ref else []
@@ -1021,6 +1058,29 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     if is_capabilities_request(message.text):
         await message.answer(capabilities_reply())
         await db_session.commit()
+        return
+    requested_generation = generation_kind(message.text)
+    if requested_generation == "image":
+        try:
+            if not await generation_allowed(user, config.FAL_TEXT_IMAGE_CREDITS):
+                await message.answer("Лимит кредитов для генерации изображения исчерпан.")
+                return
+            artifact = await generate_image(message.text, options=parse_media_options(message.text, "image"))
+            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.")
+        except Exception:
+            logging.exception("Text image generation failed")
+            await message.answer("Не получилось создать изображение. Проверь Fal.ai и попробуй ещё раз.")
+        return
+    if requested_generation == "video":
+        try:
+            if not await generation_allowed(user, config.FAL_TEXT_VIDEO_CREDITS):
+                await message.answer("Лимит кредитов для генерации видео исчерпан.")
+                return
+            artifact = await generate_video(message.text, options=parse_media_options(message.text, "video"))
+            await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал видео.")
+        except Exception:
+            logging.exception("Text video generation failed")
+            await message.answer("Не получилось создать видео. Проверь Fal.ai и попробуй ещё раз.")
         return
     explicit_fact = explicit_memory_fact(message.text)
     if explicit_fact:

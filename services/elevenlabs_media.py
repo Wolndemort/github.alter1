@@ -38,3 +38,61 @@ async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
     if response.status_code >= 400:
         raise ElevenLabsError("ElevenLabs audio isolation failed")
     return response.content
+
+
+async def speech_to_text(data: bytes, filename: str = "voice.m4a") -> dict:
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            "https://api.elevenlabs.io/v1/speech-to-text",
+            headers={"xi-api-key": _key()},
+            files={"file": (filename, data, "application/octet-stream")},
+            data={"model_id": "scribe_v1", "language_code": "ru"},
+        )
+    if response.status_code >= 400:
+        raise ElevenLabsError("ElevenLabs speech-to-text failed")
+    return response.json()
+
+
+async def speech_to_speech(data: bytes, voice_id: str, filename: str = "voice.m4a") -> bytes:
+    if not voice_id.strip():
+        raise ElevenLabsError("ElevenLabs voice id is required")
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post(
+            f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}",
+            headers={"xi-api-key": _key(), "Accept": "audio/mpeg"},
+            files={"audio": (filename, data, "application/octet-stream")},
+            data={"model_id": "eleven_multilingual_sts_v2"},
+        )
+    if response.status_code >= 400:
+        raise ElevenLabsError("ElevenLabs speech-to-speech failed")
+    return response.content
+
+
+async def list_voices() -> dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get("https://api.elevenlabs.io/v2/voices", headers={"xi-api-key": _key()})
+    if response.status_code >= 400:
+        raise ElevenLabsError("ElevenLabs voices lookup failed")
+    return response.json()
+
+
+async def list_models() -> list:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get("https://api.elevenlabs.io/v1/models", headers={"xi-api-key": _key()})
+    if response.status_code >= 400:
+        raise ElevenLabsError("ElevenLabs models lookup failed")
+    return response.json()
+
+
+async def design_voice(description: str) -> dict:
+    if not description.strip():
+        raise ElevenLabsError("voice description is required")
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            "https://api.elevenlabs.io/v1/text-to-voice/design",
+            headers={"xi-api-key": _key(), "Content-Type": "application/json"},
+            json={"voice_description": description[:1000]},
+        )
+    if response.status_code >= 400:
+        raise ElevenLabsError("ElevenLabs voice generation failed")
+    return response.json()

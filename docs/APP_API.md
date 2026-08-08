@@ -48,6 +48,11 @@ POST /api/v1/youtube/audio    Authorization: Bearer <token>, {"url":"https://you
 POST /api/v1/audio/sound-effects Authorization: Bearer <token>, {"prompt":"rain on glass"}; returns MP3
 POST /api/v1/audio/isolate    Authorization: Bearer <token>, multipart `file`; returns MP3
 POST /api/v1/audio/process    Authorization: Bearer <token>, multipart `prompt` + optional `file`; returns JSON with base64 MP3
+POST /api/v1/audio/speech-to-text Authorization: Bearer <token>, multipart `file`; returns ElevenLabs transcript JSON
+POST /api/v1/audio/speech-to-speech?voice_id=<id> Authorization: Bearer <token>, multipart `file`; returns MP3
+GET  /api/v1/audio/voices     Authorization: Bearer <token>
+GET  /api/v1/audio/models     Authorization: Bearer <token>
+POST /api/v1/audio/voice-generation Authorization: Bearer <token>, {"description":"..."}
 GET  /api/v1/account         Authorization: Bearer <token>
 GET  /api/v1/memory          Authorization: Bearer <token>
 GET  /api/v1/subscription    Authorization: Bearer <token>
@@ -140,8 +145,11 @@ memory and quotas.
 
 ## Fal.ai
 
-Set `MEDIA_PROVIDER=fal`, `MEDIA_GENERATION_API_KEY`, `FAL_IMAGE_MODEL` and,
-for video, `FAL_VIDEO_MODEL`. Image generation/editing uses:
+Current production models are `fal-ai/flux-pro/kontext/max` for image-to-image
+editing and `fal-ai/kling-video/v2.1/master/image-to-video` for animation.
+They both require an input image; text-to-image and text-to-video are not
+enabled by the current model configuration. Set `MEDIA_PROVIDER=fal`,
+`MEDIA_GENERATION_API_KEY`, `FAL_IMAGE_MODEL` and `FAL_VIDEO_MODEL`.
 
 ```bash
 curl -X POST "$API/api/v1/media/generate" -H "Authorization: Bearer $TOKEN" \
@@ -149,4 +157,15 @@ curl -X POST "$API/api/v1/media/generate" -H "Authorization: Bearer $TOKEN" \
 ```
 
 The response contains `media_type`, `filename` and `data_base64`; success is
-returned only after fal.ai provides a real artifact.
+returned only after fal.ai provides a real artifact. Model-specific controls
+can be passed as a JSON `options` multipart field, for example:
+
+```bash
+-F 'options={"aspect_ratio":"9:16","seed":42,"output_format":"png"}'
+```
+
+Image options include `aspect_ratio`, `seed`, `guidance_scale`, `sync_mode`,
+`num_images`, `output_format`, `safety_tolerance`, `enhance_prompt` and
+`image_prompt_strength`. Video options include `duration`, `negative_prompt`,
+`cfg_scale`, `generate_audio`, `shot_type`, `aspect_ratio`, `tail_image_url`,
+`camera_control` and the other fields documented by the configured model.

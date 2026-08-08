@@ -63,3 +63,19 @@ async def test_audio_is_transcribed_and_delegated_to_text_chat(monkeypatch):
     monkeypatch.setattr("services.chat_service.ChatService.reply", chat)
     result = await media_chat_service.reply(Db(), 7, "", "audio/m4a", b"audio")
     assert result.reply == "text reply"
+
+
+@pytest.mark.asyncio
+async def test_voice_generation_command_returns_real_image_artifact(monkeypatch):
+    async def transcribe(data): return "Создай красивое фото девушки"
+
+    async def generate(prompt):
+        assert "фото" in prompt
+        return SimpleNamespace(data=b"png", filename="alter.png", media_type="image/png")
+
+    monkeypatch.setattr(media_chat_service, "transcribe_voice", transcribe)
+    monkeypatch.setattr(media_chat_service, "generate_image", generate)
+    result = await media_chat_service.reply(Db(), 7, "", "audio/m4a", b"audio")
+    assert result.media_data == b"png"
+    assert result.media_filename == "alter.png"
+    assert result.media_type == "image/png"

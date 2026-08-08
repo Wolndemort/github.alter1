@@ -8,7 +8,7 @@ from api.auth_routes import _bearer, _json
 from config import config
 from data.database import async_session
 from data.models import User, WebAccount
-from services.elevenlabs_media import ElevenLabsError, isolate_audio, sound_effect
+from services.elevenlabs_media import ElevenLabsError, design_voice, isolate_audio, list_models, list_voices, sound_effect, speech_to_speech, speech_to_text
 from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.billing import has_active_subscription, has_owner_access
 from utils.quota import charge_user_id_credits
@@ -117,7 +117,84 @@ async def process_audio_route(request: web.Request) -> web.Response:
     })
 
 
+async def speech_to_text_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await _allowed(user_id):
+        raise web.HTTPPaymentRequired(text="active subscription required")
+    if not request.content_type.startswith("multipart/"):
+        raise web.HTTPBadRequest(text="multipart form required")
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "file":
+        raise web.HTTPBadRequest(text="audio file required")
+    data = await field.read(decode=False)
+    if not data or len(data) > config.MEDIA_MAX_BYTES:
+        raise web.HTTPBadRequest(text="invalid audio file")
+    try:
+        return web.json_response(await speech_to_text(data, field.filename or "voice.m4a"))
+    except ElevenLabsError as exc:
+        raise web.HTTPBadGateway(text=str(exc))
+
+
+async def speech_to_speech_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await _allowed(user_id):
+        raise web.HTTPPaymentRequired(text="active subscription required")
+    voice_id = request.query.get("voice_id", "").strip()
+    if not voice_id:
+        raise web.HTTPBadRequest(text="voice_id query parameter required")
+    if not request.content_type.startswith("multipart/"):
+        raise web.HTTPBadRequest(text="multipart form required")
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "file":
+        raise web.HTTPBadRequest(text="audio file required")
+    data = await field.read(decode=False)
+    if not data or len(data) > config.MEDIA_MAX_BYTES:
+        raise web.HTTPBadRequest(text="invalid audio file")
+    try:
+        return web.Response(body=await speech_to_speech(data, voice_id, field.filename or "voice.m4a"), content_type="audio/mpeg")
+    except ElevenLabsError as exc:
+        raise web.HTTPBadGateway(text=str(exc))
+
+
+async def voices_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await _allowed(user_id):
+        raise web.HTTPPaymentRequired(text="active subscription required")
+    try:
+        return web.json_response(await list_voices())
+    except ElevenLabsError as exc:
+        raise web.HTTPBadGateway(text=str(exc))
+
+
+async def models_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await _allowed(user_id):
+        raise web.HTTPPaymentRequired(text="active subscription required")
+    try:
+        return web.json_response({"models": await list_models()})
+    except ElevenLabsError as exc:
+        raise web.HTTPBadGateway(text=str(exc))
+
+
+async def voice_generation_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await _allowed(user_id):
+        raise web.HTTPPaymentRequired(text="active subscription required")
+    payload = await _json(request)
+    try:
+        return web.json_response(await design_voice(str(payload.get("description") or "")))
+    except ElevenLabsError as exc:
+        raise web.HTTPBadGateway(text=str(exc))
+
+
 def setup_elevenlabs_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/audio/sound-effects", sound_effect_route)
     app.router.add_post("/api/v1/audio/isolate", isolate_audio_route)
     app.router.add_post("/api/v1/audio/process", process_audio_route)
+    app.router.add_post("/api/v1/audio/speech-to-text", speech_to_text_route)
+    app.router.add_post("/api/v1/audio/speech-to-speech", speech_to_speech_route)
+    app.router.add_get("/api/v1/audio/voices", voices_route)
+    app.router.add_get("/api/v1/audio/models", models_route)
+    app.router.add_post("/api/v1/audio/voice-generation", voice_generation_route)

@@ -1,5 +1,7 @@
 # ALTER
 
+Полная инструкция по API, маршрутам и текстовым/голосовым командам: [docs/USER_API_GUIDE.md](docs/USER_API_GUIDE.md).
+
 ## Актуальный production baseline (2026-08-08)
 
 - Backend: 249 тестов проходят локально; mobile TypeScript и тесты проходят.

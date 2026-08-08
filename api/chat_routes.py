@@ -1,6 +1,7 @@
 """HTTP adapter for the shared chat use case."""
 
 import base64
+import json
 
 from aiohttp import web
 from sqlalchemy import select
@@ -10,7 +11,7 @@ from data.database import async_session
 from services.chat_service import ChatService
 from utils.billing import has_active_subscription, has_owner_access
 from services.media_chat_service import reply as media_reply
-from services.media_generation import MediaGenerationError, generate_image, generate_video
+from services.media_generation import MediaGenerationError, fal_capabilities, generate_image, generate_video
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
 from utils.tasks import process_session
@@ -154,18 +155,14 @@ async def media_chat_route(request: web.Request) -> web.Response:
     payload = {"reply": result.reply, "session_id": result.session_id, "transcript": result.transcript}
     if result.audio:
         payload.update({"audio_base64": base64.b64encode(result.audio).decode("ascii"), "audio_filename": result.audio_filename or "alter-audio.mp3", "audio_mime": "audio/mpeg"})
+    if result.media_data:
+        payload.update({"media_base64": base64.b64encode(result.media_data).decode("ascii"), "media_filename": result.media_filename or "alter-generated", "media_mime": result.media_type or "application/octet-stream"})
     return web.json_response(payload)
 
 
 async def media_generate_route(request: web.Request) -> web.Response:
     """Generate/edit media through the same HTTP contract for mobile and bots."""
     user_id = _bearer(request)
-    redis = create_redis()
-    try:
-        if not await charge_user_id_credits(redis, user_id, 40, async_session):
-            raise web.HTTPTooManyRequests(text="monthly media limit reached")
-    finally:
-        await close_redis(redis)
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -181,6 +178,7 @@ async def media_generate_route(request: web.Request) -> web.Response:
         reader = await request.multipart()
         prompt = ""
         kind = "image"
+        options = {}
         source = None
         while True:
             part = await reader.next()
@@ -190,6 +188,15 @@ async def media_generate_route(request: web.Request) -> web.Response:
                 prompt = (await part.text()).strip()
             elif part.name == "kind":
                 kind = (await part.text()).strip().lower()
+            elif part.name == "options":
+                try:
+                    options = json.loads((await part.text()).strip() or "{}")
+                except json.JSONDecodeError as exc:
+                    raise web.HTTPBadRequest(text="options must be valid JSON") from exc
+                if not isinstance(options, dict) or len(options) > 30:
+                    raise web.HTTPBadRequest(text="options must be a JSON object")
+                if set(options) & {"prompt", "image_url", "video_url"}:
+                    raise web.HTTPBadRequest(text="prompt and source media are controlled by the request")
             elif part.name == "file":
                 content_type = part.headers.get("Content-Type", "application/octet-stream")
                 chunks, size = [], 0
@@ -202,8 +209,21 @@ async def media_generate_route(request: web.Request) -> web.Response:
                         raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES, actual_size=size)
                     chunks.append(chunk)
                 source = (content_type, b"".join(chunks))
+        cost = (
+            config.FAL_TEXT_IMAGE_CREDITS if kind == "image" and source is None else
+            config.FAL_TEXT_VIDEO_CREDITS if kind == "video" and source is None else
+            config.MEDIA_GENERATION_CREDITS
+        )
+        redis = create_redis()
         try:
-            artifact = await (generate_video(prompt, source) if kind == "video" else generate_image(prompt, source))
+            if not await charge_user_id_credits(redis, user_id, cost, async_session):
+                raise web.HTTPTooManyRequests(text="monthly media limit reached")
+        finally:
+            await close_redis(redis)
+        try:
+            if kind not in {"image", "video"}:
+                raise web.HTTPBadRequest(text="kind must be image or video")
+            artifact = await (generate_video(prompt, source, options) if kind == "video" else generate_image(prompt, source, options))
         except MediaGenerationError as exc:
             raise web.HTTPBadRequest(text=str(exc))
     return web.json_response({
@@ -211,6 +231,12 @@ async def media_generate_route(request: web.Request) -> web.Response:
         "filename": artifact.filename,
         "data_base64": base64.b64encode(artifact.data).decode("ascii"),
     })
+
+
+async def media_capabilities_route(request: web.Request) -> web.Response:
+    """Return configured media models/options; never returns API keys."""
+    _bearer(request)
+    return web.json_response(fal_capabilities())
 
 
 async def voice_reply_route(request: web.Request) -> web.Response:
@@ -249,4 +275,5 @@ def setup_chat_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/chat/history", history_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
+    app.router.add_get("/api/v1/media/capabilities", media_capabilities_route)
     app.router.add_post("/api/v1/voice/reply", voice_reply_route)
