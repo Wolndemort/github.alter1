@@ -62,7 +62,7 @@ fi
 # dangling images and old build cache after the new containers are healthy;
 # running images, named images, volumes, and the database are not touched.
 docker image prune -f
-docker builder prune -af --filter "until=168h" || true
+docker builder prune -af || true
 
 docker compose ps
 trap - ERR
