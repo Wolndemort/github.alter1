@@ -66,6 +66,20 @@ async def new_session_route(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def history_route(request: web.Request) -> web.Response:
+    """Return recent messages so mobile can restore the visible conversation."""
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import Session as ChatSession
+        result = await session.execute(select(ChatSession).where(
+            ChatSession.user_id == user_id,
+            ChatSession.is_processed.is_(False),
+        ).order_by(ChatSession.started_at.desc()))
+        active = result.scalar_one_or_none()
+        messages = list(active.raw_messages or []) if active else []
+    return web.json_response({"session_id": active.id if active else None, "messages": messages[-100:]})
+
+
 async def media_chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     redis = create_redis()
@@ -205,6 +219,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
 def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/messages", chat_route)
     app.router.add_post("/api/v1/chat/new", new_session_route)
+    app.router.add_get("/api/v1/chat/history", history_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
     app.router.add_post("/api/v1/voice/reply", voice_reply_route)

@@ -14,7 +14,7 @@ from config import config
 from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from services.account_linking import resolve_telegram_user
-from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price
+from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
 
 _resolved_telegram_username: str | None = None
@@ -116,6 +116,7 @@ async def account_route(request: web.Request) -> web.Response:
             "payment_method_saved": bool(user.payment_method_id),
             "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
+            "subscription_plan": (user.tech_stack or {}).get("subscription_plan", "personal"),
         })
 
 
@@ -126,7 +127,8 @@ async def memory_route(request: web.Request) -> web.Response:
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        return web.json_response({"memory": user.memory or {}, "tech_stack": user.tech_stack or {}})
+        from utils.memory_view import memory_sections
+        return web.json_response({"sections": memory_sections(user.memory)})
 
 
 async def usage_route(request: web.Request) -> web.Response:
@@ -147,11 +149,14 @@ async def subscription_route(request: web.Request) -> web.Response:
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        current_plan = normalize_plan((user.tech_stack or {}).get("subscription_plan"))
         return web.json_response({
             "active": has_owner_access(user.id, account.email if account else None) or has_active_subscription(user),
             "price_rub": str(price()), "days": config.SUBSCRIPTION_DAYS,
             "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
+            "plan": current_plan,
+            "plans": [{"id": key, **value} for key, value in PLANS.items()],
         })
 
 
@@ -191,16 +196,18 @@ async def create_app_payment_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     if not billing_configured():
         raise web.HTTPServiceUnavailable(text="payments are not configured")
+    payload = await _json(request)
+    plan = normalize_plan(payload.get("plan"))
     async with async_session() as session:
         from data.models import User
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         try:
-            url = await create_payment(session, user, await telegram_bot_username(), "bank_card")
+            url = await create_payment(session, user, await telegram_bot_username(), "bank_card", plan)
         except RuntimeError as exc:
             raise web.HTTPBadGateway(text=str(exc))
-        return web.json_response({"payment_url": url, "price_rub": str(price()), "days": config.SUBSCRIPTION_DAYS})
+        return web.json_response({"payment_url": url, "price_rub": str(price(plan)), "plan": plan, "days": config.SUBSCRIPTION_DAYS})
 
 
 async def start_telegram_link_route(request: web.Request) -> web.Response:

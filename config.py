@@ -32,7 +32,10 @@ class Setting(BaseSettings):
     YUKASSA_SECRET_KEY: SecretStr | None = None
     YUKASSA_RECEIPT_EMAIL: str | None = None
     YUKASSA_SAVE_PAYMENT_METHOD: bool = False
-    SUBSCRIPTION_PRICE_RUB: str = "490.00"
+    SUBSCRIPTION_PRICE_RUB: str = "990.00"
+    EGO_PRICE_RUB: str = "2990.00"
+    PERSONAL_MONTHLY_CREDITS: int = 1000
+    EGO_MONTHLY_CREDITS: int = 5000
     SUBSCRIPTION_DAYS: int = 30
     SUBSCRIPTION_RENEWAL_CHECK_SECONDS: int = 3600
     YOUTUBE_API_KEY: SecretStr | None = None
@@ -44,7 +47,8 @@ class Setting(BaseSettings):
     TTS_MAX_TOKENS: int = 1024
     VOICE_REPLY_DEFAULT: bool = True
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:lordwolndemort0195@alter_db_container:5432/alter_project_db"
+    # Production must provide DATABASE_URL through .env/docker-compose.
+    DATABASE_URL: str = "postgresql+asyncpg://postgres@localhost:5432/alter_project_db"
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CACHE_TTL: int = 3600
     SESSION_TIMEOUT: int = 1800
@@ -60,8 +64,12 @@ class Setting(BaseSettings):
 
     DAILY_REQUEST_LIMIT: int = 100
     MONTHLY_CREDITS: int = 1000
+    YOUTUBE_SEARCH_CREDITS: int = 1
+    YOUTUBE_AUDIO_CREDITS: int = 10
     SPAM_REQUEST_LIMIT: int = 5
     SPAM_WINDOW_SECONDS: int = 60
+    HTTP_RATE_LIMIT: int = 120
+    HTTP_RATE_WINDOW_SECONDS: int = 60
     MAX_OUTPUT_TOKENS: int = 600
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300

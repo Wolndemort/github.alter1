@@ -122,3 +122,12 @@ async def allow_request(redis: Redis, user_id: int, limit: int, window: int) -> 
     if count > limit:
         return False
     return True
+
+
+async def allow_http_request(redis: Redis, key_suffix: str, limit: int, window: int) -> bool:
+    """Fixed-window limiter for unauthenticated and HTTP-only requests."""
+    key = f"alter:http:{key_suffix}"
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, window)
+    return count <= limit

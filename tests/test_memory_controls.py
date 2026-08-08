@@ -4,8 +4,8 @@ from utils.keyboards import SETTINGS_BUTTON, memory_keyboard, memory_categories_
 
 def test_memory_format_is_readable_for_nested_memory():
     result = format_memory({"skills_career": {"project": "ALTER"}, "goals": ["learn"]})
-    assert "skills_career" in result
-    assert "project: ALTER" in result
+    assert "Навыки и работа" in result
+    assert "Project: ALTER" in result
     assert "learn" in result
 
 

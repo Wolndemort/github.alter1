@@ -33,9 +33,24 @@ def has_owner_access(user_id: int, email: str | None = None) -> bool:
     return is_owner(user_id) or bool(email and email.strip().casefold() in owner_emails())
 
 
-def price() -> Decimal:
+PLANS = {
+    "personal": {"name": "ALTER Personal", "price": "990.00", "credits": config.PERSONAL_MONTHLY_CREDITS},
+    "ego": {"name": "ALTER Ego", "price": "2990.00", "credits": config.EGO_MONTHLY_CREDITS},
+}
+
+
+def normalize_plan(value: object) -> str:
+    return str(value or "personal").strip().casefold() if str(value or "personal").strip().casefold() in PLANS else "personal"
+
+
+def plan_info(plan: object = "personal") -> dict:
+    return PLANS[normalize_plan(plan)]
+
+
+def price(plan: object = "personal") -> Decimal:
     try:
-        value = Decimal(config.SUBSCRIPTION_PRICE_RUB).quantize(Decimal("0.01"))
+        configured = config.SUBSCRIPTION_PRICE_RUB if normalize_plan(plan) == "personal" else config.EGO_PRICE_RUB
+        value = Decimal(configured).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError):
         raise RuntimeError("Invalid SUBSCRIPTION_PRICE_RUB")
     if value <= 0:
@@ -51,11 +66,12 @@ def configured() -> bool:
     return bool(config.YUKASSA_SHOP_ID and config.YUKASSA_SECRET_KEY)
 
 
-async def create_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card") -> str:
+async def create_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", plan: str = "personal") -> str:
     if not configured():
         raise RuntimeError("YooKassa is not configured")
     key = f"alter-{user.id}-{uuid.uuid4().hex}"
-    amount = price()
+    plan = normalize_plan(plan)
+    amount = price(plan)
     payment = Payment(user_id=user.id, idempotence_key=key, amount_rub=str(amount), status="pending")
     session.add(payment)
     await session.flush()
@@ -67,7 +83,7 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
             "type": "redirect",
             "return_url": f"https://t.me/{bot_username}?start=payment_{key}",
         },
-        "metadata": {"user_id": str(user.id), "payment_key": key},
+        "metadata": {"user_id": str(user.id), "payment_key": key, "plan": plan},
         "description": f"ALTER — доступ на {config.SUBSCRIPTION_DAYS} дней",
     }
     if payment_method_type == "sbp":
@@ -110,7 +126,8 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     async with httpx.AsyncClient(auth=(config.YUKASSA_SHOP_ID, config.YUKASSA_SECRET_KEY.get_secret_value()), timeout=15) as client:
         response = await client.get(f"https://api.yookassa.ru/v3/payments/{payment.provider_payment_id}")
     data = response.json()
-    expected = price()
+    plan = normalize_plan((data.get("metadata") or {}).get("plan"))
+    expected = price(plan)
     actual = data.get("amount") or {}
     metadata = data.get("metadata") or {}
     if response.status_code != 200 or data.get("status") != "succeeded" or not data.get("paid"):
@@ -127,6 +144,9 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     now = datetime.now(timezone.utc)
     base = user.subscription_expires_at if has_active_subscription(user) else now
     user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
+    settings = dict(user.tech_stack or {})
+    settings["subscription_plan"] = plan
+    user.tech_stack = settings
     payment_method = (data.get("payment_method") or {}).get("id")
     if payment_method:
         user.payment_method_id = str(payment_method)
@@ -141,7 +161,8 @@ async def charge_recurring_payment(session: AsyncSession, user: User) -> str:
     """Charge a saved YooKassa payment method once and extend the subscription."""
     if not configured() or not user.payment_method_id or not user.auto_renew:
         return "skipped"
-    amount = price()
+    plan = normalize_plan((user.tech_stack or {}).get("subscription_plan"))
+    amount = price(plan)
     key = f"alter-renew-{user.id}-{(user.next_charge_at or datetime.now(timezone.utc)).date().isoformat()}"
     existing = (await session.execute(select(Payment).where(Payment.idempotence_key == key))).scalar_one_or_none()
     if existing and existing.status == "succeeded":
@@ -150,7 +171,7 @@ async def charge_recurring_payment(session: AsyncSession, user: User) -> str:
         "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
         "capture": True,
         "payment_method_id": user.payment_method_id,
-        "metadata": {"user_id": str(user.id), "payment_key": key, "type": "recurring"},
+        "metadata": {"user_id": str(user.id), "payment_key": key, "type": "recurring", "plan": plan},
         "description": f"ALTER — автопродление на {config.SUBSCRIPTION_DAYS} дней",
     }
     if config.YUKASSA_RECEIPT_EMAIL:

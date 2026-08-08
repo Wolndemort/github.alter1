@@ -11,6 +11,8 @@ from data.models import User
 @pytest.fixture(autouse=True)
 def paid_access(monkeypatch):
     monkeypatch.setattr(youtube_routes, "has_active_subscription", lambda user: True)
+    async def allow_charge(user_id, cost): return None
+    monkeypatch.setattr(youtube_routes, "_charge_youtube", allow_charge)
 
 
 class Request:

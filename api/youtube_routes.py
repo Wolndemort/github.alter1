@@ -13,6 +13,17 @@ from utils.billing import has_active_subscription, has_owner_access
 from data.models import WebAccount
 from sqlalchemy import select
 from utils.youtube_search import search_youtube
+from utils.redis_store import create_redis, close_redis, charge_credits
+from config import config
+
+
+async def _charge_youtube(user_id: int, cost: int) -> None:
+    redis = create_redis()
+    try:
+        if not await charge_credits(redis, user_id, cost, config.MONTHLY_CREDITS):
+            raise web.HTTPTooManyRequests(text="monthly YouTube limit reached")
+    finally:
+        await close_redis(redis)
 
 
 def _youtube_url(value: object) -> str:
@@ -36,18 +47,20 @@ async def _require_access(request: web.Request):
 
 
 async def youtube_search_route(request: web.Request) -> web.Response:
-    await _require_access(request)
+    user_id = await _require_access(request)
     payload = await _json(request)
     query = str(payload.get("query", "")).strip()
     if not query or len(query) > 200: raise web.HTTPBadRequest(text="query is required")
+    await _charge_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
     return web.json_response({"results": await search_youtube(query, max_results=5)})
 
 
 async def youtube_audio_route(request: web.Request) -> web.Response:
-    await _require_access(request)
+    user_id = await _require_access(request)
     payload = await _json(request)
     try: url = _youtube_url(payload.get("url"))
     except ValueError as exc: raise web.HTTPBadRequest(text=str(exc))
+    await _charge_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
     result = await download_audio(url)
     if result is None: raise web.HTTPBadGateway(text="audio download failed")
     path, title = result

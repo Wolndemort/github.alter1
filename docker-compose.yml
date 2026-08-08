@@ -3,8 +3,6 @@ services:
     image: redis:7-alpine
     container_name: alter_redis_container
     restart: always
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     logging: &default-logging
@@ -26,8 +24,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: alter_project_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     logging: *default-logging
@@ -51,6 +47,12 @@ services:
       REDIS_URL: "redis://redis:6379/0"
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - default
       - web_network

@@ -116,6 +116,10 @@ async def process_session(session: Session, db) -> bool:
     """Summarize one inactive session and persist its durable memory."""
     facts = await summarize_session(session.raw_messages)
     if not facts:
+        # A failed/empty summary must not leave the session active forever.
+        # The next "new chat" should always start from a clean context.
+        session.is_processed = True
+        await db.commit()
         return False
     # Resolve the owner explicitly. Accessing ``session.user`` can trigger a
     # lazy async query after a rollback and raise MissingGreenlet.

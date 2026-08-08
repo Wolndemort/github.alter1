@@ -1,5 +1,7 @@
 # ALTER
 
+Квоты и расчёт себестоимости находятся в [QUOTAS_AND_UNIT_ECONOMICS.md](QUOTAS_AND_UNIT_ECONOMICS.md).
+
 ## UX and usage baseline
 
 Mobile and Telegram share the same session rule: starting a new chat closes the active session and persists its summary; clearing memory is explicit and is never performed by starting a new chat. Metro only serves JavaScript locally; the mobile `.env` points to the production API.

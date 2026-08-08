@@ -157,7 +157,7 @@ async def generate_image(prompt: str, source: tuple[str, bytes] | None = None) -
         raise MediaGenerationError("Не удалось получить изображение от сервиса.") from exc
 
 
-async def generate_video(prompt: str, source: tuple[str, bytes] | None = None) -> None:
+async def generate_video(prompt: str, source: tuple[str, bytes] | None = None) -> MediaArtifact:
     """Reserve the same contract for async video providers.
 
     Video generation needs a provider-specific job/polling protocol; silently
@@ -170,8 +170,16 @@ async def generate_video(prompt: str, source: tuple[str, bytes] | None = None) -
         if source:
             mime, data = source
             arguments["video_url"] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-        await _fal_result(config.FAL_VIDEO_MODEL, arguments)
-        raise MediaGenerationError("Видео поставлено в очередь; async-выдача ещё подключается.")
+        payload = await _fal_result(config.FAL_VIDEO_MODEL, arguments)
+        candidates = payload.get("videos") or payload.get("data") or []
+        if isinstance(payload.get("video"), dict):
+            candidates = [payload["video"], *candidates]
+        item = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+        if item.get("url"):
+            return await _download_artifact(item["url"], "alter-generated.mp4")
+        if item.get("b64_json"):
+            return MediaArtifact("video/mp4", base64.b64decode(item["b64_json"]), "alter-generated.mp4")
+        raise MediaGenerationError("fal.ai не вернул готовое видео.")
     if not config.MEDIA_VIDEO_API_URL or not config.MEDIA_VIDEO_MODEL:
         raise MediaGenerationError("Генерация видео пока не подключена на сервере.")
     raise MediaGenerationError("Генератор видео требует отдельного job-процесса.")

@@ -5,12 +5,14 @@ export type MeResponse = {
   subscription_expires_at: string | null;
 };
 export type ChatResponse = { reply: string; session_id: number };
+export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string;
 };
-export type MemoryResponse = { memory: Record<string, unknown>; tech_stack: Record<string, unknown> };
-export type SubscriptionResponse = { active: boolean; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
+export type MemorySection = { title: string; items: { label: string; value: string }[] };
+export type MemoryResponse = { sections: MemorySection[] };
+export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 
@@ -93,6 +95,7 @@ export class AlterApi {
     }, token);
   }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
+  history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
 
   async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio") {
     const mime = mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a";
@@ -135,7 +138,7 @@ export class AlterApi {
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
   removePaymentMethod(token: string) { return this.request<{ ok: boolean; auto_renew: boolean; payment_method_saved: boolean }>("/api/v1/subscription/payment-method", { method: "DELETE" }, token); }
-  createPayment(token: string) { return this.request<{ payment_url: string; price_rub: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST" }, token); }
+  createPayment(token: string, plan: string = "personal") { return this.request<{ payment_url: string; price_rub: string; plan: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST", body: JSON.stringify({ plan }) }, token); }
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
@@ -149,7 +152,6 @@ export class AlterApi {
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
   createReminder(token: string, text: string, remindAt: string) { return this.request<Reminder>("/api/v1/reminders", { method: "POST", body: JSON.stringify({ text, remind_at: remindAt }) }, token); }
   deleteReminder(token: string, id: number) { return this.request<{ ok: boolean }>(`/api/v1/reminders/${id}`, { method: "DELETE" }, token); }
-  youtubeSearch(token: string, query: string) { return this.request<{ results: { title: string; channel: string; url: string }[] }>("/api/v1/youtube/search", { method: "POST", body: JSON.stringify({ query }) }, token); }
   async youtubeAudio(token: string, url: string) {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/youtube/audio`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
     if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Request failed");

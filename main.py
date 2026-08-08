@@ -10,7 +10,7 @@ from data.database import async_session, engine
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
-from utils.redis_store import create_redis, close_redis
+from utils.redis_store import create_redis, close_redis, allow_http_request
 from utils.runtime import check_dependencies
 from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
@@ -37,7 +37,33 @@ async def main():
     dispatcher.message.middleware(GuardMiddleware(redis))
     dispatcher.include_router(router)
     web_app = web.Application()
-    web_app.router.add_get("/health", lambda request: web.json_response({"ok": True}))
+
+    @web.middleware
+    async def http_rate_limit(request, handler):
+        if request.path.startswith("/api/") and request.path not in {"/api/v1/usage"}:
+            remote = request.remote or "unknown"
+            try:
+                if not await allow_http_request(redis, remote, config.HTTP_RATE_LIMIT, config.HTTP_RATE_WINDOW_SECONDS):
+                    raise web.HTTPTooManyRequests(text="too many requests")
+            except web.HTTPTooManyRequests:
+                raise
+            except Exception:
+                logging.exception("HTTP rate limiter unavailable")
+                raise web.HTTPServiceUnavailable(text="rate limiter unavailable")
+        return await handler(request)
+
+    web_app.middlewares.append(http_rate_limit)
+
+    async def health(request):
+        return web.json_response({"ok": True, "service": "alter"})
+
+    async def readiness(request):
+        if not await check_dependencies(redis, engine):
+            raise web.HTTPServiceUnavailable(text="dependencies unavailable")
+        return web.json_response({"ok": True, "ready": True})
+
+    web_app.router.add_get("/health", health)
+    web_app.router.add_get("/ready", readiness)
     web_app.router.add_post(config.PAYMENT_WEBHOOK_PATH, handle_yookassa_webhook)
     setup_auth_routes(web_app)
     setup_chat_routes(web_app)

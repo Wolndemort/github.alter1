@@ -13,4 +13,6 @@ test "$(docker inspect -f '{{.State.Status}}' alter_nginx)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
 sleep 5
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
+test "$(docker inspect -f '{{.State.Health.Status}}' alter_bot)" = healthy
+curl --fail --silent --show-error https://api.alterai.ru/ready >/dev/null
 docker compose ps

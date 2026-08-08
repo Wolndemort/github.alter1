@@ -64,3 +64,28 @@ async def test_fal_zero_balance_is_safe_error(monkeypatch):
     monkeypatch.setattr(media_generation.httpx, "AsyncClient", Client)
     with pytest.raises(media_generation.MediaGenerationError, match="баланс"):
         await media_generation.generate_image("cinematic")
+
+
+@pytest.mark.asyncio
+async def test_fal_image_returns_downloaded_artifact(monkeypatch):
+    monkeypatch.setattr(media_generation.config, "MEDIA_PROVIDER", "fal")
+    monkeypatch.setattr(media_generation.config, "FAL_IMAGE_MODEL", "fal-ai/test-image")
+    monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
+
+    class Response:
+        status_code = 200
+        headers = {"content-type": "image/png"}
+        content = b"png"
+        def json(self): return {"images": [{"url": "https://cdn.example/image.png"}]}
+        def raise_for_status(self): pass
+
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs): return Response()
+        async def get(self, *args, **kwargs): return Response()
+
+    monkeypatch.setattr(media_generation.httpx, "AsyncClient", Client)
+    result = await media_generation.generate_image("cinematic")
+    assert result.data == b"png"

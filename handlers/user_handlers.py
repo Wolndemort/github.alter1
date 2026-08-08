@@ -27,7 +27,7 @@ from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
-from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from utils.redis_store import consume_link_token
 from utils.metrics import increment
@@ -491,20 +491,8 @@ async def animate_media_video(callback: types.CallbackQuery):
 
 
 def format_memory(memory: dict) -> str:
-    if not memory:
-        return "🧠 Пока ALTER ничего важного о тебе не помнит."
-    lines = ["🧠 Что ALTER помнит о тебе:"]
-    for category, facts in memory.items():
-        if not facts:
-            continue
-        if isinstance(facts, dict):
-            value = "; ".join(f"{key}: {item}" for key, item in facts.items())
-        elif isinstance(facts, list):
-            value = ", ".join(str(item) for item in facts)
-        else:
-            value = str(facts)
-        lines.append(f"• {category}: {value}")
-    return "\n".join(lines) if len(lines) > 1 else "🧠 Пока ALTER ничего важного о тебе не помнит."
+    from utils.memory_view import format_memory as render_memory
+    return render_memory(memory)
 
 
 async def get_active_session(user_id: int, db_session: AsyncSession) -> Session | None:
@@ -594,6 +582,27 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
         return
     if not billing_configured():
         await message.answer("Оплата пока настраивается. Попробуй немного позже.")
+        return
+    try:
+        me = await message.bot.get_me()
+        user = await get_or_create_user(message, db_session)
+        personal_card = await create_payment(db_session, user, me.username or "", "bank_card", "personal")
+        personal_sbp = await create_payment(db_session, user, me.username or "", "sbp", "personal")
+        ego_card = await create_payment(db_session, user, me.username or "", "bank_card", "ego")
+        ego_sbp = await create_payment(db_session, user, me.username or "", "sbp", "ego")
+        await message.answer(
+            "Выбери тариф ALTER:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=f"ALTER Personal · {price('personal')} ₽ · карта", url=personal_card)],
+                [InlineKeyboardButton(text="Personal · СБП", url=personal_sbp)],
+                [InlineKeyboardButton(text=f"ALTER Ego · {price('ego')} ₽ · карта", url=ego_card)],
+                [InlineKeyboardButton(text="Ego · СБП", url=ego_sbp)],
+            ]),
+        )
+        return
+    except Exception:
+        logging.exception("Failed to create plan payments")
+        await message.answer("Не удалось открыть тарифы. Попробуй ещё раз позже.")
         return
     try:
         me = await message.bot.get_me()
