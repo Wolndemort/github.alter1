@@ -435,6 +435,17 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             append_session_message(session, "assistant", calendar_reply)
             await db_session.commit()
             return
+        # Keep voice and text routing identical for deterministic integrations.
+        # A forecast request should not depend on the model deciding to call
+        # the weather tool after transcription.
+        if is_weather_request(text):
+            city = parse_weather_city(text)
+            reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
+            await answer_reply(message, reply, user)
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", reply)
+            await db_session.commit()
+            return
         requested_generation = generation_kind(text)
         if requested_generation == "image":
             if not await generation_allowed(user, config.FAL_TEXT_IMAGE_CREDITS):
@@ -514,22 +525,57 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
         await message.answer("Не удалось обработать голосовое сообщение.")
 
 
+def media_generation_requested(prompt: str) -> bool:
+    """Recognise a natural edit/generation command attached to media.
+
+    Telegram captions are not required to use a command prefix.  Matching the
+    first meaningful word keeps ordinary questions such as "что на фото?" on
+    the vision-analysis path while accepting normal Russian instructions.
+    """
+    normalized = " ".join((prompt or "").casefold().strip().split())
+    if not normalized:
+        return False
+    command_words = (
+        "/edit",
+        "измени", "изменить", "изменяй",
+        "редактируй", "редактировать",
+        "сделай", "создай", "нарисуй", "оживи",
+        "добавь", "добавить", "убери", "убрать",
+        "замени", "заменить", "надень", "переодень",
+        "перекрась", "перекрасить",
+    )
+    first_word = normalized.split(" ", 1)[0].rstrip(" ,.!?:;—–-\n")
+    return first_word in command_words
+
+
 @router.message(lambda message: message.photo or message.video)
 async def handle_media(message: types.Message, db_session: AsyncSession):
     prompt = message.caption or "Проанализируй это изображение и объясни, что на нём."
     try:
         user = await get_or_create_user(message, db_session)
-        # The mobile client exposes the same explicit "Изменить" action;
-        # Telegram uses a caption starting with /edit or "измени".
-        generation_requested = prompt.casefold().startswith(("/edit", "измени", "сделай"))
+        # A caption on attached media is a natural-language command.  Do not
+        # require the API-style /edit prefix: users commonly write
+        # "Редактируй фото, надень шляпу", "добавь фон" or "убери человека".
+        generation_requested = media_generation_requested(prompt)
         if generation_requested:
-            if not await generation_allowed(user, config.MEDIA_GENERATION_CREDITS):
+            requested_kind = generation_kind(prompt)
+            generation_cost = (
+                config.FAL_TEXT_VIDEO_CREDITS
+                if requested_kind == "video"
+                else config.MEDIA_GENERATION_CREDITS
+            )
+            if not await generation_allowed(user, generation_cost):
                 await message.answer("Лимит кредитов для генерации медиа исчерпан.")
                 return
             if message.photo:
                 buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
-                artifact = await generate_image(prompt, ("image/jpeg", buffer.getvalue()), parse_media_options(prompt, "image"))
-                await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename))
+                source = ("image/jpeg", buffer.getvalue())
+                if requested_kind == "video":
+                    artifact = await generate_video(prompt, source, parse_media_options(prompt, "video"))
+                    await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename))
+                else:
+                    artifact = await generate_image(prompt, source, parse_media_options(prompt, "image"))
+                    await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename))
             else:
                 buffer = await message.bot.download(message.video, destination=BytesIO())
                 artifact = await generate_video(prompt, ("video/mp4", buffer.getvalue()), parse_media_options(prompt, "video"))
@@ -596,6 +642,7 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
         append_session_message(session, "assistant", reply)
         await db_session.commit()
     except Exception:
+        logging.exception("Telegram media handler failed")
         await message.answer("Не удалось обработать этот файл.")
 
 
