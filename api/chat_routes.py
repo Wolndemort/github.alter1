@@ -14,7 +14,8 @@ from services.media_generation import MediaGenerationError, generate_image, gene
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
 from utils.tasks import process_session
-from utils.redis_store import create_redis, close_redis, charge_credits
+from utils.redis_store import create_redis, close_redis
+from utils.quota import charge_user_id_credits
 from config import config
 
 
@@ -23,7 +24,7 @@ async def chat_route(request: web.Request) -> web.Response:
     payload = await _json(request)
     redis = create_redis()
     try:
-        if not await charge_credits(redis, user_id, 1, config.MONTHLY_CREDITS):
+        if not await charge_user_id_credits(redis, user_id, 1, async_session):
             raise web.HTTPTooManyRequests(text="monthly AI limit reached")
     finally:
         await close_redis(redis)
@@ -84,7 +85,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     redis = create_redis()
     try:
-        if not await charge_credits(redis, user_id, 20, config.MONTHLY_CREDITS):
+        if not await charge_user_id_credits(redis, user_id, 20, async_session):
             raise web.HTTPTooManyRequests(text="monthly media limit reached")
     finally:
         await close_redis(redis)
@@ -135,7 +136,7 @@ async def media_generate_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     redis = create_redis()
     try:
-        if not await charge_credits(redis, user_id, 40, config.MONTHLY_CREDITS):
+        if not await charge_user_id_credits(redis, user_id, 40, async_session):
             raise web.HTTPTooManyRequests(text="monthly media limit reached")
     finally:
         await close_redis(redis)
@@ -191,7 +192,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     redis = create_redis()
     try:
-        if not await charge_credits(redis, user_id, 5, config.MONTHLY_CREDITS):
+        if not await charge_user_id_credits(redis, user_id, 5, async_session):
             raise web.HTTPTooManyRequests(text="monthly voice limit reached")
     finally:
         await close_redis(redis)

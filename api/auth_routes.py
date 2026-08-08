@@ -14,7 +14,7 @@ from config import config
 from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from services.account_linking import resolve_telegram_user
-from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info
+from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
 
 _resolved_telegram_username: str | None = None
@@ -133,12 +133,18 @@ async def memory_route(request: web.Request) -> web.Response:
 
 async def usage_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
     redis = create_redis()
     try:
         used = await credits_used(redis, user_id)
     finally:
         await close_redis(redis)
-    return web.json_response({"used": used, "limit": config.MONTHLY_CREDITS, "remaining": max(0, config.MONTHLY_CREDITS - used)})
+    limit = credits_limit(user)
+    return web.json_response({"used": used, "limit": limit, "remaining": max(0, limit - used)})
 
 
 async def subscription_route(request: web.Request) -> web.Response:

@@ -13,14 +13,15 @@ from utils.billing import has_active_subscription, has_owner_access
 from data.models import WebAccount
 from sqlalchemy import select
 from utils.youtube_search import search_youtube
-from utils.redis_store import create_redis, close_redis, charge_credits
+from utils.redis_store import create_redis, close_redis
+from utils.quota import charge_user_id_credits
 from config import config
 
 
 async def _charge_youtube(user_id: int, cost: int) -> None:
     redis = create_redis()
     try:
-        if not await charge_credits(redis, user_id, cost, config.MONTHLY_CREDITS):
+        if not await charge_user_id_credits(redis, user_id, cost):
             raise web.HTTPTooManyRequests(text="monthly YouTube limit reached")
     finally:
         await close_redis(redis)

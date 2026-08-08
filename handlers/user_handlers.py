@@ -27,9 +27,10 @@ from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
-from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
-from utils.redis_store import consume_link_token
+from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
+from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
 from utils.metrics import increment
 import logging
 
@@ -188,6 +189,32 @@ async def button_support(message: types.Message):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Написать Адаму", url=f"tg://user?id={config.SUPPORT_TELEGRAM_ID}")],
         ]),
+    )
+
+
+@router.message(F.text == STATUS_BUTTON)
+async def button_status(message: types.Message, db_session: AsyncSession):
+    await cmd_status(message, db_session)
+
+
+@router.message(F.text == USAGE_BUTTON)
+async def button_usage(message: types.Message, db_session: AsyncSession):
+    user = await get_telegram_user(message.from_user.id, db_session)
+    if not user:
+        await message.answer("Сначала открой /start.", reply_markup=memory_keyboard())
+        return
+    redis = create_redis()
+    try:
+        used = await credits_used(redis, user.id)
+    finally:
+        await close_redis(redis)
+    plan = normalize_plan((user.tech_stack or {}).get("subscription_plan"))
+    limit = credits_limit(user)
+    await message.answer(
+        f"Тариф: {plan_info(plan)['name']}\n"
+        f"Использовано: {used} из {limit} кредитов\n"
+        f"Осталось: {max(0, limit - used)}",
+        reply_markup=memory_keyboard(),
     )
 
 

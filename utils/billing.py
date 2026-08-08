@@ -47,6 +47,13 @@ def plan_info(plan: object = "personal") -> dict:
     return PLANS[normalize_plan(plan)]
 
 
+def credits_limit(user: User | None) -> int:
+    """Return the monthly credit quota for the user's active plan."""
+    if user is None:
+        return int(config.PERSONAL_MONTHLY_CREDITS)
+    return int(plan_info((user.tech_stack or {}).get("subscription_plan"))["credits"])
+
+
 def price(plan: object = "personal") -> Decimal:
     try:
         configured = config.SUBSCRIPTION_PRICE_RUB if normalize_plan(plan) == "personal" else config.EGO_PRICE_RUB
