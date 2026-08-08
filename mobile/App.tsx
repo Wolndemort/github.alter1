@@ -303,6 +303,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
+  const activeVoiceSound = React.useRef<Audio.Sound | null>(null);
+  const voicePlaybackSerial = React.useRef(0);
   const autoScrollAfterUpdate = React.useRef(false);
   const drawerX = React.useRef(new Animated.Value(-420)).current;
   const logoPulse = React.useRef(new Animated.Value(0.72)).current;
@@ -382,17 +384,33 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     return () => animation.stop();
   }, [logoPulse]);
   useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [resetIdle]);
+  const stopVoicePlayback = async () => {
+    voicePlaybackSerial.current += 1;
+    const sound = activeVoiceSound.current;
+    activeVoiceSound.current = null;
+    if (sound) {
+      try { await sound.stopAsync(); } catch { /* already stopped */ }
+      try { await sound.unloadAsync(); } catch { /* already unloaded */ }
+    }
+    setPlayingVoiceId(null);
+  };
   const playVoiceReply = async (text: string, id?: string) => {
-    if (playingVoiceId) return;
+    await stopVoicePlayback();
+    const serial = voicePlaybackSerial.current;
     setPlayingVoiceId(id || "manual");
     try {
       const blob = await api.voiceReply(token, text);
       const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
-      await playAudioBase64(dataUrl.split(",", 2)[1], "wav", id);
+      if (serial !== voicePlaybackSerial.current) return;
+      await playAudioBase64(dataUrl.split(",", 2)[1], "wav", id, serial);
     } catch (err) { setPlayingVoiceId(null); setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
   };
-  const playAudioBase64 = async (base64: string, extension = "mp3", id?: string) => {
+  const playAudioBase64 = async (base64: string, extension = "mp3", id?: string, serial?: number) => {
     if (!base64 || !FileSystem.cacheDirectory) throw new Error("Аудиофайл пустой");
+    if (serial === undefined) {
+      await stopVoicePlayback();
+      serial = voicePlaybackSerial.current;
+    }
     setPlayingVoiceId(id || "audio-action");
     const uri = `${FileSystem.cacheDirectory}alter-audio-${Date.now()}.${extension}`;
     await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
@@ -406,8 +424,16 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       shouldDuckAndroid: false,
       playThroughEarpieceAndroid: false,
     });
+    if (serial !== voicePlaybackSerial.current) return;
     const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: 1.0 });
-    loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) { setPlayingVoiceId(null); loaded.sound.unloadAsync(); } });
+    activeVoiceSound.current = loaded.sound;
+    loaded.sound.setOnPlaybackStatusUpdate((status) => {
+      if ("didJustFinish" in status && status.didJustFinish) {
+        if (activeVoiceSound.current === loaded.sound) activeVoiceSound.current = null;
+        setPlayingVoiceId(null);
+        loaded.sound.unloadAsync();
+      }
+    });
   };
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
