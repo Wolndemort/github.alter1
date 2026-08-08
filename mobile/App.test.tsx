@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import { AuthScreen, IntroScreen, VoiceButton } from "./App";
+import { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds } from "./App";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./src/api/client";
 
@@ -22,6 +22,24 @@ jest.mock("@react-navigation/native-stack", () => {
 
 describe("ALTER mobile critical screens", () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it("archives only messages older than the timeout, keeping the last three per role", () => {
+    const now = 120_000;
+    const items = [
+      ...Array.from({ length: 4 }, (_, index) => ({ id: "u" + index, role: "user", text: "", createdAt: index * 10_000 })),
+      ...Array.from({ length: 4 }, (_, index) => ({ id: "a" + index, role: "assistant", text: "", createdAt: index * 10_000 })),
+    ];
+    expect(getExpiredChatIds(items, now)).toEqual(["u0", "a0"]);
+  });
+
+  it("does not archive the last three messages even after the timeout", () => {
+    const items = [
+      { id: "u1", role: "user", text: "", createdAt: 0 },
+      { id: "u2", role: "user", text: "", createdAt: 0 },
+      { id: "u3", role: "user", text: "", createdAt: 0 },
+    ];
+    expect(getExpiredChatIds(items, 120_000)).toEqual([]);
+  });
 
   it("finishes the offline intro scene smoothly", () => {
     jest.useFakeTimers();

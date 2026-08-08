@@ -17,6 +17,14 @@ import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
 type ChatItem = { id: string; role: string; text: string; createdAt?: number; mediaUri?: string; feedback?: "positive" | "negative" };
+export function getExpiredChatIds(items: ChatItem[], now: number, timeoutMs = 60000): string[] {
+  const cutoff = now - timeoutMs;
+  const keep = new Set<string>();
+  for (const role of ["user", "assistant"]) {
+    items.filter((item) => item.role === role).slice(-3).forEach((item) => keep.add(item.id));
+  }
+  return items.filter((item) => item.createdAt !== undefined && item.createdAt <= cutoff && !keep.has(item.id)).map((item) => item.id);
+}
 
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
 
@@ -59,7 +67,7 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
     return () => { clearTimeout(timer); if (sound) sound.unloadAsync().catch(() => undefined); };
   }, [line, opacity, onFinished, scale]);
 
-  return <View style={styles.intro}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>PERSONAL INTELLIGENCE</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
+  return <View style={[styles.intro, { backgroundColor: "#050505" }]}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>PERSONAL INTELLIGENCE</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
 }
 
 function TypingText({ text }: { text: string }) {
@@ -112,10 +120,10 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
     return () => { pulseLoop.stop(); lineLoop.stop(); textLoop.stop(); };
   }, [drift, line, pulse]);
   const capabilities = "память\nживой диалог\nголосовые ответы\nтранскрипция речи\nфото и видео\nсоздание изображений\nпоиск и музыка\nпогода и напоминания\nнапоминания о важном\nмягкая забота\nобщий контекст\nALTER рядом";
-  return <Animated.View pointerEvents="none" style={[idleStyles.overlay, { opacity }]}>
+  return <Animated.View pointerEvents="none" style={[idleStyles.overlay, { opacity, zIndex: 20, backgroundColor: "#050505" }]}>
     <Animated.Text style={[styles.introLogo, idleStyles.logo, { opacity: pulse }]}>ALTER</Animated.Text>
     <Animated.View style={[styles.introLine, idleStyles.line, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />
-    <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-320, 230] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View>
+    <View style={idleStyles.capabilityViewport}><Animated.Text style={[idleStyles.capabilities, { transform: [{ translateY: drift.interpolate({ inputRange: [-1, 0], outputRange: [-320, 230] }) }] }]}>{capabilities}</Animated.Text><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeTop]} /><View pointerEvents="none" style={[idleStyles.capabilityFade, idleStyles.capabilityFadeBottom]} /></View><View style={{ width: "100%", overflow: "hidden", marginTop: 12, gap: 4 }}><Animated.Text style={{ color: "#777777", fontSize: 9, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [-360, 260] }) }] }}>ALTER · 2026 · ™</Animated.Text><Animated.Text style={{ color: "#666666", fontSize: 8, letterSpacing: 2, width: 700, textAlign: "center", transform: [{ translateX: drift.interpolate({ inputRange: [-1, 0], outputRange: [260, -360] }) }] }}>PERSONAL INTELLIGENCE · VERSION 0.1.0</Animated.Text></View>
   </Animated.View>;
 }
 
@@ -291,17 +299,23 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   }, [token]);
   useEffect(() => {
     const timer = setInterval(() => {
-      const cutoff = Date.now() - 60000;
+        const cutoff = Date.now();
       setItems((current) => {
         const keep = new Set<string>();
         for (const role of ["user", "assistant"]) {
           current.filter((item) => item.role === role).slice(-3).forEach((item) => keep.add(item.id));
         }
-        const expired = current.filter((item) => item.createdAt && item.createdAt <= cutoff && !keep.has(item.id));
+        const expiredIds = new Set(getExpiredChatIds(current, cutoff));
+        const expired = current.filter((item) => expiredIds.has(item.id));
         if (expired.length) setArchivedItems((old) => [...old, ...expired.filter((item) => !old.some((entry) => entry.id === item.id))]);
-        const next = current.filter((item) => !item.createdAt || item.createdAt > cutoff || keep.has(item.id));
+        const next = current.filter((item) => !expiredIds.has(item.id));
         if (next.length === current.length) return current;
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        LayoutAnimation.configureNext({
+          duration: 900,
+          create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+          update: { type: LayoutAnimation.Types.easeInEaseOut },
+          delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.scaleXY },
+        });
         return next;
       });
     }, 1000);
@@ -581,7 +595,7 @@ const styles = StyleSheet.create({
 (styles as Record<string, unknown>).aiBubble = { ...StyleSheet.flatten(styles.aiBubble), backgroundColor: "#000000", borderWidth: 0, borderColor: "transparent" };
 (styles as Record<string, unknown>).messages = { ...StyleSheet.flatten(styles.messages), padding: 10, gap: 3 };
 (styles as Record<string, unknown>).bubble = { ...StyleSheet.flatten(styles.bubble), padding: 8, maxWidth: "92%" };
-(styles as Record<string, unknown>).intro = { ...StyleSheet.flatten(styles.intro), backgroundColor: "#0b0b0b" };
+(styles as Record<string, unknown>).intro = { ...StyleSheet.flatten(styles.intro), backgroundColor: "#050505" };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
