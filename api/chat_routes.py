@@ -43,7 +43,10 @@ async def chat_route(request: web.Request) -> web.Response:
             result = await ChatService().reply(session, user_id, payload.get("message", ""), location) if location else await ChatService().reply(session, user_id, payload.get("message", ""))
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
-    return web.json_response({"reply": result.reply, "session_id": result.session_id, "transcript": result.transcript})
+    payload = {"reply": result.reply, "session_id": result.session_id}
+    if hasattr(result, "transcript"):
+        payload["transcript"] = result.transcript
+    return web.json_response(payload)
 
 
 async def new_session_route(request: web.Request) -> web.Response:

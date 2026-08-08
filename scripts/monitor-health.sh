@@ -4,6 +4,8 @@ set -Eeuo pipefail
 PROJECT_DIR="${PROJECT_DIR:-/root/alter}"
 HEALTH_URL="${HEALTH_URL:-https://api.alterai.ru/ready}"
 ALERT_WEBHOOK_URL="${ALERT_WEBHOOK_URL:-}"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-${BOT_TOKEN:-}}"
+TELEGRAM_ALERT_CHAT_ID="${TELEGRAM_ALERT_CHAT_ID:-}"
 MAX_DISK_USED_PERCENT="${MAX_DISK_USED_PERCENT:-85}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_DIR/backups}"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-30}"
@@ -16,6 +18,11 @@ alert() {
     curl --fail --silent --show-error --max-time 10 -X POST "$ALERT_WEBHOOK_URL" \
       -H 'Content-Type: application/json' \
       --data "{\"text\":\"ALTER alert: $message\"}" >/dev/null || true
+  fi
+  if [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_ALERT_CHAT_ID" ]]; then
+    curl --fail --silent --show-error --max-time 10 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+      --data-urlencode "text=ALTER alert: ${message}" >/dev/null || true
   fi
 }
 
