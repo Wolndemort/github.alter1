@@ -561,9 +561,9 @@ const answerActionStyles = StyleSheet.create({
 const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 5 }, overlay: { ...StyleSheet.absoluteFillObject, zIndex: 6, backgroundColor: "#050505", alignItems: "center", justifyContent: "center", overflow: "hidden" }, logo: { fontSize: 52, letterSpacing: 8 }, line: { marginTop: 28 }, capabilityViewport: { width: "100%", overflow: "hidden", marginTop: 34, height: 190, justifyContent: "center" }, capabilities: { color: "#f4f4f4", fontSize: 13, lineHeight: 25, letterSpacing: 1.2, width: "100%", textAlign: "center" }, capabilityFade: { position: "absolute", left: 0, right: 0, height: 55, backgroundColor: "#050505" }, capabilityFadeTop: { top: 0 }, capabilityFadeBottom: { bottom: 0 } });
 
 const sheetStyles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.68)" },
-  sheet: { backgroundColor: "#050505", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 0 },
-  handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#ffffff", alignSelf: "center", marginBottom: 7 },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "transparent" },
+  sheet: { backgroundColor: "transparent", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 78 },
+  handle: { display: "none" },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
   action: { minHeight: 54, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "transparent" },
   actionIcon: { display: "none" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
@@ -592,7 +592,7 @@ const permissionStyles = StyleSheet.create({
 const premiumStyles = StyleSheet.create({
   drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.58)", alignItems: "flex-start" },
   headerAction: { minWidth: 54, height: 40, alignItems: "center", justifyContent: "center" }, headerActionText: { color: "#ffffff", fontSize: 22 }, refreshAction: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }, refreshIcon: { color: "#ffffff", fontSize: 27, fontWeight: "300" },
-  newChatPrompt: { position: "absolute", top: 58, right: 14, zIndex: 10, flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: "#050505" }, newChatPromptText: { color: "#ffffff", fontSize: 13 }, newChatActions: { flexDirection: "row", alignItems: "center", gap: 14 }, newChatAction: { color: "#ffffff", fontSize: 23, lineHeight: 24 },
+  newChatPrompt: { position: "absolute", top: 58, right: 14, zIndex: 10, flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: "transparent" }, newChatPromptText: { color: "#ffffff", fontSize: 13 }, newChatActions: { flexDirection: "row", alignItems: "center", gap: 14 }, newChatAction: { color: "#ffffff", fontSize: 23, lineHeight: 24 },
   newChatLoading: { ...StyleSheet.absoluteFillObject, zIndex: 20, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, newChatLoadingLogo: { color: "#ffffff", fontSize: 42, fontWeight: "900", letterSpacing: 8 }, newChatLoadingText: { color: "#888888", fontSize: 12, letterSpacing: 1, marginTop: 14 },
   menuCard: { width: "84%", height: "100%", backgroundColor: "#000000" },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
