@@ -25,9 +25,27 @@ test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = heal
 test "$(docker inspect -f '{{.State.Status}}' alter_redis_container)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_nginx)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
-sleep 5
-test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
-test "$(docker inspect -f '{{.State.Health.Status}}' alter_bot)" = healthy
+
+# The bot starts polling before its HTTP healthcheck has completed.  A fixed
+# sleep caused healthy deploys to fail while the container was still
+# `health: starting`.  Wait for the actual readiness state instead.
+deadline=$((SECONDS + 120))
+while true; do
+  bot_status="$(docker inspect -f '{{.State.Status}}' alter_bot 2>/dev/null || true)"
+  bot_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' alter_bot 2>/dev/null || true)"
+  if [ "$bot_status" = running ] && [ "$bot_health" = healthy ]; then
+    break
+  fi
+  if [ "$bot_status" != running ] || [ "$bot_health" = unhealthy ]; then
+    echo "ALTER bot failed readiness: status=$bot_status health=$bot_health"
+    exit 1
+  fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "Timed out waiting for ALTER bot health: status=$bot_status health=$bot_health"
+    exit 1
+  fi
+  sleep 3
+done
 docker exec alter_bot python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=5)"
 if ! curl --fail --silent --show-error --max-time 15 https://api.alterai.ru/ready >/dev/null; then
   echo "WARNING: public /ready check failed; container readiness is healthy"
