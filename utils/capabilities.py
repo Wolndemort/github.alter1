@@ -59,6 +59,13 @@ _CAPABILITY_PATTERNS = (
 
 
 def is_capabilities_request(text: str) -> bool:
+    # Concrete questions about an audio operation must use the capability
+    # inventory instead of being guessed by the general chat model.
+    if re.search(
+        r"\b(?:может ли|умеет ли|умеешь ли)\b.*\b(?:наложить|добавить|смешать|подложить|очистить|убрать шум|звуков(?:ой|ые)|эффект|дождь|голосов(?:ое|ую)|аудио|запись)\b",
+        (text or "").casefold(),
+    ):
+        return True
     if re.search(r"\b(сколько|какой)\s+(кредитов|лимит|квот)|\bчто\s+доступно\b|\bкак\s+пользоваться\b", (text or "").casefold()):
         return True
     value = (text or "").casefold().replace("ё", "е").strip()
