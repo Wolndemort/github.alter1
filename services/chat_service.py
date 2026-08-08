@@ -17,6 +17,7 @@ from utils.helpers import merge_memory
 from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
+from utils.calendar_intent import handle_calendar_request
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,10 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
 
-        if is_weather_request(text):
+        calendar_reply = await handle_calendar_request(text, user)
+        if calendar_reply is not None:
+            reply = calendar_reply
+        elif is_weather_request(text):
             city = parse_weather_city(text)
             if not city and isinstance(location, dict):
                 city = str(location.get("city") or location.get("region") or "").strip()

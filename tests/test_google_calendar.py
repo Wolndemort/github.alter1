@@ -5,6 +5,7 @@ import pytest
 from aiohttp import web
 from api import calendar_routes
 from services import google_calendar
+from utils import calendar_intent
 
 
 def run(coro):
@@ -29,7 +30,7 @@ def test_oauth_state_is_signed_and_round_trips(monkeypatch):
 def test_oauth_state_rejects_tampering(monkeypatch):
     setup_config(monkeypatch)
     state = google_calendar.make_state(42)
-    altered = state[:-1] + ("A" if state[-1] != "A" else "B")
+    altered = ("A" if state[0] != "A" else "B") + state[1:]
     try:
         google_calendar.read_state(altered)
     except ValueError:
@@ -74,3 +75,44 @@ async def test_calendar_create_validates_required_event_fields(monkeypatch):
     monkeypatch.setattr(calendar_routes, "_bearer", lambda request: 42)
     with pytest.raises(web.HTTPBadRequest):
         await calendar_routes.calendar_create_event_route(Request())
+
+
+def test_natural_language_calendar_create_and_list(monkeypatch):
+    user = SimpleNamespace(id=42, tech_stack={"google_calendar": {"access_token": "x"}})
+    created = {}
+
+    async def create(current_user, event, calendar_id="primary"):
+        created.update(event)
+        return {"summary": event["summary"]}
+
+    async def listed(current_user, *args):
+        return [{"id": "event-1", "summary": "Demo", "start": {"dateTime": "2026-08-20T10:00:00+03:00"}}]
+
+    monkeypatch.setattr(calendar_intent.google_calendar, "create_event", create)
+    monkeypatch.setattr(calendar_intent.google_calendar, "list_events", listed)
+    assert "Добавил" in run(calendar_intent.handle_calendar_request("добавь встречу 2026-08-20 10:00 тест", user))
+    assert created["start"]["dateTime"].startswith("2026-08-20T10:00")
+    assert "event-1" in run(calendar_intent.handle_calendar_request("покажи календарь", user))
+
+
+def test_natural_language_calendar_delete(monkeypatch):
+    user = SimpleNamespace(id=42, tech_stack={"google_calendar": {"access_token": "x"}})
+    deleted = []
+
+    async def remove(current_user, event_id, calendar_id="primary"):
+        deleted.append(event_id)
+        return {}
+
+    monkeypatch.setattr(calendar_intent.google_calendar, "delete_event", remove)
+    assert "удалено" in run(calendar_intent.handle_calendar_request("удали событие event-123", user))
+    assert deleted == ["event-123"]
+
+
+def test_natural_language_calendar_list(monkeypatch):
+    user = SimpleNamespace(id=42, tech_stack={"google_calendar": {"access_token": "x"}})
+
+    async def calendars(current_user):
+        return [{"id": "primary", "summary": "Личный"}]
+
+    monkeypatch.setattr(calendar_intent.google_calendar, "list_calendars", calendars)
+    assert "primary" in run(calendar_intent.handle_calendar_request("покажи мои календари", user))

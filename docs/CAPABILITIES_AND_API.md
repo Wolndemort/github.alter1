@@ -89,3 +89,4 @@ FIRECRAWL_SEARCH_LIMIT=10
 Подключение выполняется через OAuth Google. Для backend используется redirect URI `https://api.alterai.ru/api/v1/calendar/oauth/callback`. Доступные маршруты: `/api/v1/calendar/connect`, `/api/v1/calendar/status`, `/api/v1/calendar/calendars`, `/api/v1/calendar/events` и `/api/v1/calendar/oauth/callback`.
 
 В Telegram: `/calendar_connect`, `/calendar`, `/calendar_add YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM название`. После OAuth те же действия доступны mobile через общий API.
+Календарь понимает одинаковые текстовые и голосовые обращения: «подключи Google Calendar», «покажи события», «добавь встречу завтра в 10:00», «удали событие event-123». Голосовой input сначала проходит Speech-to-Text.

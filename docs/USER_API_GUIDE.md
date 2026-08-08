@@ -655,3 +655,19 @@ GOOGLE_REDIRECT_URI=https://api.alterai.ru/api/v1/calendar/oauth/callback
 ```
 
 В мобильном приложении используется тот же backend: `GET /api/v1/calendar/connect` возвращает OAuth-ссылку, после подключения доступны `GET /api/v1/calendar/status`, `GET /api/v1/calendar/events`, `POST /api/v1/calendar/events` и `DELETE /api/v1/calendar/events/{event_id}`. OAuth подключается отдельно каждым пользователем; ALTER получает только выбранные права Calendar и не видит пароль Google.
+### Обращение к календарю текстом и голосом
+
+Те же фразы можно написать или произнести голосовым сообщением. Голос сначала превращается в текст, после чего выполняется тот же intent:
+
+```text
+Подключи Google Calendar                         -> /api/v1/calendar/connect
+Проверь, подключён ли мой календарь              -> /api/v1/calendar/status
+Покажи мои календари                              -> /api/v1/calendar/calendars
+Покажи события на ближайшие дни                  -> /api/v1/calendar/events
+Что у меня сегодня в календаре?                 -> /api/v1/calendar/events
+Добавь встречу завтра в 10:00                    -> /api/v1/calendar/events (POST)
+Добавь событие 2026-08-20 10:00 тест            -> /api/v1/calendar/events (POST)
+Удали событие event-123                          -> /api/v1/calendar/events/event-123 (DELETE)
+```
+
+Для надёжного создания указывай дату, время и название. Для удаления ALTER показывает ID события в списке календаря; его можно назвать текстом или голосом. OAuth callback вызывается Google автоматически после разрешения и отдельно пользователем не набирается.

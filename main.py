@@ -20,6 +20,7 @@ from api.user_features_routes import setup_user_features_routes
 from api.youtube_routes import setup_youtube_routes
 from api.elevenlabs_routes import setup_elevenlabs_routes
 from api.calendar_routes import setup_calendar_routes
+from api.faq_routes import setup_faq_routes
 from utils.sentry_setup import init_sentry
 
 
@@ -75,6 +76,7 @@ async def main():
     setup_youtube_routes(web_app)
     setup_elevenlabs_routes(web_app)
     setup_calendar_routes(web_app)
+    setup_faq_routes(web_app)
     web_runner = web.AppRunner(web_app)
     await web_runner.setup()
     web_site = web.TCPSite(web_runner, config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT)

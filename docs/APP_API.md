@@ -1,5 +1,14 @@
 # Independent application API
 
+Public help page:
+
+```text
+GET /api/v1/faq
+```
+
+It returns the same black-and-white FAQ linked from the mobile menu and
+Telegram `/faq` command. It does not require a bearer token.
+
 The mobile application is a parallel client. Telegram polling and `handlers/`
 remain separate; shared behavior lives in `services/`, HTTP adapters in `api/`,
 and the future React Native client in `mobile/`.

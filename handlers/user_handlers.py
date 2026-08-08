@@ -27,6 +27,7 @@ from utils.vector_memory import recall, remember
 from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
 from utils.capabilities import capabilities_reply, is_capabilities_request
+from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
@@ -279,8 +280,16 @@ async def button_forget_category(message: types.Message, command: CommandObject,
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    await message.answer(capabilities_reply())
+    faq_markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть полный FAQ", url="https://api.alterai.ru/api/v1/faq")]])
+    await message.answer(capabilities_reply(), reply_markup=faq_markup)
     return
+
+
+@router.message(Command("faq"))
+async def cmd_faq(message: types.Message):
+    await message.answer("Полный FAQ ALTER: https://api.alterai.ru/api/v1/faq")
+    return
+    await message.answer("Полный FAQ ALTER: https://api.alterai.ru/api/v1/faq")
     await message.answer(
         "<b>ALTER</b> — просто напиши, что нужно.\n\n"
         "🧠 Память: «запомни, что…» или «забудь, что…»\n"
@@ -416,6 +425,13 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             await answer_reply(message, reply, user)
             append_session_message(session, "user", text)
             append_session_message(session, "assistant", reply)
+            await db_session.commit()
+            return
+        calendar_reply = await handle_calendar_request(text, user)
+        if calendar_reply is not None:
+            await answer_reply(message, calendar_reply, user)
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", calendar_reply)
             await db_session.commit()
             return
         requested_generation = generation_kind(text)
