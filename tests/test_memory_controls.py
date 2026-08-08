@@ -1,5 +1,5 @@
 from handlers.user_handlers import format_memory
-from utils.keyboards import SETTINGS_BUTTON, memory_keyboard, memory_categories_keyboard, settings_keyboard
+from utils.keyboards import SETTINGS_BUTTON, STATUS_BUTTON, USAGE_BUTTON, memory_keyboard, memory_categories_keyboard, settings_keyboard
 
 
 def test_memory_format_is_readable_for_nested_memory():
@@ -22,7 +22,7 @@ def test_main_keyboard_has_no_duplicate_buttons_and_expected_layout():
     keyboard = memory_keyboard().keyboard
     labels = [button.text for row in keyboard for button in row]
     assert len(labels) == len(set(labels))
-    assert len(keyboard) == 4
+    assert len(keyboard) == 5
     assert all(len(row) == 2 for row in keyboard[:-1])
     assert len(keyboard[-1]) == 2
 
@@ -43,7 +43,7 @@ def test_every_main_button_has_a_router_handler():
     callbacks = {handler.callback.__name__ for handler in router.message.handlers}
     assert {"button_memory", "button_new_session", "button_reminders", "button_checkins",
             "button_settings", "button_settings_back", "button_voice", "button_voice_on", "button_voice_off", "button_help",
-            "button_buy_subscription", "button_cabinet", "button_support", "button_cabinet_back"} <= callbacks
+            "button_buy_subscription", "button_cabinet", "button_support", "button_cabinet_back", "button_status", "button_usage"} <= callbacks
 
 
 def test_settings_commands_have_router_handlers():
