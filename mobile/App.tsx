@@ -606,6 +606,8 @@ const answerActionStyles = StyleSheet.create({
 
 const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 5 }, overlay: { ...StyleSheet.absoluteFillObject, zIndex: 6, backgroundColor: "#050505", alignItems: "center", justifyContent: "center", overflow: "hidden" }, logo: { fontSize: 52, letterSpacing: 8 }, line: { marginTop: 28 }, capabilityViewport: { width: "100%", overflow: "hidden", marginTop: 34, height: 190, justifyContent: "center" }, capabilities: { color: "#f4f4f4", fontSize: 13, lineHeight: 25, letterSpacing: 1.2, width: "100%", textAlign: "center" }, capabilityFade: { position: "absolute", left: 0, right: 0, height: 55, backgroundColor: "#050505" }, capabilityFadeTop: { top: 0 }, capabilityFadeBottom: { bottom: 0 } });
 
+// The idle scene uses a soft matte black instead of absolute OLED black.
+(idleStyles as Record<string, unknown>).overlay = { ...StyleSheet.flatten(idleStyles.overlay), backgroundColor: "#0b0b0b" };
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "transparent" },
   sheet: { backgroundColor: "transparent", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 78 },
