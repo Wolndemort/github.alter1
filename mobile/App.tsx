@@ -272,9 +272,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
+    const userMessageId = `${Date.now()}u`;
     autoScrollAfterUpdate.current = true;
-    setMessage(""); setAttachment(null); setItems((old) => [...old, { id: `${Date.now()}u`, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
+    setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };

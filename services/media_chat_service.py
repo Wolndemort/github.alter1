@@ -18,6 +18,7 @@ from utils.voice import transcribe_voice
 class MediaChatResult:
     reply: str
     session_id: int
+    transcript: str | None = None
 
 
 def validate_media(content_type: str, data: bytes) -> str:
@@ -58,7 +59,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         prompt = transcript
         from services.chat_service import ChatService
         result = await ChatService().reply(db, user_id, prompt)
-        return result
+        return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)
     media = [("image/jpeg" if kind == "image" else "video/mp4", data)]
     if kind == "video":
         media = await video_preview(data)

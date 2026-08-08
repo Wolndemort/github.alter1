@@ -5,6 +5,7 @@ import logging
 from config import config
 from utils.ap_logic import chat_with_fallback, chat_with_tools, client
 from utils.prompts import MEDIA_SYSTEM_PROMPT
+from utils.quality import has_internal_leak
 
 
 async def generate_media_reply(
@@ -37,7 +38,11 @@ async def generate_media_reply(
                 messages.append({"role": turn["role"], "content": str(turn["content"])})
         messages.append({"role": "user", "content": content})
         response = await chat_with_tools(messages, max_tokens=config.MAX_MEDIA_OUTPUT_TOKENS)
-        return response.choices[0].message.content or "Не смог разобрать материал."
+        answer = response.choices[0].message.content or "Не смог разобрать материал."
+        if len(answer) > 3000 or has_internal_leak(answer):
+            logging.warning("Rejecting oversized media reply as possible reasoning leak: chars=%d", len(answer))
+            return "Я получил материал, но не смог безопасно сформулировать краткий ответ. Попробуй ещё раз."
+        return answer
     except Exception:
         logging.exception("Media analysis error")
         return "Не удалось проанализировать файл. Проверь формат и ключ модели."

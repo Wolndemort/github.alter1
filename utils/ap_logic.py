@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
 from utils.metrics import increment
-from utils.quality import assess_reply
+from utils.quality import assess_reply, has_internal_leak
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "worldview", "politics", "preferences", "travel", "finance", "important_events", "open_loops"}
@@ -460,6 +460,10 @@ async def generate_reply(messages, memory=None, search_results=None):
         if memory.get("current_location"):
             system += "\nCURRENT DEVICE LOCATION (permission granted): " + json.dumps(memory["current_location"], ensure_ascii=False) + ". If the user asks where they are, answer from this location instead of claiming you have no access."
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
+        raw_reply = response.choices[0].message.content or ""
+        if len(raw_reply) > 3000 or has_internal_leak(raw_reply):
+            logging.warning("Rejecting oversized model reply as possible reasoning leak: chars=%d", len(raw_reply))
+            response.choices[0].message.content = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — я отвечу коротко и по делу."
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
         if config.AI_DEEP_REVIEW_ENABLED and _needs_deep_review(messages, search_results):
             reply = await _deep_review_reply(messages, reply, search_results)

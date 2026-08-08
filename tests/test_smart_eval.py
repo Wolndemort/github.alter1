@@ -145,3 +145,11 @@ def test_quality_eval_detects_internal_leak_and_missing_sources():
     assert result.score < 100
     assert "internal_details" in result.issues
     assert "missing_source_attribution" in result.issues
+
+
+def test_quality_eval_detects_russian_reasoning_leak():
+    result = assess_reply(
+        "Пользователь хочет понять проблему. Сначала нужно понять запрос. "
+        "Следует ответить пользователю коротко."
+    )
+    assert "internal_details" in result.issues

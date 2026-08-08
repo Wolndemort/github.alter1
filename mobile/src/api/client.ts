@@ -4,7 +4,7 @@ export type MeResponse = {
   name: string;
   subscription_expires_at: string | null;
 };
-export type ChatResponse = { reply: string; session_id: number };
+export type ChatResponse = { reply: string; session_id: number; transcript?: string | null };
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
