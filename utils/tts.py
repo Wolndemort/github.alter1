@@ -72,6 +72,7 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
 
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
+    logging.info("TTS voice request selected=%s", voice or config.TTS_VOICE)
     if voice == "elevenlabs" and not (
         config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID
     ):
@@ -103,6 +104,12 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
             if result:
                 increment("voice.tts.elevenlabs.success")
                 return result
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 402:
+                logging.error("ElevenLabs Premium rejected TTS: payment/credits required (HTTP 402)")
+            else:
+                logging.exception("ElevenLabs Premium TTS failed with HTTP %s", exc.response.status_code)
+            return b""
         except Exception:
             logging.exception("ElevenLabs speech synthesis failed for explicitly selected Premium voice")
             return b""

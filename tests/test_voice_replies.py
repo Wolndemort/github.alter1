@@ -24,7 +24,7 @@ def test_answer_reply_sends_text_and_enabled_voice(monkeypatch):
     message = FakeMessage()
     user = SimpleNamespace(tech_stack={"voice_replies": True})
 
-    async def synthesize(text):
+    async def synthesize(text, **kwargs):
         return b"voice"
 
     monkeypatch.setattr(user_handlers, "synthesize_speech", synthesize)
@@ -39,7 +39,7 @@ def test_answer_reply_keeps_text_when_tts_fails(monkeypatch):
     message = FakeMessage()
     user = SimpleNamespace(tech_stack={"voice_replies": True})
 
-    async def synthesize(text):
+    async def synthesize(text, **kwargs):
         return b""
 
     monkeypatch.setattr(user_handlers, "synthesize_speech", synthesize)
@@ -53,7 +53,7 @@ def test_answer_reply_force_voice_ignores_user_setting(monkeypatch):
     message = FakeMessage()
     user = SimpleNamespace(tech_stack={"voice_replies": False})
 
-    async def synthesize(text):
+    async def synthesize(text, **kwargs):
         return b"voice"
 
     monkeypatch.setattr(user_handlers, "synthesize_speech", synthesize)
@@ -66,7 +66,7 @@ def test_answer_reply_does_not_send_voice_when_disabled(monkeypatch):
     message = FakeMessage()
     user = SimpleNamespace(tech_stack={"voice_replies": False})
 
-    async def synthesize(text):
+    async def synthesize(text, **kwargs):
         return b"voice"
 
     monkeypatch.setattr(user_handlers, "synthesize_speech", synthesize)

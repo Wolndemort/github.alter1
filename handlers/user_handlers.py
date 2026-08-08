@@ -70,7 +70,8 @@ async def answer_reply(message: types.Message, reply: str, user: User, force_voi
         await message.answer(reply)
     if force_voice or voice_enabled(user):
         try:
-            audio = await synthesize_speech(reply)
+            selected_voice = (user.tech_stack or {}).get("tts_voice")
+            audio = await synthesize_speech(reply, voice=selected_voice)
         except Exception:
             logging.exception("Optional voice reply failed")
             audio = None
@@ -123,7 +124,7 @@ async def cmd_voice(message: types.Message, db_session: AsyncSession):
     if not text:
         await message.answer("Формат: /voice текст, на который нужен голосовой ответ")
         return
-    audio = await synthesize_speech(text)
+    audio = await synthesize_speech(text, voice=(user.tech_stack or {}).get("tts_voice"))
     if audio:
         await message.answer_voice(BufferedInputFile(audio, filename="alter.ogg"))
     else:
