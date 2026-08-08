@@ -527,11 +527,11 @@ const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject
 
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.68)" },
-  sheet: { backgroundColor: "#101010", borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderColor: "#ffffff", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 0 },
+  sheet: { backgroundColor: "#050505", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 0 },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#ffffff", alignSelf: "center", marginBottom: 7 },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
-  action: { minHeight: 54, borderRadius: 14, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#191720" },
-  actionIcon: { fontSize: 18, color: "#ffffff", width: 38, height: 38, lineHeight: 38, textAlign: "center", borderRadius: 19, backgroundColor: "#262626", overflow: "hidden" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  action: { minHeight: 54, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "transparent" },
+  actionIcon: { fontSize: 18, color: "#ffffff", width: 24, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#ffffff", fontWeight: "700" },
 });
 
@@ -557,14 +557,14 @@ const permissionStyles = StyleSheet.create({
 const premiumStyles = StyleSheet.create({
   drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.58)", alignItems: "flex-start" },
   headerAction: { minWidth: 54, height: 40, alignItems: "center", justifyContent: "center" }, headerActionText: { color: "#ffffff", fontSize: 22 }, newChatText: { color: "#ffffff", fontSize: 15, fontWeight: "700", letterSpacing: 0.2 },
-  menuCard: { width: "84%", height: "100%", backgroundColor: "#101010", borderTopRightRadius: 28, borderBottomRightRadius: 28, borderColor: "#ffffff", shadowColor: "#ffffff", shadowOpacity: 0.42, shadowRadius: 30, shadowOffset: { width: 8, height: 0 }, elevation: 18 },
+  menuCard: { width: "84%", height: "100%", backgroundColor: "#050505" },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
   drawerLogo: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: 7, marginBottom: 2 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
   sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#ffffff", fontSize: 18 }, sectionBody: { gap: 8 },
-  usageRow: { minHeight: 42, borderRadius: 11, backgroundColor: "#171717", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, usageText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
-  submenu: { marginTop: -4, marginLeft: 10, gap: 6, borderLeftWidth: 1, borderLeftColor: "#ffffff", paddingLeft: 10 }, submenuAction: { minHeight: 42, borderRadius: 11, backgroundColor: "#141414", borderWidth: 1, borderColor: "#333333", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  menuAction: { minHeight: 48, borderRadius: 14, backgroundColor: "#171717", borderWidth: 1, borderColor: "#333333", paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  usageRow: { minHeight: 42, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, usageText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
+  submenu: { marginTop: -4, marginLeft: 10, gap: 6, paddingLeft: 10 }, submenuAction: { minHeight: 42, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  menuAction: { minHeight: 48, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   menuActionText: { color: "#fff", fontSize: 15, fontWeight: "600", letterSpacing: 0.5 },
   menuActionArrow: { color: "#fff", fontSize: 20 },
   menuTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 },
@@ -574,7 +574,7 @@ const premiumStyles = StyleSheet.create({
   dangerAction: { borderColor: "#5b3042" },
   ownerBadge: { color: "#ffffff", fontSize: 12, fontWeight: "800", letterSpacing: 1.2, textAlign: "center", paddingVertical: 8 },
   sectionLabel: { color: "#ffffff", fontSize: 10, fontWeight: "800", letterSpacing: 1.6, marginTop: 6 }, version: { color: "#888888", fontSize: 11, letterSpacing: 1.2, textAlign: "center", paddingVertical: 4 },
-  accountRow: { minHeight: 38, borderRadius: 10, backgroundColor: "#151515", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  accountRow: { minHeight: 38, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });
 
 const activityStyles = StyleSheet.create({
