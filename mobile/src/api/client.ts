@@ -4,7 +4,7 @@ export type MeResponse = {
   name: string;
   subscription_expires_at: string | null;
 };
-export type ChatResponse = { reply: string; session_id: number; transcript?: string | null };
+export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string };
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
@@ -145,6 +145,18 @@ export class AlterApi {
   async voiceReply(token: string, text: string) {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/voice/reply`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.blob();
+  }
+  async soundEffect(token: string, prompt: string) {
+    const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/sound-effects", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ prompt }) });
+    if (!response.ok) throw new ApiError(response.status, await response.text());
+    return response.blob();
+  }
+  async isolateAudio(token: string, uri: string) {
+    const form = new FormData();
+    form.append("file", { uri, type: "audio/m4a", name: "alter-audio.m4a" } as unknown as Blob);
+    const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/isolate", { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
+    if (!response.ok) throw new ApiError(response.status, await response.text());
     return response.blob();
   }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }

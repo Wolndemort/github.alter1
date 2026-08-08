@@ -16,6 +16,7 @@ from utils.tts import synthesize_speech
 from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
 from utils.quota import charge_user_id_credits
+from utils.audio_actions import detect_audio_action, process_audio_action
 from config import config
 
 
@@ -38,6 +39,23 @@ async def chat_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+        if detect_audio_action(payload.get("message", "")) == "effect":
+            audio_redis = create_redis()
+            try:
+                if not await charge_user_id_credits(audio_redis, user_id, 20, async_session):
+                    raise web.HTTPTooManyRequests(text="monthly audio limit reached")
+            finally:
+                await close_redis(audio_redis)
+            audio_result = await process_audio_action(payload.get("message", ""), b"")
+            if audio_result:
+                answer, audio = audio_result
+                return web.json_response({
+                    "reply": answer,
+                    "session_id": 0,
+                    "audio_base64": base64.b64encode(audio).decode("ascii"),
+                    "audio_filename": "alter-sound.mp3",
+                    "audio_mime": "audio/mpeg",
+                })
         try:
             location = payload.get("location")
             result = await ChatService().reply(session, user_id, payload.get("message", ""), location) if location else await ChatService().reply(session, user_id, payload.get("message", ""))
@@ -107,6 +125,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
         reader = await request.multipart()
         prompt = ""
         content_type = ""
+        filename = "audio.m4a"
         data = b""
         while True:
             part = await reader.next()
@@ -116,6 +135,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
                 prompt = (await part.text()).strip()
             elif part.name == "file":
                 content_type = part.headers.get("Content-Type", "application/octet-stream")
+                filename = part.filename or filename
                 chunks = []
                 size = 0
                 while True:
@@ -128,10 +148,13 @@ async def media_chat_route(request: web.Request) -> web.Response:
                     chunks.append(chunk)
                 data = b"".join(chunks)
         try:
-            result = await media_reply(session, user_id, prompt, content_type, data)
+            result = await media_reply(session, user_id, prompt, content_type, data, filename)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
-    return web.json_response({"reply": result.reply, "session_id": result.session_id})
+    payload = {"reply": result.reply, "session_id": result.session_id, "transcript": result.transcript}
+    if result.audio:
+        payload.update({"audio_base64": base64.b64encode(result.audio).decode("ascii"), "audio_filename": result.audio_filename or "alter-audio.mp3", "audio_mime": "audio/mpeg"})
+    return web.json_response(payload)
 
 
 async def media_generate_route(request: web.Request) -> web.Response:

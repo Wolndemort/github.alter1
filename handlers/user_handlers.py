@@ -21,6 +21,7 @@ from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
+from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
@@ -30,6 +31,7 @@ from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
+from utils.quota import charge_user_id_credits
 from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
 from utils.metrics import increment
 import logging
@@ -271,6 +273,7 @@ async def cmd_help(message: types.Message):
         "⏰ Напоминание: «напомни мне завтра в 10:00 позвонить…»\n"
         "💭 Check-in: ALTER сама иногда возвращается к важной теме\n"
         "🎙 Голос: отправь голосовое или попроси озвучить ответ\n"
+        "🔊 Аудио: напиши «создай звук дождя», «почисти моё голосовое» или отправь голосовое с подписью «наложи звук дождя»\n"
         "📎 Фото и видео: отправь файл и напиши, что сделать\n\n"
         "Память, напоминания, настройки, подписка и лимиты — в кнопках меню.",
         parse_mode="HTML",
@@ -382,7 +385,9 @@ async def cmd_quiet_hours(message: types.Message, db_session: AsyncSession):
 async def handle_voice(message: types.Message, db_session: AsyncSession):
     try:
         buffer = await message.bot.download(message.voice, destination=BytesIO())
-        text = await transcribe_voice(buffer.getvalue())
+        audio_data = buffer.getvalue()
+        caption = (message.caption or "").strip()
+        text = caption or await transcribe_voice(audio_data)
         if not text:
             await message.answer("Не смог разобрать голосовое сообщение.")
             return
@@ -392,7 +397,26 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             session = Session(user_id=user.id, raw_messages=[])
             db_session.add(session)
             await db_session.flush()
-        append_session_message(session, "user", text)
+        action_source = audio_data
+        action_filename = "voice.ogg"
+        detected_action = detect_audio_action(text)
+        # A spoken command can refer to the previous voice message. Keep the
+        # command recording out of the mix and restore the prior Telegram file.
+        if detected_action in {"mix", "isolate"} and not caption:
+            previous = next((item.get("media") for item in reversed(session.raw_messages or []) if item.get("media", {}).get("media_type") == "audio/ogg"), None)
+            if previous and previous.get("file_id"):
+                previous_buffer = await message.bot.download(previous["file_id"], destination=BytesIO())
+                action_source = previous_buffer.getvalue()
+                action_filename = "previous.ogg"
+        action_result = await process_audio_action(text, action_source, action_filename) if detected_action else None
+        if action_result:
+            answer, output = action_result
+            await message.answer_audio(BufferedInputFile(output, filename="alter-audio.mp3"), caption=answer)
+            append_session_message(session, "user", text)
+            append_session_message(session, "assistant", answer)
+            await db_session.commit()
+            return
+        append_session_message(session, "user", text, media={"media_type": "audio/ogg", "file_id": message.voice.file_id})
         # Расшифровка используется только внутри ALTER и не отправляется пользователю.
         await message.bot.send_chat_action(message.chat.id, "typing")
         audio_plan = await plan_audio_request(text)
@@ -947,6 +971,25 @@ async def cmd_weather(message: types.Message):
     city = message.text.partition(" ")[2].strip() or "Москва"
     result = await get_weather(city)
     await message.answer(result or "Не удалось получить погоду. Попробуй указать город.")
+
+
+@router.message(lambda message: message.text and detect_audio_action(message.text) == "effect")
+async def handle_sound_effect_text(message: types.Message, db_session: AsyncSession):
+    """Create a sound from an ordinary natural-language chat message."""
+    user = await get_or_create_user(message, db_session)
+    redis = create_redis()
+    try:
+        if not await charge_user_id_credits(redis, user.id, 20, async_session):
+            await message.answer("Месячный лимит аудио исчерпан.")
+            return
+    finally:
+        await close_redis(redis)
+    try:
+        _, output = await process_audio_action(message.text, b"")
+        await message.answer_audio(BufferedInputFile(output, filename="alter-sound.mp3"), caption="Готово — создал звуковой эффект.")
+    except Exception:
+        logging.exception("Sound effect text request failed")
+        await message.answer("Не удалось создать звук сейчас. Проверь баланс ElevenLabs и попробуй ещё раз.")
 
 
 @router.message()

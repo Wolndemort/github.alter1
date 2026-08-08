@@ -459,6 +459,16 @@ async def generate_reply(messages, memory=None, search_results=None):
         )
         if memory.get("current_location"):
             system += "\nCURRENT DEVICE LOCATION (permission granted): " + json.dumps(memory["current_location"], ensure_ascii=False) + ". If the user asks where they are, answer from this location instead of claiming you have no access."
+        system += (
+            "\nCAPABILITY INVENTORY: ALTER can use voice replies with a premium ElevenLabs voice, "
+            "speech transcription, image/video generation, photo/video analysis, web search, YouTube search and audio "
+            "delivery, reminders, memory, push notifications and consented location context. ElevenLabs permissions "
+            "for sound effects and audio isolation are available through the audio attachment workflow: the user can "
+            "ask to create a sound, clean a recording, or mix an effect into a voice message. Music, dubbing and "
+            "voice generation are not exposed as natural-language workflows yet. Never claim an action is complete "
+            "unless the corresponding tool/API actually succeeded. "
+            "If the user asks how to use a capability, explain the exact natural-language request they can send."
+        )
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         if len(raw_reply) > 3000 or has_internal_leak(raw_reply):

@@ -353,13 +353,16 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try {
       const blob = await api.voiceReply(token, text);
       const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
-      const base64 = dataUrl.split(",", 2)[1];
-      if (!base64 || !FileSystem.cacheDirectory) throw new Error("Аудиофайл пустой");
-      const uri = `${FileSystem.cacheDirectory}alter-reply-${Date.now()}.wav`;
-      await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-      loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) { setPlayingVoiceId(null); loaded.sound.unloadAsync(); } });
+      await playAudioBase64(dataUrl.split(",", 2)[1], "wav", id);
     } catch (err) { setPlayingVoiceId(null); setMenuError(err instanceof Error ? err.message : "Не удалось озвучить ответ"); }
+  };
+  const playAudioBase64 = async (base64: string, extension = "mp3", id?: string) => {
+    if (!base64 || !FileSystem.cacheDirectory) throw new Error("Аудиофайл пустой");
+    setPlayingVoiceId(id || "audio-action");
+    const uri = `${FileSystem.cacheDirectory}alter-audio-${Date.now()}.${extension}`;
+    await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+    const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+    loaded.sound.setOnPlaybackStatusUpdate((status) => { if ("didJustFinish" in status && status.didJustFinish) { setPlayingVoiceId(null); loaded.sound.unloadAsync(); } });
   };
   const send = async () => {
     const text = message.trim(); if ((!text && !attachment) || busy) return;
@@ -367,7 +370,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const userMessageId = `${Date.now()}u`;
     autoScrollAfterUpdate.current = true;
     Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? " " : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
     catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -536,7 +539,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={async () => { const next = !voiceReplies; setVoiceReplies(next); setVoiceMenuOpen(next); try { await api.updateSettings(token, { voice_replies: next }); } catch (err) { setVoiceReplies(!next); setVoiceMenuOpen(false); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Голосовые ответы</Text><Text style={premiumStyles.menuActionArrow}>{voiceReplies ? "✓" : "○"}</Text></Pressable>
-        {voiceReplies && voiceMenuOpen ? <View style={premiumStyles.submenu}><Pressable style={premiumStyles.submenuAction} onPress={async () => { const next = !autoVoiceReplies; setAutoVoiceReplies(next); try { await api.updateSettings(token, { voice_auto_replies: next }); } catch (err) { setAutoVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Озвучивать автоматически</Text><Text style={premiumStyles.menuActionArrow}>{autoVoiceReplies ? "✓" : "○"}</Text></Pressable><Pressable style={premiumStyles.submenuAction} onPress={async () => { const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"]; const next = voices[(voices.indexOf(ttsVoice) + 1) % voices.length]; const preview = "Привет, я ALTER, твой персональный ассистент."; setTtsVoice(next); try { await api.updateSettings(token, { tts_voice: next }); await playVoiceReply(preview, "voice-preview"); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось выбрать голос"); } }}><Text style={premiumStyles.menuActionText}>Голос · {ttsVoice}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable></View> : null}
+        {voiceReplies && voiceMenuOpen ? <View style={premiumStyles.submenu}><Pressable style={premiumStyles.submenuAction} onPress={async () => { const next = !autoVoiceReplies; setAutoVoiceReplies(next); try { await api.updateSettings(token, { voice_auto_replies: next }); } catch (err) { setAutoVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Озвучивать автоматически</Text><Text style={premiumStyles.menuActionArrow}>{autoVoiceReplies ? "✓" : "○"}</Text></Pressable><Pressable style={premiumStyles.submenuAction} onPress={async () => { const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"]; const next = voices[(voices.indexOf(ttsVoice) + 1) % voices.length]; const preview = "Привет, я ALTER, твой персональный ассистент."; setTtsVoice(next); try { await api.updateSettings(token, { tts_voice: next }); await playVoiceReply(preview, "voice-preview"); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось выбрать голос"); } }}><Text style={premiumStyles.menuActionText}>Голос · {ttsVoice === "elevenlabs" ? "ElevenLabs Premium" : ttsVoice}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable></View> : null}
         </View> : null}
         <Text style={premiumStyles.version}>ALTER · 0.1.0</Text><Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
         </ScrollView>

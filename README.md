@@ -18,7 +18,7 @@ Mobile and Telegram share the same session rule: starting a new chat closes the 
 
 The mobile profile uses collapsible groups (profile, connections, tools, application). Email is masked and revealed only on tap. Voice replies and automatic playback are independent settings. Assistant answers expose copy, manual playback, and feedback actions.
 
-Monthly usage is stored in Redis and shared by API and Telegram. Current costs are: text 1 credit, voice 5, media analysis 20, media generation 40. `/api/v1/usage` returns used, limit, and remaining credits. Plans are quota-based; unlimited external-provider operations are not promised.
+Monthly usage is stored in Redis and shared by API and Telegram. Current costs are: text 1 credit, voice 5, media analysis 20, media generation 40, and ElevenLabs audio actions 20. `/api/v1/usage` returns used, limit, and remaining credits. Plans are quota-based; unlimited external-provider operations are not promised. Audio actions are requested naturally: “создай звук дождя”, or attach a voice and say “наложи звук дождя на моё голосовое” / “почисти запись от шума”.
 
 Parity checks: `/new_session` and the mobile New Chat action persist summaries; `/clear_memory` removes only durable memory; Telegram media actions restore the latest media from the session, so Improve Photo does not depend on the reply message containing a photo.
 

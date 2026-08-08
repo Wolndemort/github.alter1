@@ -19,6 +19,8 @@ class MediaChatResult:
     reply: str
     session_id: int
     transcript: str | None = None
+    audio: bytes | None = None
+    audio_filename: str | None = None
 
 
 def validate_media(content_type: str, data: bytes) -> str:
@@ -45,7 +47,7 @@ async def _active_session(db: AsyncSession, user_id: int) -> Session:
     return session
 
 
-async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, data: bytes) -> MediaChatResult:
+async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, data: bytes, filename: str = "audio.m4a") -> MediaChatResult:
     kind = validate_media(content_type, data)
     user = await db.get(User, user_id)
     if user is None:
@@ -53,6 +55,14 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     session = await _active_session(db, user_id)
     prompt = validate_message(prompt or "Проанализируй это вложение")
     if kind == "audio":
+        from utils.audio_actions import process_audio_action
+        action_result = await process_audio_action(prompt, data, filename)
+        if action_result:
+            answer, audio = action_result
+            _append(session, "user", prompt)
+            _append(session, "assistant", answer)
+            await db.commit()
+            return MediaChatResult(reply=answer, session_id=session.id, audio=audio, audio_filename="alter-audio.mp3")
         transcript = await transcribe_voice(data)
         if not transcript:
             raise ValueError("voice message could not be transcribed")
