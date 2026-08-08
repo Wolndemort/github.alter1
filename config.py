@@ -43,6 +43,9 @@ class Setting(BaseSettings):
     FIRECRAWL_API_KEY: SecretStr | None = None
     # Number of Firecrawl results returned per search, not a monthly quota.
     FIRECRAWL_SEARCH_LIMIT: int = 10
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: SecretStr | None = None
+    GOOGLE_REDIRECT_URI: str = "https://api.alterai.ru/api/v1/calendar/oauth/callback"
     TRANSCRIPTION_MODEL: str = "openai/whisper-1"
     TTS_MODEL: str = "openai/gpt-audio-mini"
     TTS_VOICE: str = "alloy"

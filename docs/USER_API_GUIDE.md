@@ -630,3 +630,28 @@ Tavily выполняет углублённый поиск, Firecrawl допо�
 - owner всё равно использует общий Firecrawl/Tavily-ключ и его внешнюю квоту.
 
 Для усиленного поиска ALTER одновременно обращается к Tavily и Firecrawl, объединяет результаты, убирает дубли и продолжает работу при отказе одного источника.
+## Google Calendar
+
+ALTER может подключить личный Google Calendar через OAuth. В Google Cloud нужно создать OAuth Client типа `Web application` и добавить redirect URI:
+
+```text
+https://api.alterai.ru/api/v1/calendar/oauth/callback
+```
+
+В основной `.env` добавляются значения из скачанного JSON-файла Google:
+
+```env
+GOOGLE_CLIENT_ID=вставь_client_id
+GOOGLE_CLIENT_SECRET=вставь_client_secret
+GOOGLE_REDIRECT_URI=https://api.alterai.ru/api/v1/calendar/oauth/callback
+```
+
+Пользовательские команды Telegram:
+
+```text
+/calendar_connect — получить ссылку и подключить Google Calendar
+/calendar — показать ближайшие события
+/calendar_add 2026-08-20 10:00 2026-08-20 11:00 встреча — создать событие
+```
+
+В мобильном приложении используется тот же backend: `GET /api/v1/calendar/connect` возвращает OAuth-ссылку, после подключения доступны `GET /api/v1/calendar/status`, `GET /api/v1/calendar/events`, `POST /api/v1/calendar/events` и `DELETE /api/v1/calendar/events/{event_id}`. OAuth подключается отдельно каждым пользователем; ALTER получает только выбранные права Calendar и не видит пароль Google.

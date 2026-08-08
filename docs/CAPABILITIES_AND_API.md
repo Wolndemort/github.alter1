@@ -84,3 +84,8 @@ FIRECRAWL_SEARCH_LIMIT=10
 ```
 
 `FIRECRAWL_SEARCH_LIMIT` — число результатов на один запрос, а не месячная квота. Внешняя квота Firecrawl принадлежит API-ключу и действует также для owner. Owner получает бесплатный доступ только в рамках внутренних кредитов ALTER; внешние ограничения провайдера не обходятся.
+## Google Calendar
+
+Подключение выполняется через OAuth Google. Для backend используется redirect URI `https://api.alterai.ru/api/v1/calendar/oauth/callback`. Доступные маршруты: `/api/v1/calendar/connect`, `/api/v1/calendar/status`, `/api/v1/calendar/calendars`, `/api/v1/calendar/events` и `/api/v1/calendar/oauth/callback`.
+
+В Telegram: `/calendar_connect`, `/calendar`, `/calendar_add YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM название`. После OAuth те же действия доступны mobile через общий API.

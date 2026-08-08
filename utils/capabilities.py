@@ -46,7 +46,7 @@ CAPABILITIES_PROMPT = (
     + "\nНе обещай Music Generation, Dubbing или другие функции, которых нет в этом списке."
 )
 
-CAPABILITY_KNOWLEDGE += "\nЛимит 10 — это число результатов одного поиска, не месячная квота. Owner не тратит внутренние кредиты ALTER, но внешние лимиты Firecrawl и Tavily действуют для всех.\n"
+CAPABILITY_KNOWLEDGE += "\nЛимит 10 — это число результатов одного поиска, не месячная квота. Owner не тратит внутренние кредиты ALTER, но внешние лимиты Firecrawl и Tavily действуют для всех.\nGoogle Calendar: подключение через /calendar_connect, просмотр через /calendar, добавление через /calendar_add YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM название. В мобильном приложении используй кнопку/методы календаря после OAuth. Также понимай естественные запросы: «добавь встречу в календарь», «что у меня сегодня в календаре», «созвонись со мной завтра в 10».\n"
 CAPABILITIES_PROMPT += "\n" + CAPABILITY_KNOWLEDGE
 
 _CAPABILITY_PATTERNS = (

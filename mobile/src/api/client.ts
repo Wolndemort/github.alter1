@@ -16,6 +16,7 @@ export type SubscriptionResponse = { active: boolean; plan: string; plans: { id:
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 export type YouTubeResult = { title: string; url: string; channel?: string; thumbnail?: string };
+export type CalendarEvent = { id?: string; summary: string; description?: string; location?: string; start: Record<string, string>; end: Record<string, string>; htmlLink?: string };
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -194,6 +195,18 @@ export class AlterApi {
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
   createReminder(token: string, text: string, remindAt: string) { return this.request<Reminder>("/api/v1/reminders", { method: "POST", body: JSON.stringify({ text, remind_at: remindAt }) }, token); }
   deleteReminder(token: string, id: number) { return this.request<{ ok: boolean }>(`/api/v1/reminders/${id}`, { method: "DELETE" }, token); }
+  calendarConnect(token: string) { return this.request<{ authorization_url: string }>("/api/v1/calendar/connect", {}, token); }
+  calendarStatus(token: string) { return this.request<{ configured: boolean; connected: boolean }>("/api/v1/calendar/status", {}, token); }
+  calendarEvents(token: string, params: { calendar_id?: string; time_min?: string; time_max?: string } = {}) {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return this.request<{ events: CalendarEvent[] }>(`/api/v1/calendar/events${query ? `?${query}` : ""}`, {}, token);
+  }
+  createCalendarEvent(token: string, event: CalendarEvent, calendarId = "primary") {
+    return this.request<CalendarEvent>("/api/v1/calendar/events", { method: "POST", body: JSON.stringify({ calendar_id: calendarId, event }) }, token);
+  }
+  deleteCalendarEvent(token: string, eventId: string, calendarId = "primary") {
+    return this.request<{ ok: boolean }>(`/api/v1/calendar/events/${encodeURIComponent(eventId)}?calendar_id=${encodeURIComponent(calendarId)}`, { method: "DELETE" }, token);
+  }
   async youtubeAudio(token: string, url: string) {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/youtube/audio`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
     if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Request failed");

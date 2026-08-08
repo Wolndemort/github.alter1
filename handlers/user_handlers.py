@@ -33,6 +33,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
+from services import google_calendar
 from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
 from utils.quota import charge_user_id_credits
 from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
@@ -1030,6 +1031,52 @@ async def cmd_weather(message: types.Message):
     city = message.text.partition(" ")[2].strip() or "Москва"
     result = await get_weather(city)
     await message.answer(result or "Не удалось получить погоду. Попробуй указать город.")
+
+
+@router.message(Command("calendar_connect"))
+async def cmd_calendar_connect(message: types.Message, db_session: AsyncSession):
+    if not google_calendar.configured():
+        await message.answer("Google Calendar пока не настроен на сервере.")
+        return
+    user = await get_or_create_user(message, db_session)
+    try:
+        await message.answer("Открой ссылку и разреши ALTER доступ к Google Calendar:\n\n" + google_calendar.authorization_url(user.id))
+    except Exception:
+        logging.exception("Calendar OAuth URL failed")
+        await message.answer("Не удалось подготовить подключение Google Calendar.")
+
+
+@router.message(Command("calendar"))
+async def cmd_calendar(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
+    try:
+        events = await google_calendar.list_events(user)
+    except Exception:
+        await message.answer("Сначала подключи календарь командой /calendar_connect.")
+        return
+    if not events:
+        await message.answer("На ближайшее время событий нет.")
+        return
+    lines = ["Ближайшие события:"]
+    for item in events[:10]:
+        start = item.get("start", {}).get("dateTime") or item.get("start", {}).get("date", "")
+        lines.append(f"• {start} — {item.get('summary', 'Без названия')}")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("calendar_add"))
+async def cmd_calendar_add(message: types.Message, command: CommandObject, db_session: AsyncSession):
+    parts = (command.args or "").split(maxsplit=4)
+    if len(parts) < 5:
+        await message.answer("Формат: /calendar_add 2026-08-20 10:00 2026-08-20 11:00 название")
+        return
+    user = await get_or_create_user(message, db_session)
+    event = {"summary": parts[4], "start": {"dateTime": f"{parts[0]}T{parts[1]}:00+03:00"}, "end": {"dateTime": f"{parts[2]}T{parts[3]}:00+03:00"}}
+    try:
+        created = await google_calendar.create_event(user, event)
+        await message.answer(f"Событие добавлено: {created.get('summary', parts[4])}")
+    except Exception:
+        await message.answer("Не удалось добавить событие. Проверь подключение через /calendar_connect.")
 
 
 @router.message(lambda message: message.text and detect_audio_action(message.text) == "effect")
