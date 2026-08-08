@@ -179,6 +179,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
   const [memoryVisible, setMemoryVisible] = useState(false);
   const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryError, setMemoryError] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
   const [permissionOfferVisible, setPermissionOfferVisible] = useState(true);
   const [permissionBusy, setPermissionBusy] = useState(false);
@@ -330,9 +331,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } },
   ]);
   const openMemory = async () => {
-    setMemoryVisible(true); setMemoryLoading(true); setMenuVisible(false);
+    setMemoryVisible(true); setMemoryLoading(true); setMemoryError(""); setMenuVisible(false);
     try { setMemoryData(await api.memory(token)); }
-    catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить память"); }
+    catch (err) { setMemoryError(err instanceof Error ? err.message : "Не удалось загрузить память"); }
     finally { setMemoryLoading(false); }
   };
   const pickMediaLibrary = async () => {
@@ -428,7 +429,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={memoryVisible} animationType="slide" onRequestClose={() => setMemoryVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}>
       <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Button title="Закрыть" onPress={() => setMemoryVisible(false)} /></View>
-      {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryEntries.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <FlatList data={memoryEntries} keyExtractor={([key]) => key} contentContainerStyle={styles.memoryList} renderItem={({ item: [key, value] }) => <View style={styles.memoryRow}><Text style={styles.memoryKey}>{key.replace(/_/g, " ")}</Text><Text style={styles.memoryValue}>{Array.isArray(value) ? value.join("\n") : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}</Text></View>} />}
+      {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memoryEntries.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <FlatList data={memoryEntries} keyExtractor={([key]) => key} contentContainerStyle={styles.memoryList} renderItem={({ item: [key, value] }) => <View style={styles.memoryRow}><Text style={styles.memoryKey}>{key.replace(/_/g, " ")}</Text><Text style={styles.memoryValue}>{Array.isArray(value) ? value.join("\n") : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}</Text></View>} />}
     </SafeAreaView>
   </Modal>
   <StatusBar style="light" /></SafeAreaView>;

@@ -79,13 +79,28 @@ async def charge_credits(redis: Redis, user_id: int, cost: int, limit: int) -> b
     """Atomically reserve monthly AI credits; refunds the reservation on overflow."""
     key = _credits_key(user_id)
     try:
-        count = await redis.incrby(key, max(1, int(cost)))
-    except RedisError:
+        amount = max(1, int(cost))
+        incrby = getattr(redis, "incrby", None)
+        if callable(incrby):
+            count = await incrby(key, amount)
+        else:
+            # Some Redis-compatible clients and lightweight test doubles expose
+            # only INCR/DECR. Keep billing working with both interfaces.
+            count = 0
+            for _ in range(amount):
+                count = await redis.incr(key)
+    except (RedisError, AttributeError):
         return True
     if count == cost:
         await redis.expire(key, 35 * 86400)
     if count > limit:
-        await redis.decrby(key, max(1, int(cost)))
+        amount = max(1, int(cost))
+        decrby = getattr(redis, "decrby", None)
+        if callable(decrby):
+            await decrby(key, amount)
+        else:
+            for _ in range(amount):
+                await redis.decr(key)
         return False
     return True
 
