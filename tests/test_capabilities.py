@@ -15,6 +15,14 @@ def test_quota_and_usage_questions_are_capability_requests():
 
 def test_inventory_does_not_advertise_unavailable_audio_products_as_available():
     assert is_capabilities_request("может ли он наложить шум дождя на голосовое?")
+    for prompt in (
+        "умеет ли он искать актуальные новости?",
+        "может ли он добавить встречу в календарь?",
+        "умеет ли ALTER запоминать мои предпочтения?",
+        "можно ли создать видео?",
+        "умеет ли он присылать уведомления?",
+    ):
+        assert is_capabilities_request(prompt), prompt
     reply = capabilities_reply()
     assert "звук дождя" in reply
     assert "Dubbing сейчас не подключены" in reply

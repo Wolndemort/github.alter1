@@ -72,6 +72,16 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
 
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
+    if voice == "elevenlabs" and not (
+        config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID
+    ):
+        logging.error(
+            "ElevenLabs voice selected but configuration is incomplete: enabled=%s key=%s voice_id=%s",
+            config.ELEVENLABS_ENABLED,
+            bool(config.ELEVENLABS_API_KEY),
+            bool(config.ELEVENLABS_VOICE_ID),
+        )
+        return b""
     # The provider is a user-selectable voice option.  Do not silently use
     # ElevenLabs for every voice whenever its global credentials are present;
     # otherwise switching between OpenRouter voices and Premium sounds the
@@ -94,7 +104,8 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
                 increment("voice.tts.elevenlabs.success")
                 return result
         except Exception:
-            logging.exception("ElevenLabs speech synthesis failed; using OpenRouter fallback")
+            logging.exception("ElevenLabs speech synthesis failed for explicitly selected Premium voice")
+            return b""
     try:
         provider_voice = config.TTS_VOICE if voice == "elevenlabs" else (voice or config.TTS_VOICE)
         # Make the brand pronunciation unambiguous for Russian speech models:
