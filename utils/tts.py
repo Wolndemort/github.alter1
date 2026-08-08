@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+import re
 import tempfile
 import wave
 from io import BytesIO
@@ -71,13 +72,16 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
     """Generate OGG/Opus via OpenRouter's documented audio chat response."""
     try:
+        # Make the brand pronunciation unambiguous for Russian speech models:
+        # ALTER is the assistant's name, pronounced "А́льтер".
+        spoken_text = re.sub(r"\bALTER\b", "А́льтер", text, flags=re.IGNORECASE)
         response = await client.chat.completions.create(
             model=config.TTS_MODEL,
             modalities=["text", "audio"],
             audio={"voice": voice or config.TTS_VOICE, "format": "pcm16"},
             messages=[
-                {"role": "system", "content": "Read the user's text exactly as written. Do not summarize, paraphrase, add, remove, or reinterpret any words."},
-                {"role": "user", "content": text[:config.TTS_MAX_CHARS]},
+                {"role": "system", "content": "Read the user's text exactly as written. ALTER is the assistant's name and must be pronounced in Russian as А́льтер. Do not summarize, paraphrase, add, remove, or reinterpret any words."},
+                {"role": "user", "content": spoken_text[:config.TTS_MAX_CHARS]},
             ],
             # Keep voice replies understandable without allowing huge audio output.
             max_tokens=config.TTS_MAX_TOKENS,
