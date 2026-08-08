@@ -27,6 +27,7 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         issues.append("too_many_questions")
     leaked_markers = ("tool_calls", '"status":', "system prompt", "developer message", "chain of thought")
     reasoning_phrases = (
+        "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",
         "я должен ответить", "нужно ответить пользователю", "следует ответить",
         "внутреннее рассуждение", "предыдущий диалог", "инструмент не нужен",
         "пользователь хочет", "пользователь просит", "сначала нужно понять",
