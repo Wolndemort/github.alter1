@@ -91,6 +91,8 @@ class FakeClient:
 
 @pytest.fixture
 def configured_yookassa(monkeypatch):
+    monkeypatch.setattr(config, "SUBSCRIPTION_PRICE_RUB", "990.00")
+    monkeypatch.setattr(config, "EGO_PRICE_RUB", "2990.00")
     monkeypatch.setattr(config, "YUKASSA_SHOP_ID", "shop-1")
     monkeypatch.setattr(config, "YUKASSA_SECRET_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
     monkeypatch.setattr(config, "YUKASSA_RECEIPT_EMAIL", None)
@@ -143,11 +145,11 @@ def test_create_payment_removes_local_payment_when_provider_rejects(configured_y
 
 def test_check_and_activate_verifies_provider_and_saves_card(configured_yookassa):
     user = User(id=7, first_name="Test", memory={}, tech_stack={})
-    payment = Payment(user_id=7, provider_payment_id="pay-1", idempotence_key="key-1", amount_rub="490.00", status="pending")
+    payment = Payment(user_id=7, provider_payment_id="pay-1", idempotence_key="key-1", amount_rub="990.00", status="pending")
     session = Session(payment=payment, user=user)
     FakeClient.response = FakeResponse(200, {
         "status": "succeeded", "paid": True,
-        "amount": {"value": "490.00", "currency": "RUB"},
+        "amount": {"value": "990.00", "currency": "RUB"},
         "metadata": {"payment_key": "key-1", "user_id": "7"},
         "payment_method": {"id": "pm-1"},
     })
@@ -161,11 +163,11 @@ def test_check_and_activate_verifies_provider_and_saves_card(configured_yookassa
 @pytest.mark.parametrize("payload", [
     {"status": "pending", "paid": False},
     {"status": "succeeded", "paid": True, "amount": {"value": "1.00", "currency": "RUB"}},
-    {"status": "succeeded", "paid": True, "amount": {"value": "490.00", "currency": "RUB"}, "metadata": {"payment_key": "other", "user_id": "7"}},
+    {"status": "succeeded", "paid": True, "amount": {"value": "990.00", "currency": "RUB"}, "metadata": {"payment_key": "other", "user_id": "7"}},
 ])
 def test_check_and_activate_rejects_unverified_result(configured_yookassa, payload):
     user = User(id=7, first_name="Test", memory={}, tech_stack={})
-    payment = Payment(user_id=7, provider_payment_id="pay-1", idempotence_key="key-1", amount_rub="490.00", status="pending")
+    payment = Payment(user_id=7, provider_payment_id="pay-1", idempotence_key="key-1", amount_rub="990.00", status="pending")
     session = Session(payment=payment, user=user)
     FakeClient.response = FakeResponse(200, payload)
     assert run(check_and_activate(session, "key-1")) is False
@@ -221,7 +223,7 @@ def test_recurring_does_not_charge_same_idempotence_key_twice(configured_yookass
     user.payment_method_id = "pm-1"
     user.auto_renew = True
     user.next_charge_at = datetime.now(timezone.utc)
-    existing = Payment(user_id=7, idempotence_key=f"alter-renew-7-{user.next_charge_at.date().isoformat()}", amount_rub="490.00", status="succeeded")
+    existing = Payment(user_id=7, idempotence_key=f"alter-renew-7-{user.next_charge_at.date().isoformat()}", amount_rub="990.00", status="succeeded")
     session = Session(payment=existing, user=user)
     assert run(charge_recurring_payment(session, user)) == "already_paid"
     assert not FakeClient.requests
