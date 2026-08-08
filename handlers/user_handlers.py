@@ -897,7 +897,7 @@ async def cmd_remind(message: types.Message, command: CommandObject, db_session:
 @router.message(Command("reminders"))
 async def cmd_reminders(message: types.Message, db_session: AsyncSession):
     result = await db_session.execute(select(Reminder).where(
-        Reminder.user_id == message.from_user.id,
+        Reminder.user_id == user.id,
         Reminder.is_sent.is_(False),
     ).order_by(Reminder.remind_at))
     reminders = result.scalars().all()
@@ -918,7 +918,7 @@ async def cmd_cancel_reminder(message: types.Message, command: CommandObject, db
         await message.answer("Формат: /cancel_reminder ID")
         return
     result = await db_session.execute(select(Reminder).where(
-        Reminder.id == reminder_id, Reminder.user_id == message.from_user.id,
+        Reminder.id == reminder_id, Reminder.user_id == user.id,
         Reminder.is_sent.is_(False),
     ))
     reminder = result.scalar_one_or_none()
@@ -1013,7 +1013,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     user = await get_or_create_user(message, db_session)
 
     stmt = select(Session).where(
-        Session.user_id == message.from_user.id,
+        Session.user_id == user.id,
         Session.is_processed.is_(False),
     ).order_by(Session.started_at.desc())
 
@@ -1021,7 +1021,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     session = result.scalar_one_or_none()
 
     if not session:
-        session = Session(user_id=message.from_user.id, raw_messages=[])
+        session = Session(user_id=user.id, raw_messages=[])
         db_session.add(session)
         await db_session.flush()
 
