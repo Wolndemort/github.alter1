@@ -149,7 +149,7 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
     pulseLoop.start(); lineLoop.start(); driftLoop.start();
     return () => { pulseLoop.stop(); lineLoop.stop(); driftLoop.stop(); };
   }, [drift, line, pulse]);
-  const capabilities = "память · память фактов · память целей · забыть факт · новый разговор · текстовый чат · голосовой чат · Speech-to-Text · Speech-to-Speech · Text-to-Speech · Voice Generation · голоса · модели · звуковые эффекты · микс голоса и фона · Fal text-to-image · Fal text-to-video · редактирование фото · image-to-video · анализ фото · анализ видео · YouTube · web-поиск · погода · напоминания · check-in · push · подписка · owner access";
+  const capabilities = "память · память фактов · память целей · забыть факт · новый разговор · текстовый чат · голосовой чат · Speech-to-Text · Speech-to-Speech · Text-to-Speech · Voice Generation · голоса · модели · звуковые эффекты · микс голоса и фона · Fal text-to-image · Fal text-to-video · редактирование фото · image-to-video · анализ фото · анализ видео · YouTube · Tavily · Firecrawl · глубокий web-поиск · источники · погода · напоминания · check-in · push · подписка · owner access";
   return <Animated.View pointerEvents="none" style={[idleStyles.cleanOverlay, { opacity }]}>
     <Animated.Text style={[styles.introLogo, idleStyles.cleanLogo, { opacity: pulse }]}>ALTER</Animated.Text>
     <Animated.View style={[styles.introLine, idleStyles.cleanLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} />

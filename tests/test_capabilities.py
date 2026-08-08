@@ -8,6 +8,11 @@ def test_capabilities_request_is_detected_in_text_and_voice_transcript():
     assert not is_capabilities_request("Какая погода в Москве?")
 
 
+def test_quota_and_usage_questions_are_capability_requests():
+    assert is_capabilities_request("сколько кредитов стоит поиск?")
+    assert is_capabilities_request("как пользоваться поиском?")
+
+
 def test_inventory_does_not_advertise_unavailable_audio_products_as_available():
     reply = capabilities_reply()
     assert "звук дождя" in reply
