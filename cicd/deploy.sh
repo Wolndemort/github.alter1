@@ -57,5 +57,12 @@ docker exec alter_bot python -c "import urllib.request; urllib.request.urlopen('
 if ! curl --fail --silent --show-error --max-time 15 https://api.alterai.ru/ready >/dev/null; then
   echo "WARNING: public /ready check failed; container readiness is healthy"
 fi
+
+# Every rebuild leaves the previous untagged image behind.  Remove only
+# dangling images and old build cache after the new containers are healthy;
+# running images, named images, volumes, and the database are not touched.
+docker image prune -f
+docker builder prune -f --filter "until=168h" || true
+
 docker compose ps
 trap - ERR
