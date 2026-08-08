@@ -39,6 +39,7 @@ POST /api/v1/auth/verify-email {"email":"...", "code":"123456"}
 POST /api/v1/auth/resend-verification {"email":"..."}
 POST /api/v1/auth/login      {"email":"...", "password":"..."}
 GET  /api/v1/auth/me         Authorization: Bearer <token>
+POST /api/v1/legal/accept   Authorization: Bearer <token>
 POST /api/v1/chat/messages   Authorization: Bearer <token>, {"message":"..."}
 POST /api/v1/chat/new        Authorization: Bearer <token>
 GET  /api/v1/chat/history    Authorization: Bearer <token>

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from config import config
 from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
+from datetime import datetime, timezone
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
@@ -58,7 +59,12 @@ async def register_route(request: web.Request) -> web.Response:
     payload = await _json(request)
     try:
         async with async_session() as session:
-            account = await register(session, str(payload.get("email", "")), str(payload.get("password", "")))
+            if not isinstance(payload.get("legal_accepted", False), bool):
+                raise web.HTTPBadRequest(text="legal_accepted must be boolean")
+            if payload.get("legal_accepted", False):
+                account = await register(session, str(payload.get("email", "")), str(payload.get("password", "")), True)
+            else:
+                account = await register(session, str(payload.get("email", "")), str(payload.get("password", "")))
             await session.commit()
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc))
@@ -117,6 +123,7 @@ async def account_route(request: web.Request) -> web.Response:
             "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
             "subscription_plan": (user.tech_stack or {}).get("subscription_plan", "personal"),
+            "legal_accepted": user.legal_accepted_at is not None,
         })
 
 
@@ -226,6 +233,18 @@ async def start_telegram_link_route(request: web.Request) -> web.Response:
     return web.json_response({"url": f"https://t.me/{await telegram_bot_username()}?start=link_{token}"})
 
 
+async def accept_legal_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        user.legal_accepted_at = user.legal_accepted_at or datetime.now(timezone.utc)
+        await session.commit()
+    return web.json_response({"ok": True, "legal_accepted": True})
+
+
 def _bearer(request: web.Request) -> int:
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
@@ -261,5 +280,6 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_delete("/api/v1/subscription/payment-method", remove_payment_method_route)
     app.router.add_post("/api/v1/subscription/create-payment", create_app_payment_route)
     app.router.add_post("/api/v1/telegram/link", start_telegram_link_route)
+    app.router.add_post("/api/v1/legal/accept", accept_legal_route)
     app.router.add_post("/api/v1/auth/login", login_route)
     app.router.add_get("/api/v1/auth/me", me_route)

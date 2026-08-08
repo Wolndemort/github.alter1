@@ -5,6 +5,12 @@ describe("AlterApi", () => {
     global.fetch = jest.fn();
   });
 
+  it("sends legal acceptance to the backend", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ ok: true, legal_accepted: true }) });
+    await new AlterApi("https://alter.example").acceptLegal("token");
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/legal/accept", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token" }) }));
+  });
+
   it("sends bearer token and JSON chat payload", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "ok", session_id: 3 }) });
     const result = await new AlterApi("https://alter.example/").sendMessage("token", "hello");

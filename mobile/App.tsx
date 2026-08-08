@@ -268,6 +268,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
   const [memoryVisible, setMemoryVisible] = useState(false);
   const [faqVisible, setFaqVisible] = useState(false);
+  const [legalVisible, setLegalVisible] = useState(false);
+  const [legalChecked, setLegalChecked] = useState(false);
+  const [legalBusy, setLegalBusy] = useState(false);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
   const [reminders, setReminders] = useState<{ id: number; text: string; remind_at: string }[]>([]);
@@ -314,11 +317,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       Animated.sequence([Animated.timing(idleShade, { toValue: 0.32, duration: 2200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }), Animated.timing(idleShade, { toValue: 0.68, duration: 2600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }), Animated.timing(idleShade, { toValue: 1, duration: 3600, easing: Easing.inOut(Easing.quad), useNativeDriver: true })]).start();
     }, 120000);
   }, [idleShade]);
-  const refreshAccount = () => { api.account(token).then(setAccount).catch(() => undefined); };
+  const showPermissionOfferIfNeeded = () => { AsyncStorage.getItem(`alter_permission_offer_seen_${token}`).then((value) => { if (value !== "1") setPermissionOfferVisible(true); }).catch(() => setPermissionOfferVisible(true)); };
+  const refreshAccount = () => { api.account(token).then((value) => { setAccount(value); if (value.legal_accepted) showPermissionOfferIfNeeded(); else setLegalVisible(true); }).catch(() => undefined); };
   useEffect(() => {
-    AsyncStorage.getItem(`alter_permission_offer_seen_${token}`).then((value) => {
-      if (value !== "1") setPermissionOfferVisible(true);
-    }).catch(() => setPermissionOfferVisible(true));
     refreshAccount();
     api.usage(token).then(setUsage).catch(() => undefined);
     api.settings(token).then(({ settings, checkins_enabled }) => {
@@ -452,6 +453,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       await requestLocation(false);
     } finally { await AsyncStorage.setItem(`alter_permission_offer_seen_${token}`, "1"); setPermissionBusy(false); setPermissionOfferVisible(false); }
   };
+  const acceptLegal = async () => {
+    if (!legalChecked || legalBusy) return;
+    setLegalBusy(true); setMenuError("");
+    try { await api.acceptLegal(token); setAccount((value) => value ? { ...value, legal_accepted: true } : value); setLegalVisible(false); showPermissionOfferIfNeeded(); }
+    catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось сохранить согласие"); }
+    finally { setLegalBusy(false); }
+  };
   const chooseLocationMode = () => Alert.alert("Геолокация", "Выбери, как ALTER может использовать местоположение.", [
     { text: "Только при использовании", onPress: () => requestLocation(false) },
     { text: "Всегда, если разрешит iPhone", onPress: () => requestLocation(true) },
@@ -538,7 +546,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
   </KeyboardAvoidingView>
   <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
-  <Modal visible={permissionOfferVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
+  <Modal visible={legalVisible} transparent animationType="fade" onRequestClose={() => undefined}>
+    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · ДО НАЧАЛА РАБОТЫ</Text><Text style={permissionStyles.title}>Документы и согласие</Text><Text style={permissionStyles.body}>Перед началом работы ознакомься с политикой конфиденциальности, публичной офертой и согласием на обработку данных. Без подтверждения ALTER не запрашивает push и геолокацию и не запускает рабочий чат.</Text><View style={{ gap: 8, marginBottom: 18 }}><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/privacy.html")}><Text style={linkStyles.link}>Политика конфиденциальности →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/consent.html")}><Text style={linkStyles.link}>Согласие на обработку данных →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/offer.html")}><Text style={linkStyles.link}>Публичная оферта →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/refund.html")}><Text style={linkStyles.link}>Оплата и возврат →</Text></Pressable></View><Pressable style={authStyles.legalRow} onPress={() => setLegalChecked((value) => !value)}><Text style={authStyles.check}>{legalChecked ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Я ознакомился с документами и согласен на обработку данных</Text></Pressable><Pressable style={[permissionStyles.primary, { opacity: legalChecked && !legalBusy ? 1 : 0.45, marginTop: 18 }]} onPress={acceptLegal} disabled={!legalChecked || legalBusy}><Text style={permissionStyles.primaryText}>{legalBusy ? "Сохраняем…" : "Принять и продолжить"}</Text></Pressable></View></View>
+  </Modal>
+  <Modal visible={permissionOfferVisible && !legalVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
   </Modal>
   <Modal visible={menuVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>

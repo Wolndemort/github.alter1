@@ -83,3 +83,13 @@ async def test_start_link_returns_deep_link(monkeypatch):
     monkeypatch.setattr(auth_routes, "telegram_bot_username", lambda: asyncio.sleep(0, result="alter_ai_bot"))
     response = await auth_routes.start_telegram_link_route(Request())
     assert "start=link_one-time" in response.text
+
+
+@pytest.mark.asyncio
+async def test_accept_legal_persists_timestamp(monkeypatch):
+    user = User(id=4, first_name="Adam", memory={}, tech_stack={})
+    monkeypatch.setattr(auth_routes, "async_session", lambda: Db(user))
+    monkeypatch.setattr(auth_routes, "_bearer", lambda request: 4)
+    response = await auth_routes.accept_legal_route(Request())
+    assert response.status == 200
+    assert user.legal_accepted_at is not None

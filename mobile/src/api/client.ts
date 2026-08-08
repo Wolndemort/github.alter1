@@ -8,7 +8,7 @@ export type ChatResponse = { reply: string; session_id: number; transcript?: str
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean;
 };
 export type MemorySection = { title: string; items: { label: string; value: string }[] };
 export type MemoryResponse = { sections: MemorySection[] };
@@ -61,7 +61,7 @@ export class AlterApi {
   register(email: string, password: string) {
     return this.request<AuthResponse>("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, legal_accepted: true }),
     });
   }
 
@@ -139,6 +139,7 @@ export class AlterApi {
   }
 
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
+  acceptLegal(token: string) { return this.request<{ ok: boolean; legal_accepted: boolean }>("/api/v1/legal/accept", { method: "POST" }, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }

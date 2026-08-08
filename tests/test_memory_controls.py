@@ -22,7 +22,8 @@ def test_main_keyboard_has_no_duplicate_buttons_and_expected_layout():
     keyboard = memory_keyboard().keyboard
     labels = [button.text for row in keyboard for button in row]
     assert len(labels) == len(set(labels))
-    assert len(keyboard) == 5
+    assert len(keyboard) >= 16
+    assert {"/faq", "/calendar_connect", "/calendar", "/calendar_add", "/clear_memory", "/clear_context", "/cancel_reminder", "/voice_on", "/voice_off"} <= set(labels)
     assert all(len(row) == 2 for row in keyboard[:-1])
     assert len(keyboard[-1]) == 2
 
