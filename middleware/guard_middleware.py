@@ -9,8 +9,11 @@ from redis.exceptions import RedisError
 from config import config
 from data.models import User
 from utils.redis_store import charge_request, allow_request, charge_credits
-from utils.billing import has_active_subscription, is_owner, credits_limit
+from utils.billing import has_active_subscription, has_owner_access, is_owner, credits_limit
 from services.account_linking import resolve_telegram_user
+from utils.audio_actions import detect_audio_action
+from utils.capabilities import is_capabilities_request
+from utils.generation_intent import generation_kind
 
 
 def _billing_exempt(event: TelegramObject) -> bool:
@@ -23,6 +26,14 @@ def _legal_exempt(event: TelegramObject) -> bool:
     text = getattr(event, "text", None) or ""
     command = text.split(maxsplit=1)[0].split("@", 1)[0].casefold() if text.startswith("/") else ""
     return command == "/start"
+
+
+def _credit_exempt(event: TelegramObject) -> bool:
+    """Heavy handlers charge their exact operation after inspecting media."""
+    if getattr(event, "voice", None) is not None or getattr(event, "photo", None) or getattr(event, "video", None):
+        return True
+    text = getattr(event, "text", None) or ""
+    return bool(is_capabilities_request(text) or generation_kind(text) or detect_audio_action(text))
 
 
 class GuardMiddleware(BaseMiddleware):
@@ -45,7 +56,9 @@ class GuardMiddleware(BaseMiddleware):
             except RedisError:
                 logging.exception("Redis spam check failed; allowing request")
                 data["spam_allowed"] = True
-            if data.get("db_session") is not None and not is_owner(user.id) and not _billing_exempt(event):
+            db_user = await resolve_telegram_user(data["db_session"], user.id) if data.get("db_session") is not None else None
+            owner_access = has_owner_access(user.id, getattr(data.get("db_user"), "email", None)) or has_owner_access(user.id, getattr(db_user, "email", None))
+            if data.get("db_session") is not None and not owner_access and not _billing_exempt(event):
                 answer = getattr(event, "answer", None)
                 if not data["spam_allowed"]:
                     if answer:
@@ -55,8 +68,7 @@ class GuardMiddleware(BaseMiddleware):
                     if answer:
                         await answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
                     return None
-                db_user = await resolve_telegram_user(data["db_session"], user.id)
-                data["credits_allowed"] = await charge_credits(self.redis, user.id, 1, credits_limit(db_user))
+                data["credits_allowed"] = True if _credit_exempt(event) else await charge_credits(self.redis, user.id, 1, credits_limit(db_user))
                 if not data["credits_allowed"]:
                     if answer:
                         await answer("Месячный лимит AI-запросов исчерпан. Лимит обновится в начале следующего месяца.")
@@ -69,7 +81,7 @@ class GuardMiddleware(BaseMiddleware):
                     if answer:
                         await answer("Сначала открой /start, ознакомься с документами и нажми «Принять и продолжить».")
                     return None
-            if db_session is not None and not is_owner(user.id):
+            if db_session is not None and not owner_access:
                 subscription_allowed = has_active_subscription(db_user)
                 data["subscription_allowed"] = subscription_allowed
                 if not subscription_allowed and not _billing_exempt(event):

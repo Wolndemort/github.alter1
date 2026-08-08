@@ -449,6 +449,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                 previous_buffer = await message.bot.download(previous["file_id"], destination=BytesIO())
                 action_source = previous_buffer.getvalue()
                 action_filename = "previous.ogg"
+        if detected_action and not await generation_allowed(user, 20):
+            await message.answer("Лимит кредитов для аудио исчерпан.")
+            return
         action_result = await process_audio_action(text, action_source, action_filename) if detected_action else None
         if action_result:
             answer, output = action_result
@@ -456,6 +459,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             append_session_message(session, "user", text)
             append_session_message(session, "assistant", answer)
             await db_session.commit()
+            return
+        if not await generation_allowed(user, 1):
+            await message.answer("Лимит кредитов исчерпан.")
             return
         append_session_message(session, "user", text, media={"media_type": "audio/ogg", "file_id": message.voice.file_id})
         # Расшифровка используется только внутри ALTER и не отправляется пользователю.
@@ -466,6 +472,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             if results:
                 downloaded = await download_audio(results[0]["url"])
                 if downloaded:
+                    if not await generation_allowed(user, config.YOUTUBE_AUDIO_CREDITS):
+                        await message.answer("Лимит кредитов YouTube-аудио исчерпан.")
+                        return
                     audio_file, audio_title = downloaded
                     try:
                         from aiogram.types import FSInputFile
@@ -538,6 +547,9 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                 transcript = await transcribe_voice(audio)
                 if transcript:
                     prompt += f"\n\nРасшифровка речи в видео:\n{transcript}"
+        if not await generation_allowed(user, 20):
+            await message.answer("Лимит кредитов для анализа медиа исчерпан.")
+            return
         await message.bot.send_chat_action(message.chat.id, "typing")
         # Media analysis also uses the semantic tool loop; no phrase matching.
         web_results = []
