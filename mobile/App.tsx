@@ -219,6 +219,8 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
 export function ChatScreen({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [message, setMessage] = useState("");
   const [items, setItems] = useState<ChatItem[]>([]);
+  const [archivedItems, setArchivedItems] = useState<ChatItem[]>([]);
+  const [historyVisible, setHistoryVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
@@ -295,6 +297,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         for (const role of ["user", "assistant"]) {
           current.filter((item) => item.role === role).slice(-3).forEach((item) => keep.add(item.id));
         }
+        const expired = current.filter((item) => item.createdAt && item.createdAt <= cutoff && !keep.has(item.id));
+        if (expired.length) setArchivedItems((old) => [...old, ...expired.filter((item) => !old.some((entry) => entry.id === item.id))]);
         const next = current.filter((item) => !item.createdAt || item.createdAt > cutoff || keep.has(item.id));
         if (next.length === current.length) return current;
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -467,7 +471,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const startNewChat = async () => { if (busy || newChatLoading) return; setNewChatPromptVisible(false); setNewChatLoading(true); try { await api.newSession(token); setItems([]); setMessage(""); setAttachment(null); setMenuVisible(false); resetIdle(); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось начать новый чат"); } finally { setNewChatLoading(false); } };
   const memorySections = memoryData?.sections || [];
   const maskedEmail = account?.email ? account.email.replace(/^(.{2}).*(@.*)$/, "$1•••$2") : "Почта не указана";
-  return <SafeAreaView style={[styles.container, { backgroundColor: "#000000" }]} onTouchStart={resetIdle}><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><IdleAlterScreen opacity={idleShade} /><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  return <SafeAreaView style={[styles.container, { backgroundColor: "#000000" }]} onTouchStart={resetIdle}><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><IdleAlterScreen opacity={idleShade} /><Pressable style={historyStyles.handle} onPress={() => setHistoryVisible(true)} accessibilityLabel="Открыть историю переписки"><Text style={historyStyles.arrow}>›</Text></Pressable><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}><Pressable style={premiumStyles.headerAction} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={premiumStyles.headerActionText}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><Pressable style={premiumStyles.refreshAction} onPress={() => setNewChatPromptVisible((value) => !value)} accessibilityLabel="Новый чат"><Text style={premiumStyles.refreshIcon}>↻</Text></Pressable></View>
     {newChatPromptVisible ? <View style={premiumStyles.newChatPrompt}><Text style={premiumStyles.newChatPromptText}>Начать новый чат?</Text><View style={premiumStyles.newChatActions}><Pressable onPress={() => setNewChatPromptVisible(false)} accessibilityLabel="Отменить новый чат"><Text style={premiumStyles.newChatAction}>×</Text></Pressable><Pressable onPress={startNewChat} accessibilityLabel="Подтвердить новый чат"><Text style={premiumStyles.newChatAction}>✓</Text></Pressable></View></View> : null}
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
@@ -477,6 +481,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
   </KeyboardAvoidingView>
+  <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
   <Modal visible={permissionOfferVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
   </Modal>
@@ -576,6 +581,7 @@ const styles = StyleSheet.create({
 (styles as Record<string, unknown>).aiBubble = { ...StyleSheet.flatten(styles.aiBubble), backgroundColor: "#000000", borderWidth: 0, borderColor: "transparent" };
 (styles as Record<string, unknown>).messages = { ...StyleSheet.flatten(styles.messages), padding: 10, gap: 3 };
 (styles as Record<string, unknown>).bubble = { ...StyleSheet.flatten(styles.bubble), padding: 8, maxWidth: "92%" };
+(styles as Record<string, unknown>).intro = { ...StyleSheet.flatten(styles.intro), backgroundColor: "#0b0b0b" };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
@@ -608,6 +614,11 @@ const idleStyles = StyleSheet.create({ shade: { ...StyleSheet.absoluteFillObject
 
 // The idle scene uses a soft matte black instead of absolute OLED black.
 (idleStyles as Record<string, unknown>).overlay = { ...StyleSheet.flatten(idleStyles.overlay), backgroundColor: "#0b0b0b" };
+(idleStyles as Record<string, unknown>).capabilityFade = { ...StyleSheet.flatten(idleStyles.capabilityFade), backgroundColor: "#0b0b0b" };
+const historyStyles = StyleSheet.create({ handle: { position: "absolute", left: 0, top: 92, zIndex: 12, width: 38, height: 68, borderTopRightRadius: 34, borderBottomRightRadius: 34, backgroundColor: "#000000", alignItems: "center", justifyContent: "center", shadowColor: "#ffffff", shadowOpacity: 0.22, shadowRadius: 8, elevation: 5 }, arrow: { color: "#ffffff", fontSize: 36, fontWeight: "300" }, backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "flex-start" }, panel: { width: "86%", height: "72%", marginTop: 92, backgroundColor: "#000000", padding: 22, paddingTop: 24, borderTopRightRadius: 18, borderBottomRightRadius: 18 }, panelClose: { color: "#ffffff", fontSize: 32, fontWeight: "300", paddingVertical: 2 }, title: { color: "#ffffff", fontSize: 24, fontWeight: "700", marginBottom: 18 }, empty: { color: "#ffffff", opacity: 0.6, fontSize: 14 } });
+(historyStyles as Record<string, unknown>).handle = { ...StyleSheet.flatten(historyStyles.handle), shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
+(historyStyles as Record<string, unknown>).panelClose = { ...StyleSheet.flatten(historyStyles.panelClose), position: "absolute", left: undefined, right: 0, top: 0, width: 72, height: 68, paddingHorizontal: 20, textAlign: "center" };
+(historyStyles as Record<string, unknown>).panel = { ...StyleSheet.flatten(historyStyles.panel), width: "91%", height: "78%" };
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "transparent" },
   sheet: { backgroundColor: "transparent", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 78 },
