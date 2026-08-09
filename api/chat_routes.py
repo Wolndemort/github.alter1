@@ -2,6 +2,8 @@
 
 import base64
 import json
+import logging
+import time
 
 from aiohttp import web
 from sqlalchemy import select
@@ -17,6 +19,7 @@ from utils.tts import synthesize_speech
 from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
 from utils.quota import charge_user_id_credits
+from services.media_jobs import cancel_job, get_job, history, submit_job
 from utils.audio_actions import detect_audio_action, process_audio_action
 from config import config
 
@@ -220,12 +223,15 @@ async def media_generate_route(request: web.Request) -> web.Response:
                 raise web.HTTPTooManyRequests(text="monthly media limit reached")
         finally:
             await close_redis(redis)
+        started_at = time.monotonic()
         try:
             if kind not in {"image", "video"}:
                 raise web.HTTPBadRequest(text="kind must be image or video")
             artifact = await (generate_video(prompt, source, options) if kind == "video" else generate_image(prompt, source, options))
         except MediaGenerationError as exc:
+            logging.warning("media generation failed user=%s kind=%s provider=%s elapsed_ms=%d error=%s", user_id, kind, config.MEDIA_PROVIDER, int((time.monotonic() - started_at) * 1000), str(exc)[:240])
             raise web.HTTPBadRequest(text=str(exc))
+        logging.info("media generation success user=%s kind=%s provider=%s model=%s bytes=%d elapsed_ms=%d cost=%d", user_id, kind, config.MEDIA_PROVIDER, (config.FAL_TEXT_VIDEO_MODEL if kind == "video" and source is None else config.FAL_VIDEO_MODEL if kind == "video" else config.FAL_TEXT_IMAGE_MODEL if source is None else config.FAL_IMAGE_MODEL), len(artifact.data), int((time.monotonic() - started_at) * 1000), cost)
     return web.json_response({
         "media_type": artifact.media_type,
         "filename": artifact.filename,
@@ -237,6 +243,45 @@ async def media_capabilities_route(request: web.Request) -> web.Response:
     """Return configured media models/options; never returns API keys."""
     _bearer(request)
     return web.json_response(fal_capabilities())
+
+
+async def media_job_create_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    kind = str(payload.get("kind") or "").lower()
+    prompt = str(payload.get("prompt") or "").strip()
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    if kind not in {"image", "video"} or not prompt:
+        raise web.HTTPBadRequest(text="kind and prompt are required")
+    cost = config.FAL_TEXT_VIDEO_CREDITS if kind == "video" else config.FAL_TEXT_IMAGE_CREDITS
+    redis = create_redis()
+    try:
+        if not await charge_user_id_credits(redis, user_id, cost, async_session):
+            raise web.HTTPTooManyRequests(text="monthly media limit reached")
+    finally:
+        await close_redis(redis)
+    job_id = await submit_job(user_id, kind, prompt, None, options)
+    return web.json_response({"job_id": job_id, "status": "queued", "progress": 0}, status=202)
+
+
+async def media_job_status_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    job = await get_job(request.match_info["job_id"])
+    if not job or job.get("user_id") != user_id:
+        raise web.HTTPNotFound(text="job not found")
+    return web.json_response(job)
+
+
+async def media_job_cancel_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not await cancel_job(request.match_info["job_id"], user_id):
+        raise web.HTTPNotFound(text="job not found")
+    return web.json_response({"ok": True, "status": "cancelled"})
+
+
+async def media_history_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    return web.json_response({"items": await history(user_id)})
 
 
 async def voice_reply_route(request: web.Request) -> web.Response:
@@ -276,4 +321,8 @@ def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
     app.router.add_get("/api/v1/media/capabilities", media_capabilities_route)
+    app.router.add_post("/api/v1/media/jobs", media_job_create_route)
+    app.router.add_get("/api/v1/media/jobs/{job_id}", media_job_status_route)
+    app.router.add_post("/api/v1/media/jobs/{job_id}/cancel", media_job_cancel_route)
+    app.router.add_get("/api/v1/media/history", media_history_route)
     app.router.add_post("/api/v1/voice/reply", voice_reply_route)

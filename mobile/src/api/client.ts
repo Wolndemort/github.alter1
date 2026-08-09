@@ -12,6 +12,7 @@ export type AccountResponse = {
 };
 export type MemorySection = { title: string; items: { label: string; value: string }[] };
 export type MemoryResponse = { sections: MemorySection[] };
+export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
@@ -137,6 +138,11 @@ export class AlterApi {
   mediaCapabilities(token: string) {
     return this.request<{ provider: string; models: Record<string, { id: string | null; mode: string; requires_source: boolean; options: Record<string, unknown> }> }>("/api/v1/media/capabilities", {}, token);
   }
+  createMediaJob(token: string, kind: "image" | "video", prompt: string, options: Record<string, unknown> = {}) {
+    return this.request<MediaJob>("/api/v1/media/jobs", { method: "POST", body: JSON.stringify({ kind, prompt, options }) }, token);
+  }
+  mediaJob(token: string, id: string) { return this.request<MediaJob>(`/api/v1/media/jobs/${encodeURIComponent(id)}`, {}, token); }
+  cancelMediaJob(token: string, id: string) { return this.request<{ ok: boolean; status: string }>(`/api/v1/media/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }, token); }
 
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   acceptLegal(token: string) { return this.request<{ ok: boolean; legal_accepted: boolean }>("/api/v1/legal/accept", { method: "POST" }, token); }

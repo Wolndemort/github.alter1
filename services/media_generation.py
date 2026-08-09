@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import logging
 
 from config import config
 
@@ -125,7 +126,15 @@ async def _fal_result(model: str, arguments: dict[str, Any]) -> dict[str, Any]:
     timeout = httpx.Timeout(config.MEDIA_GENERATION_TIMEOUT_SECONDS)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(f"{base}/{model}", headers=headers, json=arguments)
+            attempts = max(1, int(config.MEDIA_GENERATION_RETRY_ATTEMPTS))
+            response = None
+            for attempt in range(attempts):
+                response = await client.post(f"{base}/{model}", headers=headers, json=arguments)
+                if response.status_code not in {408, 425, 429, 500, 502, 503, 504} or attempt == attempts - 1:
+                    break
+                logging.warning("media provider temporary failure model=%s status=%s retry=%s", model, response.status_code, attempt + 1)
+                await asyncio.sleep(min(2 ** attempt, 4))
+            assert response is not None
             if response.status_code in {402, 403}:
                 raise MediaGenerationError("fal.ai отклонил запрос: проверь баланс и API-ключ.")
             if response.status_code >= 400:
@@ -164,7 +173,13 @@ async def _download_artifact(url: str, filename: str) -> MediaArtifact:
         async with httpx.AsyncClient(timeout=config.MEDIA_GENERATION_TIMEOUT_SECONDS) as client:
             response = await client.get(url)
             response.raise_for_status()
+            max_bytes = config.MEDIA_VIDEO_MAX_OUTPUT_BYTES if filename.endswith(".mp4") else config.MEDIA_MAX_OUTPUT_BYTES
+            if len(response.content) == 0 or len(response.content) > max_bytes:
+                raise MediaGenerationError("Провайдер вернул файл недопустимого размера.")
             media_type = response.headers.get("content-type", "image/png").split(";", 1)[0]
+            allowed = {"image/png", "image/jpeg", "image/webp", "video/mp4", "video/webm"}
+            if media_type not in allowed:
+                raise MediaGenerationError("Провайдер вернул неподдерживаемый формат файла.")
             return MediaArtifact(media_type, response.content, filename)
     except httpx.HTTPError as exc:
         raise MediaGenerationError("fal.ai вернул недоступный файл.") from exc

@@ -58,6 +58,20 @@ services:
       - web_network
     logging: *default-logging
 
+  media-worker:
+    build: .
+    container_name: alter_media_worker
+    restart: always
+    env_file:
+      - .env
+    command: python scripts/media-worker.py
+    depends_on:
+      redis:
+        condition: service_started
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+    logging: *default-logging
+
   migrations:
     build: .
     container_name: alter_migrations

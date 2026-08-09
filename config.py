@@ -101,6 +101,10 @@ class Setting(BaseSettings):
     MEDIA_VIDEO_API_URL: str | None = None
     MEDIA_VIDEO_MODEL: str | None = None
     MEDIA_GENERATION_TIMEOUT_SECONDS: int = 180
+    MEDIA_GENERATION_RETRY_ATTEMPTS: int = 2
+    MEDIA_MAX_OUTPUT_BYTES: int = 50 * 1024 * 1024
+    MEDIA_VIDEO_MAX_OUTPUT_BYTES: int = 100 * 1024 * 1024
+    MEDIA_JOB_TTL_SECONDS: int = 86400
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 20
