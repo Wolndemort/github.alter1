@@ -7,7 +7,7 @@
 | Возможность | Backend | Mobile | Telegram | Провайдер |
 |---|---|---|---|---|
 | Чат | POST /api/v1/chat/messages | Да | Да | OpenRouter |
-| Память | GET /api/v1/memory | Да | /memory и «запомни» | PostgreSQL/pgvector |
+| Память | GET /api/v1/memory, DELETE /api/v1/memory/{category}, DELETE /api/v1/memory | Да | /memory, /forget и /clear_memory | PostgreSQL/pgvector |
 | Новый чат | POST /api/v1/chat/new | Да | /new_session | PostgreSQL |
 | Голос в текст | POST /api/v1/chat/media | Да | голосовое | Whisper/OpenRouter |
 | Текст в голос | POST /api/v1/voice/reply | Да | /voice | ElevenLabs + fallback OpenRouter |

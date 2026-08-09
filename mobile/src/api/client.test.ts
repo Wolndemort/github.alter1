@@ -90,6 +90,19 @@ describe("AlterApi", () => {
     await expect(new AlterApi("https://alter.example").deleteReminder("token", 1)).resolves.toEqual({ ok: true });
   });
 
+  it("keeps memory controls and media job history on the shared API contract", async () => {
+    (fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, deleted: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [] }) });
+    await expect(new AlterApi("https://alter.example").forgetMemoryCategory("token", "skills_career")).resolves.toMatchObject({ deleted: true });
+    await expect(new AlterApi("https://alter.example").clearMemory("token")).resolves.toEqual({ ok: true });
+    await expect(new AlterApi("https://alter.example").mediaHistory("token")).resolves.toEqual({ items: [] });
+    expect(fetch).toHaveBeenNthCalledWith(1, "https://alter.example/api/v1/memory/skills_career", expect.objectContaining({ method: "DELETE" }));
+    expect(fetch).toHaveBeenNthCalledWith(2, "https://alter.example/api/v1/memory", expect.objectContaining({ method: "DELETE" }));
+    expect(fetch).toHaveBeenNthCalledWith(3, "https://alter.example/api/v1/media/history", expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer token" }) }));
+  });
+
   it("searches YouTube through the protected API", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ results: [{ title: "Rain", url: "https://youtu.be/x" }] }) });
     await expect(new AlterApi("https://alter.example").youtubeSearch("token", "rain")).resolves.toMatchObject({ results: [{ title: "Rain" }] });

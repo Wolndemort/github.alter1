@@ -65,6 +65,8 @@ GET  /api/v1/audio/models     Authorization: Bearer <token>
 POST /api/v1/audio/voice-generation Authorization: Bearer <token>, {"description":"..."}
 GET  /api/v1/account         Authorization: Bearer <token>
 GET  /api/v1/memory          Authorization: Bearer <token>
+DELETE /api/v1/memory/{category} Authorization: Bearer <token>
+DELETE /api/v1/memory         Authorization: Bearer <token>
 GET  /api/v1/subscription    Authorization: Bearer <token>
 POST /api/v1/subscription/create-payment Authorization: Bearer <token>
 POST /api/v1/telegram/link   Authorization: Bearer <token>
