@@ -12,6 +12,7 @@ from utils.prompts import (
     CHAT_BEHAVIOR_PROMPT,
     MEMORY_EXTRACTION_PROMPT,
     MEMORY_POLICY_PROMPT,
+    REASONING_POLICY_PROMPT,
     REVIEW_SYSTEM_PROMPT,
     TOOL_POLICY_PROMPT,
 )
@@ -464,6 +465,7 @@ async def generate_reply(messages, memory=None, search_results=None):
             CHAT_BEHAVIOR_PROMPT,
             TOOL_POLICY_PROMPT,
             MEMORY_POLICY_PROMPT,
+            REASONING_POLICY_PROMPT,
             "Релевантная память пользователя:\n" + json.dumps(normalize_memory(memory or {}), ensure_ascii=False),
         )) + sources
         if memory.get("current_location"):
