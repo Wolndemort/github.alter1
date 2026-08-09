@@ -638,7 +638,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={permissionOfferVisible && !legalVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · PERSONAL MODE</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
   </Modal>
-  <Modal visible={menuVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>
+  <Modal visible={menuVisible && !memoryVisible && !remindersVisible && !faqVisible && !plansVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={premiumStyles.drawerBackdrop} onPress={() => setMenuVisible(false)}>
       <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}> 
       <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
