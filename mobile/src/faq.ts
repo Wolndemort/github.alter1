@@ -86,7 +86,7 @@ Owner не расходует внутренние кредиты ALTER, но в
 Защищённые запросы используют Authorization: Bearer <access_token>.
 Авторизация: /api/v1/auth/register, /verify-email, /resend-verification, /login, /auth/me.
 Чат: /api/v1/chat/messages, /chat/new, /chat/history, /chat/media.
-Медиа: /api/v1/media/generate, /media/capabilities.
+Медиа: /api/v1/media/generate, /media/capabilities, /media/jobs, /media/jobs/{job_id}, /media/jobs/{job_id}/cancel, /media/history.
 Голос: /api/v1/voice/reply, /audio/sound-effects, /audio/isolate, /audio/process, /audio/speech-to-text, /audio/speech-to-speech, /audio/voices, /audio/models, /audio/voice-generation.
 Профиль и лимиты: /api/v1/account, /memory, /usage, /subscription, /subscription/create-payment, /subscription/auto-renew.
 Настройки: /api/v1/settings, /checkins, /push-token.

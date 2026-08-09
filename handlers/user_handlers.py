@@ -1168,7 +1168,6 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     """
     Хендлер для сохранения всех входящих сообщений в raw_messages.
     """
-    print(f"📩 ПОЛУЧЕНО СООБЩЕНИЕ: {message.text}")
     if not message.text or not message.from_user:
         return
     if not spam_allowed:
@@ -1280,7 +1279,6 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
 
     append_session_message(session, "user", message.text)
     updated_messages = list(session.raw_messages)
-    print(f"🛠 DEBUG: Сохраняю сообщение в сессию {session.id if session.id else 'NEW'}")
     await message.bot.send_chat_action(message.chat.id, "typing")
     # Weather is handled deterministically so a provider/model tool decision
     # cannot turn a simple forecast request into a vague AI refusal.
@@ -1339,7 +1337,6 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     try:
         await db_session.commit()
         await db_session.refresh(session)
-        print(f"✅ DEBUG: Сессия {session.id} успешно сохранена в Postgres!")
     except Exception as e:
-        print(f"❌ DEBUG ОШИБКА СОХРАНЕНИЯ: {e}")
+        logging.exception("Failed to save Telegram session user_id=%s session_id=%s", user.id, session.id)
 

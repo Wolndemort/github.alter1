@@ -185,7 +185,7 @@ Telegram и приложение используют общий аккаунт,
 
 Авторизация: POST /api/v1/auth/register, POST /api/v1/auth/verify-email, POST /api/v1/auth/resend-verification, POST /api/v1/auth/login, GET /api/v1/auth/me.
 Чат: POST /api/v1/chat/messages, POST /api/v1/chat/new, GET /api/v1/chat/history, POST /api/v1/chat/media.
-Медиа: POST /api/v1/media/generate, GET /api/v1/media/capabilities.
+Медиа: POST /api/v1/media/generate, GET /api/v1/media/capabilities, POST /api/v1/media/jobs, GET /api/v1/media/jobs/{job_id}, POST /api/v1/media/jobs/{job_id}/cancel, GET /api/v1/media/history.
 Голос и аудио: POST /api/v1/voice/reply, POST /api/v1/audio/sound-effects, POST /api/v1/audio/isolate, POST /api/v1/audio/process, POST /api/v1/audio/speech-to-text, POST /api/v1/audio/speech-to-speech, GET /api/v1/audio/voices, GET /api/v1/audio/models, POST /api/v1/audio/voice-generation.
 Поиск видео: POST /api/v1/youtube/search, POST /api/v1/youtube/audio.
 Профиль: GET /api/v1/account, GET /api/v1/memory, GET /api/v1/usage, GET /api/v1/subscription, POST /api/v1/subscription/create-payment, PATCH /api/v1/subscription/auto-renew, DELETE /api/v1/subscription/payment-method.
