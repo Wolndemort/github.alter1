@@ -557,6 +557,20 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     catch (err) { setMemoryError(err instanceof Error ? err.message : "Не удалось загрузить память"); }
     finally { setMemoryLoading(false); }
   };
+  const forgetMemoryCategory = (category: string, title: string) => Alert.alert("Забыть категорию?", `Удалить из памяти «${title}»?`, [
+    { text: "Отмена", style: "cancel" },
+    { text: "Забыть", style: "destructive", onPress: async () => {
+      try { await api.forgetMemoryCategory(token, category); setMemoryData((current) => current ? { sections: current.sections.filter((section) => section.category !== category) } : current); }
+      catch (err) { setMemoryError(userFacingError(err)); }
+    } },
+  ]);
+  const clearMemory = () => Alert.alert("Очистить память?", "Удалятся сохранённые факты, цели и предпочтения. История чатов останется.", [
+    { text: "Отмена", style: "cancel" },
+    { text: "Очистить", style: "destructive", onPress: async () => {
+      try { await api.clearMemory(token); setMemoryData({ sections: [] }); }
+      catch (err) { setMemoryError(userFacingError(err)); }
+    } },
+  ]);
   const openReminders = async () => {
     setRemindersVisible(true); setMenuVisible(false);
     try { setReminders((await api.reminders(token)).reminders); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить напоминания"); }
@@ -691,7 +705,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}>
       <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setMemoryVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <Text style={{ color: "#888", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 20 }}>ALTER сама запоминает важные факты. Скажи в чате «запомни…», если хочешь сохранить что-то точно.</Text>
-      {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <FlatList data={memorySections} keyExtractor={(item) => item.title} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryKey}>{item.title}</Text>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} />}
+      {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <><FlatList data={memorySections} keyExtractor={(item) => item.category} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><View style={styles.memorySectionHeader}><Text style={styles.memoryKey}>{item.title}</Text><Pressable onPress={() => forgetMemoryCategory(item.category, item.title)} accessibilityLabel={`Забыть категорию ${item.title}`}><Text style={styles.memoryForget}>Забыть</Text></Pressable></View>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} /><Pressable style={styles.clearMemoryButton} onPress={clearMemory} accessibilityLabel="Очистить всю память"><Text style={styles.clearMemoryText}>Очистить всю память</Text></Pressable></>}
     </SafeAreaView>
   </Modal>
   <Modal visible={faqVisible} animationType="slide" onRequestClose={() => setFaqVisible(false)}>
@@ -717,7 +731,7 @@ export default function App() {
   return <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>{token ? <Stack.Screen name="Chat">{() => <ChatScreen token={token} onLogout={() => { AsyncStorage.removeItem("alter_access_token"); setToken(null); }} />}</Stack.Screen> : <Stack.Screen name="Auth">{() => <AuthScreen onAuthenticated={setToken} />}</Stack.Screen>}</Stack.Navigator></NavigationContainer>;
 }
 
-const styles = StyleSheet.create({
+const styles: any = StyleSheet.create({
   intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 }, faqScreen: { flex: 1, backgroundColor: "#050505" }, faqContent: { padding: 20, paddingBottom: 60 }, faqText: { color: "#f4f4f4", fontSize: 13, lineHeight: 20, letterSpacing: 0.2 },
 });
 
@@ -727,6 +741,10 @@ const styles = StyleSheet.create({
 (styles as Record<string, unknown>).messages = { ...StyleSheet.flatten(styles.messages), padding: 10, gap: 3 };
 (styles as Record<string, unknown>).bubble = { ...StyleSheet.flatten(styles.bubble), padding: 8, maxWidth: "92%" };
 (styles as Record<string, unknown>).intro = { ...StyleSheet.flatten(styles.intro), backgroundColor: "#050505" };
+(styles as Record<string, unknown>).memorySectionHeader = { flexDirection: "row", alignItems: "center", justifyContent: "space-between" };
+(styles as Record<string, unknown>).memoryForget = { color: "#aaa", fontSize: 12 };
+(styles as Record<string, unknown>).clearMemoryButton = { marginHorizontal: 20, marginBottom: 30, borderWidth: 1, borderColor: "#5b3042", borderRadius: 12, paddingVertical: 13, alignItems: "center" };
+(styles as Record<string, unknown>).clearMemoryText = { color: "#ffb4c8", fontWeight: "700" };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({

@@ -10,7 +10,7 @@ export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
   subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean;
 };
-export type MemorySection = { title: string; items: { label: string; value: string }[] };
+export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
 export type MemoryResponse = { sections: MemorySection[] };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
@@ -147,6 +147,8 @@ export class AlterApi {
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   acceptLegal(token: string) { return this.request<{ ok: boolean; legal_accepted: boolean }>("/api/v1/legal/accept", { method: "POST" }, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
+  forgetMemoryCategory(token: string, category: string) { return this.request<{ ok: boolean; deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(category)}`, { method: "DELETE" }, token); }
+  clearMemory(token: string) { return this.request<{ ok: boolean }>("/api/v1/memory", { method: "DELETE" }, token); }
   usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }

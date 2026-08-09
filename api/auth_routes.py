@@ -9,6 +9,7 @@ from __future__ import annotations
 from aiohttp import web
 from aiogram import Bot
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.database import async_session
@@ -136,6 +137,38 @@ async def memory_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         from utils.memory_view import memory_sections
         return web.json_response({"sections": memory_sections(user.memory)})
+
+
+async def forget_memory_category_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    category = str(request.match_info.get("category") or "").strip()
+    if not category or len(category) > 64 or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for char in category):
+        raise web.HTTPBadRequest(text="invalid memory category")
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        memory = dict(user.memory or {})
+        existed = category in memory
+        memory.pop(category, None)
+        user.memory = memory
+        flag_modified(user, "memory")
+        await session.commit()
+        return web.json_response({"ok": True, "deleted": existed, "category": category})
+
+
+async def clear_memory_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        user.memory = {}
+        flag_modified(user, "memory")
+        await session.commit()
+        return web.json_response({"ok": True})
 
 
 async def usage_route(request: web.Request) -> web.Response:
@@ -274,6 +307,8 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/auth/resend-verification", resend_verification_route)
     app.router.add_get("/api/v1/account", account_route)
     app.router.add_get("/api/v1/memory", memory_route)
+    app.router.add_delete("/api/v1/memory/{category}", forget_memory_category_route)
+    app.router.add_delete("/api/v1/memory", clear_memory_route)
     app.router.add_get("/api/v1/usage", usage_route)
     app.router.add_get("/api/v1/subscription", subscription_route)
     app.router.add_patch("/api/v1/subscription/auto-renew", auto_renew_route)

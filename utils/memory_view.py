@@ -36,7 +36,7 @@ def memory_sections(memory):
                  else [{"label": "", "value": _value(v)} for v in facts if v not in (None, "")] if isinstance(facts, list)
                  else [{"label": "", "value": _value(facts)}])
         if items:
-            sections.append({"title": CATEGORY_LABELS.get(str(category), _label(category)), "items": items})
+        sections.append({"category": str(category), "title": CATEGORY_LABELS.get(str(category), _label(category)), "items": items})
     return sections
 
 def format_memory(memory):
