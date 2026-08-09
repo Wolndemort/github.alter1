@@ -43,3 +43,15 @@ async def test_enabled_elevenlabs_operations_use_expected_endpoints(monkeypatch)
     assert "https://api.elevenlabs.io/v1/text-to-voice/design" in urls
     assert "https://api.elevenlabs.io/v2/voices" in urls
     assert "https://api.elevenlabs.io/v1/models" in urls
+
+
+@pytest.mark.asyncio
+async def test_sound_effect_requests_a_usable_default_duration(monkeypatch):
+    Client.calls = []
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", Client)
+
+    assert await elevenlabs_media.sound_effect("дождь") == b"mp3"
+    call = Client.calls[0]
+    assert call[1].endswith("/v1/sound-generation")
+    assert call[2]["json"]["duration_seconds"] == 8

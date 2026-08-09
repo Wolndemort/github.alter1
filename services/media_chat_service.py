@@ -14,6 +14,7 @@ from utils.media_logic import generate_media_reply
 from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
 from services.media_generation import generate_image, generate_video
+from utils.vector_memory import recall, remember
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,8 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     if user is None:
         raise ValueError("user not found")
     session = await _active_session(db, user_id)
-    prompt = validate_message(prompt or "Проанализируй это вложение")
+    default_prompt = "Проанализируй это вложение"
+    prompt = validate_message(prompt or default_prompt)
     if kind == "audio":
         from utils.audio_actions import process_audio_action
         # A mobile voice command is inside the uploaded audio, not in the
@@ -66,7 +68,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         # otherwise ALTER treats "наложи дождь..." as ordinary chat and only
         # returns a transcript.
         transcript = None
-        if prompt == "Проанализируй это вложение":
+        if prompt == default_prompt:
             transcript = await transcribe_voice(data)
             if not transcript:
                 raise ValueError("voice message could not be transcribed")
@@ -76,6 +78,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             answer, audio = action_result
             _append(session, "user", prompt)
             _append(session, "assistant", answer)
+            await remember(db, user_id, prompt, source="user_message")
             await db.commit()
             return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript, audio=audio, audio_filename="alter-audio.mp3")
         if transcript is None:
@@ -87,6 +90,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             artifact = await generate_image(prompt)
             _append(session, "user", prompt)
             _append(session, "assistant", "Создал изображение.")
+            await remember(db, user_id, prompt, source="user_message")
             await db.commit()
             return MediaChatResult(
                 reply="Создал изображение.", session_id=session.id, transcript=transcript,
@@ -96,6 +100,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             artifact = await generate_video(prompt)
             _append(session, "user", prompt)
             _append(session, "assistant", "Создал видео.")
+            await remember(db, user_id, prompt, source="user_message")
             await db.commit()
             return MediaChatResult(
                 reply="Создал видео.", session_id=session.id, transcript=transcript,
@@ -110,7 +115,13 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not media:
             raise ValueError("video could not be processed")
     _append(session, "user", prompt)
-    answer = await generate_media_reply(prompt, media, memory=dict(user.memory or {}), conversation_context=session.raw_messages[:-1])
+    memory = dict(user.memory or {})
+    if len(prompt) >= config.MEMORY_AUTO_RECALL_MIN_CHARS:
+        recalled = await recall(db, user_id, prompt)
+        if recalled:
+            memory["related_previous_context"] = recalled
+    answer = await generate_media_reply(prompt, media, memory=memory, conversation_context=session.raw_messages[:-1])
     _append(session, "assistant", answer)
+    await remember(db, user_id, prompt, source="user_message")
     await db.commit()
     return MediaChatResult(reply=answer, session_id=session.id)

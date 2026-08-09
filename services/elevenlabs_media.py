@@ -21,10 +21,12 @@ async def sound_effect(prompt: str) -> bytes:
         response = await client.post(
             "https://api.elevenlabs.io/v1/sound-generation",
             headers={"xi-api-key": _key(), "Accept": "audio/mpeg"},
-            json={"text": prompt[:1000]},
+            json={"text": prompt[:1000], "duration_seconds": 8},
         )
     if response.status_code >= 400:
         raise ElevenLabsError("ElevenLabs sound generation failed")
+    if not response.content:
+        raise ElevenLabsError("ElevenLabs returned an empty sound effect")
     return response.content
 
 
