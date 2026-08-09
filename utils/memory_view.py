@@ -2,6 +2,7 @@
 from collections.abc import Mapping
 
 CATEGORY_LABELS = {
+    "explicit_fact": "О тебе",
     "identity": "О тебе", "health_sport": "Здоровье и спорт", "food_drinks": "Еда и напитки",
     "skills_career": "Навыки и работа", "education": "Учёба и развитие",
     "interests_hobbies": "Интересы и хобби", "goals_habits": "Цели и привычки",
@@ -11,6 +12,8 @@ CATEGORY_LABELS = {
     "important_events": "Важные события", "open_loops": "Незавершённые темы",
 }
 KEY_LABELS = {"name": "Имя", "age": "Возраст", "city": "Город", "job": "Работа", "vehicle": "Автомобиль", "language": "Язык", "title": "Тема", "description": "Описание", "follow_up_question": "Вопрос для возвращения", "follow_up_at": "Вернуться"}
+
+_HIDDEN_KEYS = {"source", "memory_source", "explicit_fact", "explicit fact", "confidence"}
 
 def _label(key):
     raw = str(key).replace("_", " ").strip()
@@ -29,7 +32,7 @@ def memory_sections(memory):
     for category, facts in (memory or {}).items():
         if not facts:
             continue
-        items = ([{"label": _label(k), "value": _value(v)} for k, v in facts.items() if v not in (None, "")] if isinstance(facts, Mapping)
+        items = ([{"label": _label(k), "value": _value(v)} for k, v in facts.items() if str(k).casefold() not in _HIDDEN_KEYS and v not in (None, "")] if isinstance(facts, Mapping)
                  else [{"label": "", "value": _value(v)} for v in facts if v not in (None, "")] if isinstance(facts, list)
                  else [{"label": "", "value": _value(facts)}])
         if items:
