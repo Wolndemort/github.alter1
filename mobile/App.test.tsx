@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds } from "./App";
+import { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds, userFacingError } from "./App";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./src/api/client";
 
@@ -21,6 +21,12 @@ jest.mock("@react-navigation/native-stack", () => {
 });
 
 describe("ALTER mobile critical screens", () => {
+  it("translates common API failures into concise user-facing messages", () => {
+    expect(userFacingError({ status: 401 })).toContain("Сессия закончилась");
+    expect(userFacingError({ status: 429 })).toContain("Лимит исчерпан");
+    expect(userFacingError({ status: 413 })).toContain("Файл слишком большой");
+    expect(userFacingError(new Error("Сетевая ошибка"))).toBe("Сетевая ошибка");
+  });
   beforeEach(() => jest.clearAllMocks());
 
   it("archives only messages older than the timeout, keeping the last three per role", () => {

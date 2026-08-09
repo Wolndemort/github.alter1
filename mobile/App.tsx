@@ -18,6 +18,18 @@ import { FAQ_TEXT } from "./src/faq";
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
 type ChatItem = { id: string; role: string; text: string; createdAt?: number; mediaUri?: string; mediaMime?: string; mediaFilename?: string; feedback?: "positive" | "negative" };
+
+export function userFacingError(error: unknown): string {
+  const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : 0;
+  const message = error instanceof Error ? error.message : "Не удалось выполнить запрос.";
+  if (status === 401) return "Сессия закончилась. Войди в ALTER снова.";
+  if (status === 402) return "Для этого действия нужна активная подписка.";
+  if (status === 409) return "Запрос уже выполняется. Подожди результат.";
+  if (status === 413) return "Файл слишком большой. Выбери файл меньшего размера.";
+  if (status === 429) return "Лимит исчерпан. Попробуй позже.";
+  if (status >= 500) return "Сервис временно недоступен. Попробуй ещё раз через минуту.";
+  return message || "Не удалось выполнить запрос.";
+}
 export function getExpiredChatIds(items: ChatItem[], now: number, timeoutMs = 60000): string[] {
   const cutoff = now - timeoutMs;
   const keep = new Set<string>();
@@ -338,6 +350,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     api.history(token).then((result) => setItems(result.messages.map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content })))).catch(() => undefined);
   }, [token]);
   useEffect(() => {
+    const key = `alter_draft_${token}`;
+    AsyncStorage.getItem(key).then((draft) => { if (draft) setMessage((current) => current || draft); }).catch(() => undefined);
+  }, [token]);
+  useEffect(() => {
+    const key = `alter_draft_${token}`;
+    if (message.trim()) AsyncStorage.setItem(key, message).catch(() => undefined);
+    else AsyncStorage.removeItem(key).catch(() => undefined);
+  }, [message, token]);
+  useEffect(() => {
     if (items.length > 0) api.memory(token).then(setMemoryData).catch(() => undefined);
   }, [token, items.length]);
   useEffect(() => {
@@ -457,7 +478,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     autoScrollAfterUpdate.current = true;
     Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? " " : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
     try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply, ...(result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}) }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
-    catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Ошибка запроса" }]); }
+    catch (err) { if (text) setMessage((current) => current || text); setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: userFacingError(err) }]); }
     finally { setBusy(false); setActivity(""); }
   };
   const generateAttachment = async () => {
@@ -469,7 +490,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const result = await api.generateMedia(token, message.trim(), current.uri, kind);
       setItems((old) => [...old, { id: `${Date.now()}g`, role: "assistant", text: "Готово.", mediaUri: `data:${result.media_type};base64,${result.data_base64}`, mediaMime: result.media_type, mediaFilename: result.filename }]);
       setMessage(""); setAttachment(null); autoScrollAfterUpdate.current = true;
-    } catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: err instanceof Error ? err.message : "Не удалось изменить медиа" }]); }
+    } catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: userFacingError(err) }]); }
     finally { setBusy(false); setActivity(""); }
   };
   const openTelegramLink = async () => {
@@ -592,8 +613,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
-    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy}><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)}><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
-    <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
+    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
+    <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} disabled={busy} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
   </KeyboardAvoidingView>
   <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
