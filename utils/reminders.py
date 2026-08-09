@@ -47,3 +47,34 @@ def parse_time_answer(text: str) -> datetime | None:
         amount = int(match.group(1))
         return now + (timedelta(minutes=amount) if match.group(2).startswith("минут") else timedelta(hours=amount))
     return None
+
+
+# UTF-8 Russian compatibility layer. The legacy parser above is retained for
+# old persisted/test strings, while new users get natural-language parsing.
+_legacy_is_reminder_request = is_reminder_request
+_legacy_parse_reminder = parse_reminder
+_RU_REMINDER_REQUEST = re.compile(r"\b(?:напомни|поставь напоминание|создай напоминание)\b", re.I)
+_RU_EXPLICIT_REMINDER = re.compile(r"\b(сегодня|завтра)\s+в\s+(\d{1,2})(?::(\d{2}))?\s+(.+)", re.I)
+_RU_RELATIVE_REMINDER = re.compile(r"\bчерез\s+(\d+)\s+(минут(?:у|ы)?|час(?:а|ов)?)\s+(.+)", re.I)
+
+
+def is_reminder_request(text: str) -> bool:
+    return _legacy_is_reminder_request(text) or bool(_RU_REMINDER_REQUEST.search(text or ""))
+
+
+def parse_reminder(text: str) -> tuple[datetime, str] | None:
+    now = datetime.now(MOSCOW)
+    match = _RU_EXPLICIT_REMINDER.search(text or "")
+    if match:
+        day = now.date() + timedelta(days=1 if match.group(1).casefold() == "завтра" else 0)
+        hour, minute = int(match.group(2)), int(match.group(3) or 0)
+        if hour > 23 or minute > 59:
+            return None
+        remind_at = datetime.combine(day, datetime.min.time(), tzinfo=MOSCOW).replace(hour=hour, minute=minute)
+        return (remind_at, match.group(4).strip()) if remind_at > now else None
+    match = _RU_RELATIVE_REMINDER.search(text or "")
+    if match:
+        amount = int(match.group(1))
+        delta = timedelta(minutes=amount) if match.group(2).startswith("минут") else timedelta(hours=amount)
+        return now + delta, match.group(3).strip()
+    return _legacy_parse_reminder(text)
