@@ -339,6 +339,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     api.history(token).then((result) => setItems(result.messages.map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content })))).catch(() => undefined);
   }, [token]);
   useEffect(() => {
+    if (items.length > 0) api.memory(token).then(setMemoryData).catch(() => undefined);
+  }, [token, items.length]);
+  useEffect(() => {
     const timer = setInterval(() => {
         const cutoff = Date.now();
       setItems((current) => {
