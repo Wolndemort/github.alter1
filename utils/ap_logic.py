@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from config import config
+from utils.capabilities import CAPABILITIES_PROMPT
 from utils.prompts import (
     ALTER_SYSTEM_PROMPT,
     AUDIO_ROUTER_PROMPT,
@@ -462,6 +463,7 @@ async def generate_reply(messages, memory=None, search_results=None):
             ) + "\n</search_results>"
         system = "\n\n".join((
             ALTER_SYSTEM_PROMPT,
+            CAPABILITIES_PROMPT,
             CHAT_BEHAVIOR_PROMPT,
             TOOL_POLICY_PROMPT,
             MEMORY_POLICY_PROMPT,
