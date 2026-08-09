@@ -61,14 +61,25 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     prompt = validate_message(prompt or "Проанализируй это вложение")
     if kind == "audio":
         from utils.audio_actions import process_audio_action
+        # A mobile voice command is inside the uploaded audio, not in the
+        # multipart text field. Transcribe it before routing audio actions;
+        # otherwise ALTER treats "наложи дождь..." as ordinary chat and only
+        # returns a transcript.
+        transcript = None
+        if prompt == "Проанализируй это вложение":
+            transcript = await transcribe_voice(data)
+            if not transcript:
+                raise ValueError("voice message could not be transcribed")
+            prompt = transcript
         action_result = await process_audio_action(prompt, data, filename)
         if action_result:
             answer, audio = action_result
             _append(session, "user", prompt)
             _append(session, "assistant", answer)
             await db.commit()
-            return MediaChatResult(reply=answer, session_id=session.id, audio=audio, audio_filename="alter-audio.mp3")
-        transcript = await transcribe_voice(data)
+            return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript, audio=audio, audio_filename="alter-audio.mp3")
+        if transcript is None:
+            transcript = await transcribe_voice(data)
         if not transcript:
             raise ValueError("voice message could not be transcribed")
         prompt = transcript

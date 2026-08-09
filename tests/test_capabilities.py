@@ -14,6 +14,7 @@ def test_quota_and_usage_questions_are_capability_requests():
 
 
 def test_inventory_does_not_advertise_unavailable_audio_products_as_available():
+    assert is_capabilities_request("Что умеет ALTER?")
     assert is_capabilities_request("может ли он наложить шум дождя на голосовое?")
     for prompt in (
         "умеет ли он искать актуальные новости?",

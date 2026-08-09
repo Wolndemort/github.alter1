@@ -66,6 +66,24 @@ async def test_audio_is_transcribed_and_delegated_to_text_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_voice_command_is_processed_as_audio_action_before_chat(monkeypatch):
+    async def transcribe(data):
+        return "Наложи шум дождя на моё голосовое"
+
+    async def action(prompt, data, filename):
+        assert prompt == "Наложи шум дождя на моё голосовое"
+        assert data == b"audio"
+        return "Наложил дождь", b"mixed-mp3"
+
+    monkeypatch.setattr(media_chat_service, "transcribe_voice", transcribe)
+    monkeypatch.setattr("utils.audio_actions.process_audio_action", action)
+    result = await media_chat_service.reply(Db(), 7, "", "audio/m4a", b"audio")
+    assert result.reply == "Наложил дождь"
+    assert result.transcript == "Наложи шум дождя на моё голосовое"
+    assert result.audio == b"mixed-mp3"
+
+
+@pytest.mark.asyncio
 async def test_voice_generation_command_returns_real_image_artifact(monkeypatch):
     async def transcribe(data): return "Создай красивое фото девушки"
 

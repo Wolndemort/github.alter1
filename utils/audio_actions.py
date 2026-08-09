@@ -42,7 +42,7 @@ async def mix_audio(source: bytes, effect: bytes, source_name: str = "voice.m4a"
         effect_path.write_bytes(effect)
         try:
             process = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y", "-i", str(source_path), "-i", str(effect_path),
+                "ffmpeg", "-y", "-i", str(source_path), "-stream_loop", "-1", "-i", str(effect_path),
                 "-filter_complex", "[0:a]volume=1[a0];[1:a]volume=0.28[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[out]",
                 "-map", "[out]", "-ac", "1", "-b:a", "128k", str(output_path),
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
