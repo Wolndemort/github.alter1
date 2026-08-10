@@ -103,6 +103,33 @@ export class AlterApi {
       body: JSON.stringify({ message, ...(location ? { location } : {}) }),
     }, token);
   }
+  async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void): Promise<ChatResponse> {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/stream`, {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ message, ...(location ? { location } : {}) }),
+    });
+    if (response.status === 404 || response.status === 405 || response.status === 409) return this.sendMessage(token, message, location);
+    if (!response.ok || !response.body) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let full = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+      for (const event of events) {
+        const line = event.split("\n").find((value) => value.startsWith("data: "));
+        if (!line) continue;
+        const payload = JSON.parse(line.slice(6));
+        if (payload.type === "error") throw new ApiError(502, "Поток ответа прервался.");
+        if (payload.type === "delta" && typeof payload.text === "string") { full += payload.text; onDelta(full); }
+      }
+    }
+    return { reply: full, session_id: 0 };
+  }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
 

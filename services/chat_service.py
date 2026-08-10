@@ -11,7 +11,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import generate_reply
+from utils.ap_logic import generate_reply, stream_text_reply
+from utils.prompts import ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
+from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
 from utils.memory_store import merge_memory_facts
 from utils.memory_facts import extract_user_facts
@@ -158,3 +160,50 @@ class ChatService:
         await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
         await db.commit()
         return ChatResult(reply=reply, session_id=session.id)
+
+    async def stream_reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None):
+        """Stream ordinary text replies while preserving the same session contract."""
+        text = validate_message(text)
+        user = await db.get(User, user_id)
+        if user is None:
+            raise ValueError("user not found")
+        result = await db.execute(select(Session).where(
+            Session.user_id == user_id, Session.is_processed.is_(False)
+        ).order_by(Session.started_at.desc()).limit(1))
+        session = result.scalar_one_or_none()
+        if session is None:
+            session = Session(user_id=user_id, raw_messages=[])
+            db.add(session)
+            await db.flush()
+        _append(session, "user", text)
+        new_facts = extract_user_facts(text)
+        if new_facts:
+            user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
+            flag_modified(user, "memory")
+        events_result = await db.execute(
+            select(ImportantEvent).where(ImportantEvent.user_id == user_id)
+            .order_by(ImportantEvent.occurred_at.desc()).limit(20)
+        )
+        memory = dict(user.memory or {})
+        feedback = feedback_context(user.tech_stack)
+        if feedback:
+            memory["response_feedback"] = feedback
+        if isinstance(location, dict):
+            memory["current_location"] = {key: location[key] for key in ("city", "region", "country") if location.get(key) not in (None, "")}
+        events = [{"title": event.title, "event_type": event.event_type, "description": event.description} for event in events_result.scalars()]
+        if events:
+            memory["important_events"] = events
+        if should_recall_context(text):
+            recalled = await recall(db, user_id, text)
+            if recalled:
+                memory["related_previous_context"] = recalled
+        system = "\n\n".join((ALTER_SYSTEM_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+        working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
+        parts = []
+        async for delta in stream_text_reply(working):
+            parts.append(delta)
+            yield delta
+        reply = sanitize_public_reply("".join(parts))
+        _append(session, "assistant", reply)
+        await remember(db, user_id, text, source="user_message", categories=list(new_facts))
+        await db.commit()

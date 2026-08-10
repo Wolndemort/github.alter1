@@ -350,6 +350,41 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
     raise RuntimeError("No chat model configured")
 
 
+async def stream_text_reply(messages, max_tokens=None, task=None):
+    """Yield plain-text deltas for the low-latency text-chat transport."""
+    messages = _bounded_api_messages(messages)
+    route = select_model_route(messages, task)
+    last_error = None
+    for model in route:
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS,
+                stream=True,
+            )
+            emitted = False
+            async for chunk in stream:
+                choices = getattr(chunk, "choices", None) or []
+                delta = getattr(choices[0], "delta", None) if choices else None
+                text = getattr(delta, "content", None) if delta else None
+                if text:
+                    emitted = True
+                    yield text
+            if emitted:
+                return
+            raise RuntimeError("Streaming model returned an empty response")
+        except Exception as error:
+            last_error = error
+            status_code = _provider_status_code(error)
+            increment("ai.model.failure", model=model, status=status_code or "exception")
+            if status_code in _COOLDOWN_STATUS_CODES:
+                _cool_down_model(model)
+            if status_code in {401, 403}:
+                break
+    raise last_error or RuntimeError("No streaming model configured")
+
+
 async def execute_tool(name: str, arguments: dict) -> list | str:
     """Execute one model-selected tool behind a small, explicit allow-list."""
     if name == "web_search":

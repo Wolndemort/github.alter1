@@ -24,6 +24,8 @@ from services.media_jobs import cancel_job, get_job, history, submit_job
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices, speech_to_speech
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.audio_actions import detect_audio_action, process_audio_action
+from utils.capabilities import is_capabilities_request
+from utils.reminders import is_reminder_request
 from config import config
 
 
@@ -95,6 +97,40 @@ async def chat_route(request: web.Request) -> web.Response:
     if hasattr(result, "transcript"):
         payload["transcript"] = result.transcript
     return web.json_response(payload)
+
+
+async def chat_stream_route(request: web.Request) -> web.StreamResponse:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    text = str(payload.get("message") or "").strip()
+    if not text or is_capabilities_request(text) or is_reminder_request(text) or detect_audio_action(text) == "effect":
+        raise web.HTTPConflict(text="stream unavailable for this request")
+    redis = create_redis()
+    try:
+        if not await charge_user_id_credits(redis, user_id, 1, async_session):
+            raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+    finally:
+        await close_redis(redis)
+    async with async_session() as session:
+        from data.models import User, WebAccount
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+            raise web.HTTPPaymentRequired(text="active subscription required")
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        await response.prepare(request)
+        try:
+            async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location")):
+                await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+            await response.write(b"data: {\"type\":\"done\"}\n\n")
+        except Exception:
+            logging.exception("Streaming chat failed")
+            await response.write(("data: " + json.dumps({"type": "error", "message": "stream failed"}) + "\n\n").encode("utf-8"))
+        finally:
+            await response.write_eof()
+        return response
 
 
 async def new_session_route(request: web.Request) -> web.Response:
@@ -347,6 +383,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
 
 def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/messages", chat_route)
+    app.router.add_post("/api/v1/chat/stream", chat_stream_route)
     app.router.add_post("/api/v1/chat/new", new_session_route)
     app.router.add_get("/api/v1/chat/history", history_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
