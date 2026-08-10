@@ -136,7 +136,7 @@ async def memory_route(request: web.Request) -> web.Response:
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        from utils.memory_view import memory_sections
+        from utils.memory_view import memory_audit, memory_sections
         event_result = await session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user_id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
         chunk_result = await session.execute(select(MemoryChunk).where(MemoryChunk.user_id == user_id).order_by(MemoryChunk.created_at.desc()).limit(20))
         active_result = await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()).limit(1))
@@ -155,7 +155,30 @@ async def memory_route(request: web.Request) -> web.Response:
             "sections": memory_sections(user.memory, extras),
             "permanent": True,
             "description": "ALTER хранит память бессрочно и удаляет её только по твоей команде.",
+            "audit": memory_audit(user.memory),
         })
+
+
+async def confirm_memory_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    category = str(request.match_info.get("category") or "").strip()
+    key = str(request.match_info.get("key") or "").strip()
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        memory = dict(user.memory or {})
+        metadata = memory.get("_meta") if isinstance(memory.get("_meta"), dict) else {}
+        entry = metadata.get(category, {}).get(key) if isinstance(metadata.get(category), dict) else None
+        if not isinstance(entry, dict) or category not in memory or key not in memory.get(category, {}):
+            raise web.HTTPNotFound(text="memory fact not found")
+        entry["confirmed"] = True
+        memory["_meta"] = metadata
+        user.memory = memory
+        flag_modified(user, "memory")
+        await session.commit()
+        return web.json_response({"ok": True, "category": category, "key": key, "confirmed": True})
 
 
 async def my_day_route(request: web.Request) -> web.Response:
@@ -180,14 +203,14 @@ async def my_day_route(request: web.Request) -> web.Response:
         loops = memory.get("open_loops") or []
         if isinstance(loops, dict):
             loops = [loops]
-        for item in loops[:5] if isinstance(loops, list) else []:
+        for loop_index, item in enumerate(loops[:5] if isinstance(loops, list) else []):
             if isinstance(item, dict):
                 title = str(item.get("title") or item.get("description") or "Незавершённая тема").strip()
                 detail = str(item.get("follow_up_question") or item.get("description") or "Вернуться к этому").strip()
             else:
                 title, detail = str(item), "Незавершённая тема"
             if title:
-                focus.append({"kind": "open_loop", "title": title[:200], "detail": detail[:300], "at": None, "priority": "normal"})
+                focus.append({"kind": "open_loop", "title": title[:200], "detail": detail[:300], "at": None, "priority": "normal", "loop_index": loop_index})
         goals = memory.get("goals_habits") or {}
         if isinstance(goals, dict):
             for key, value in list(goals.items())[:3]:
@@ -204,6 +227,33 @@ async def my_day_route(request: web.Request) -> web.Response:
             "counts": {"reminders": len(reminders), "open_loops": len(loops) if isinstance(loops, list) else 0, "goals": len(goals) if isinstance(goals, dict) else 0},
             "memory_permanent": True,
         })
+
+
+async def update_loop_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    try:
+        index = int(request.match_info.get("index", "-1"))
+    except ValueError:
+        raise web.HTTPBadRequest(text="invalid loop index")
+    payload = await request.json()
+    status = str(payload.get("status") or "").strip()
+    if status not in {"active", "done", "snoozed"}:
+        raise web.HTTPBadRequest(text="status must be active, done or snoozed")
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        loops = list((user.memory or {}).get("open_loops") or []) if user else []
+        if user is None or index < 0 or index >= len(loops):
+            raise web.HTTPNotFound(text="open loop not found")
+        item = dict(loops[index]) if isinstance(loops[index], dict) else {"title": str(loops[index])}
+        item["status"] = status
+        loops[index] = item
+        memory = dict(user.memory or {})
+        memory["open_loops"] = loops
+        user.memory = memory
+        flag_modified(user, "memory")
+        await session.commit()
+        return web.json_response({"ok": True, "index": index, "status": status})
 
 
 async def forget_memory_category_route(request: web.Request) -> web.Response:
@@ -403,7 +453,9 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/auth/resend-verification", resend_verification_route)
     app.router.add_get("/api/v1/account", account_route)
     app.router.add_get("/api/v1/memory", memory_route)
+    app.router.add_post("/api/v1/memory/{category}/{key}/confirm", confirm_memory_route)
     app.router.add_get("/api/v1/my-day", my_day_route)
+    app.router.add_patch("/api/v1/memory/open-loops/{index}", update_loop_route)
     app.router.add_delete("/api/v1/memory/{category}", forget_memory_category_route)
     app.router.add_delete("/api/v1/memory", clear_memory_route)
     app.router.add_delete("/api/v1/context", clear_context_route)

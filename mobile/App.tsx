@@ -669,6 +669,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       catch (err) { setMemoryError(userFacingError(err)); }
     } },
   ]);
+  const confirmMemoryFact = async (category: string, key: string) => {
+    try {
+      await api.confirmMemory(token, category, key);
+      setMemoryData((current) => current ? { ...current, audit: (current.audit || []).map((item) => item.category === category && item.key === key ? { ...item, confirmed: true } : item) } : current);
+    } catch (err) { setMemoryError(userFacingError(err)); }
+  };
   const openReminders = async () => {
     setRemindersVisible(true); setMenuVisible(false);
     try { setReminders((await api.reminders(token)).reminders); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить напоминания"); }
@@ -828,7 +834,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Text style={styles.myDayIntro}>ALTER собрал важное из памяти, целей и напоминаний. Не всё сразу — только то, к чему стоит вернуться.</Text>
       {myDayLoading ? <ActivityIndicator color="#fff" /> : <ScrollView contentContainerStyle={styles.memoryList}>
         <Pressable style={styles.nextStepCard} onPress={() => { setMyDayVisible(false); send(myDayData?.next_step.prompt || "Помоги мне выбрать одно главное дело на сегодня"); }}><Text style={styles.nextStepKicker}>ЛУЧШИЙ СЛЕДУЮЩИЙ ШАГ</Text><Text style={styles.nextStepTitle}>{myDayData?.next_step.title || "Выбрать главное на сегодня"}</Text><Text style={styles.nextStepAction}>Открыть в чате →</Text></Pressable>
-        {myDayData?.focus.length ? myDayData.focus.map((item, index) => <View key={`${item.kind}-${item.title}-${index}`} style={styles.dayItem}><View style={styles.dayItemDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.memoryKey}>{item.detail}{item.at ? ` · ${new Date(item.at).toLocaleString()}` : ""}</Text></View></View>) : <Text style={styles.emptyMemory}>Пока ничего не нужно удерживать в фокусе. Напиши ALTER, что для тебя важно.</Text>}
+        {myDayData?.focus.length ? myDayData.focus.map((item, index) => <View key={`${item.kind}-${item.title}-${index}`} style={styles.dayItem}><View style={styles.dayItemDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.memoryKey}>{item.detail}{item.at ? ` · ${new Date(item.at).toLocaleString()}` : ""}</Text>{item.kind === "open_loop" && item.loop_index !== undefined ? <Pressable onPress={async () => { await api.updateLoop(token, item.loop_index!, "done"); setMyDayData(await api.myDay(token)); }}><Text style={styles.loopDone}>✓ Закрыть тему</Text></Pressable> : null}</View></View>) : <Text style={styles.emptyMemory}>Пока ничего не нужно удерживать в фокусе. Напиши ALTER, что для тебя важно.</Text>}
       </ScrollView>}
     </SafeAreaView>
   </Modal>
@@ -842,6 +848,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}>
       <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setMemoryVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <View style={styles.permanentMemoryCard}><Text style={styles.permanentMemoryTitle}>Память ALTER · бессрочно</Text><Text style={styles.permanentMemoryText}>{memoryData?.description || "ALTER хранит важные факты, цели и стиль общения, пока ты сам не попросишь их удалить."}</Text></View>
+      {memoryData?.audit?.some((item) => !item.confirmed) ? <View style={styles.memoryAuditCard}><Text style={styles.memoryAuditTitle}>Проверь, что это всё ещё верно</Text>{memoryData.audit.filter((item) => !item.confirmed).slice(0, 5).map((item) => <Pressable key={item.category + item.key} onPress={() => confirmMemoryFact(item.category, item.key)}><Text style={styles.memoryAuditItem}>{item.category} · {item.key}  ✓ Подтвердить</Text></Pressable>)}</View> : null}
       <Text style={{ color: "#888", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 20 }}>ALTER сама запоминает важные факты. Скажи в чате «запомни…», если хочешь сохранить что-то точно.</Text>
        {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <><FlatList data={memorySections} keyExtractor={(item) => item.category} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><View style={styles.memorySectionHeader}><Text style={styles.memoryKey}>{item.title}</Text><Pressable onPress={() => forgetMemoryCategory(item.category, item.title)} accessibilityLabel={`Забыть категорию ${item.title}`}><Text style={styles.memoryForget}>Забыть</Text></Pressable></View>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} /><Pressable style={styles.clearMemoryButton} onPress={clearContext} accessibilityLabel="Очистить контекст прошлых разговоров"><Text style={styles.clearMemoryText}>Очистить контекст</Text></Pressable><Pressable style={styles.clearMemoryButton} onPress={clearMemory} accessibilityLabel="Очистить всю память"><Text style={styles.clearMemoryText}>Очистить всю память</Text></Pressable></>}
     </SafeAreaView>
@@ -908,6 +915,9 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).permanentMemoryCard = { marginHorizontal: 20, marginBottom: 4, padding: 14, borderRadius: 14, backgroundColor: "#171717", borderWidth: 1, borderColor: "#4a4a4a" };
 (styles as Record<string, unknown>).permanentMemoryTitle = { color: "#fff", fontSize: 13, fontWeight: "700", marginBottom: 5 };
 (styles as Record<string, unknown>).permanentMemoryText = { color: "#aaa", fontSize: 12, lineHeight: 18 };
+(styles as Record<string, unknown>).memoryAuditCard = { marginHorizontal: 20, marginTop: 8, marginBottom: 4, padding: 12, borderRadius: 12, backgroundColor: "#211f18", borderWidth: 1, borderColor: "#695d35" };
+(styles as Record<string, unknown>).memoryAuditTitle = { color: "#f0df9a", fontSize: 12, fontWeight: "700", marginBottom: 6 };
+(styles as Record<string, unknown>).memoryAuditItem = { color: "#d8cfaa", fontSize: 12, paddingVertical: 6 };
 (styles as Record<string, unknown>).myDayIntro = { color: "#aaa", paddingHorizontal: 20, paddingBottom: 8, fontSize: 14, lineHeight: 21 };
 (styles as Record<string, unknown>).nextStepCard = { marginHorizontal: 20, marginBottom: 8, padding: 16, borderRadius: 16, backgroundColor: "#f4f4f4" };
 (styles as Record<string, unknown>).nextStepKicker = { color: "#777", fontSize: 10, letterSpacing: 1.5, marginBottom: 8 };
@@ -915,6 +925,7 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).nextStepAction = { color: "#555", marginTop: 12, fontSize: 12, fontWeight: "700" };
 (styles as Record<string, unknown>).dayItem = { flexDirection: "row", gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#292929" };
 (styles as Record<string, unknown>).dayItemDot = { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff", marginTop: 7 };
+(styles as Record<string, unknown>).loopDone = { color: "#aaa", fontSize: 11, marginTop: 7 };
 (styles as Record<string, unknown>).quickActionRow = { flexDirection: "row", gap: 7, paddingHorizontal: 12, paddingBottom: 5, overflow: "hidden" };
 (styles as Record<string, unknown>).quickAction = { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 14, backgroundColor: "#111111", borderWidth: 1, borderColor: "#333333" };
 (styles as Record<string, unknown>).quickActionText = { color: "#cccccc", fontSize: 11, fontWeight: "700" };
