@@ -10,6 +10,7 @@ from utils.capabilities import CAPABILITIES_PROMPT
 from utils.prompts import (
     ALTER_SYSTEM_PROMPT,
     ALTER_CHARACTER_PROMPT,
+    ALTER_INTELLIGENCE_PROMPT,
     AUDIO_ROUTER_PROMPT,
     CHAT_BEHAVIOR_PROMPT,
     MEMORY_EXTRACTION_PROMPT,
@@ -513,6 +514,7 @@ async def generate_reply(messages, memory=None, search_results=None):
         system = "\n\n".join((
             ALTER_SYSTEM_PROMPT,
             ALTER_CHARACTER_PROMPT,
+            ALTER_INTELLIGENCE_PROMPT,
             CAPABILITIES_PROMPT,
             CHAT_BEHAVIOR_PROMPT,
             TOOL_POLICY_PROMPT,

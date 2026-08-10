@@ -12,7 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import generate_reply, stream_text_reply
-from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
+from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
 from utils.memory_store import merge_memory_facts
@@ -103,6 +103,13 @@ class ChatService:
             select(ImportantEvent).where(ImportantEvent.user_id == user_id)
             .order_by(ImportantEvent.occurred_at.desc()).limit(20)
         )
+        reminders_result = await db.execute(
+            select(Reminder).where(
+                Reminder.user_id == user_id,
+                Reminder.is_sent.is_(False),
+                Reminder.remind_at >= datetime.now(timezone.utc),
+            ).order_by(Reminder.remind_at).limit(12)
+        )
         memory = dict(user.memory or {})
         feedback = feedback_context(user.tech_stack)
         if feedback:
@@ -117,6 +124,9 @@ class ChatService:
                   for event in events_result.scalars()]
         if events:
             memory["important_events"] = events
+        active_reminders = [{"text": getattr(item, "text", ""), "remind_at": getattr(getattr(item, "remind_at", None), "isoformat", lambda: "")()} for item in reminders_result.scalars() if getattr(item, "text", None)]
+        if active_reminders:
+            memory["active_reminders"] = active_reminders
         if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
@@ -184,6 +194,13 @@ class ChatService:
             select(ImportantEvent).where(ImportantEvent.user_id == user_id)
             .order_by(ImportantEvent.occurred_at.desc()).limit(20)
         )
+        reminders_result = await db.execute(
+            select(Reminder).where(
+                Reminder.user_id == user_id,
+                Reminder.is_sent.is_(False),
+                Reminder.remind_at >= datetime.now(timezone.utc),
+            ).order_by(Reminder.remind_at).limit(12)
+        )
         memory = dict(user.memory or {})
         feedback = feedback_context(user.tech_stack)
         if feedback:
@@ -193,11 +210,14 @@ class ChatService:
         events = [{"title": event.title, "event_type": event.event_type, "description": event.description} for event in events_result.scalars()]
         if events:
             memory["important_events"] = events
+        active_reminders = [{"text": getattr(item, "text", ""), "remind_at": getattr(getattr(item, "remind_at", None), "isoformat", lambda: "")()} for item in reminders_result.scalars() if getattr(item, "text", None)]
+        if active_reminders:
+            memory["active_reminders"] = active_reminders
         if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
                 memory["related_previous_context"] = recalled
-        system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+        system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         parts = []
         async for delta in stream_text_reply(working):
