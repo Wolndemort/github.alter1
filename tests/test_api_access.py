@@ -22,11 +22,16 @@ class Request:
     async def json(self): return self.payload
 
 
+async def _credits_allowed(*args, **kwargs):
+    return True
+
+
 @pytest.mark.asyncio
 async def test_chat_route_rejects_unpaid_account(monkeypatch):
     user = User(id=42, first_name="Test", memory={}, tech_stack={})
     monkeypatch.setattr(chat_routes, "async_session", lambda: Db(user))
     monkeypatch.setattr(chat_routes, "_bearer", lambda request: 42)
+    monkeypatch.setattr(chat_routes, "charge_user_id_credits", _credits_allowed)
     with pytest.raises(web.HTTPPaymentRequired):
         await chat_routes.chat_route(Request({"message": "hello"}))
 
@@ -37,6 +42,7 @@ async def test_chat_route_allows_active_subscription(monkeypatch):
     user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=1)
     monkeypatch.setattr(chat_routes, "async_session", lambda: Db(user))
     monkeypatch.setattr(chat_routes, "_bearer", lambda request: 42)
+    monkeypatch.setattr(chat_routes, "charge_user_id_credits", _credits_allowed)
 
     class FakeResult:
         reply = "hello back"
@@ -58,6 +64,7 @@ async def test_chat_route_forwards_consented_location(monkeypatch):
     user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=1)
     monkeypatch.setattr(chat_routes, "async_session", lambda: Db(user))
     monkeypatch.setattr(chat_routes, "_bearer", lambda request: 42)
+    monkeypatch.setattr(chat_routes, "charge_user_id_credits", _credits_allowed)
 
     class FakeResult:
         reply = "weather back"

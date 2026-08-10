@@ -110,6 +110,16 @@ def _bounded_messages(messages, max_chars: int | None = None) -> list:
     return list(reversed(selected))
 
 
+def _head_tail(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    marker = "\n...[середина контекста сокращена]...\n"
+    budget = max(2, limit - len(marker))
+    head = max(1, int(budget * 0.68))
+    tail = max(1, budget - head)
+    return value[:head] + marker + value[-tail:]
+
+
 def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
     """Hard cost guard: never send an unexpectedly huge prompt upstream."""
     max_chars = max_chars or config.AI_MAX_PROMPT_CHARS
@@ -124,12 +134,13 @@ def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
     used = 0
     if system_item:
         system = dict(system_item)
-        system["content"] = str(system.get("content", ""))[:max_chars // 3]
+        system_limit = max_chars if latest_user_item is None or latest_user_item is system_item else (max_chars * 2 // 3)
+        system["content"] = _head_tail(str(system.get("content", "")), system_limit)
         selected[id(system_item)] = system
         used += len(system["content"])
     if latest_user_item and latest_user_item is not system_item:
         latest_user = dict(latest_user_item)
-        latest_user["content"] = str(latest_user.get("content", ""))[:max_chars // 3]
+        latest_user["content"] = _head_tail(str(latest_user.get("content", "")), max_chars // 3)
         selected[id(latest_user_item)] = latest_user
         used += len(latest_user["content"])
     for item in reversed(items):

@@ -15,7 +15,7 @@ class ReadOnlyRedis:
 
 
 @pytest.mark.asyncio
-async def test_guard_does_not_block_when_redis_is_read_only():
+async def test_guard_blocks_when_redis_is_read_only():
     middleware = GuardMiddleware(ReadOnlyRedis())
     seen = []
 
@@ -24,8 +24,8 @@ async def test_guard_does_not_block_when_redis_is_read_only():
 
     event = SimpleNamespace(from_user=SimpleNamespace(id=7))
     await middleware(handler, event, {})
-    assert seen[0]["billing_allowed"] is True
-    assert seen[0]["spam_allowed"] is True
+    assert seen[0]["billing_allowed"] is False
+    assert seen[0]["spam_allowed"] is False
 
 @pytest.mark.asyncio
 async def test_guard_sets_spam_flag():
