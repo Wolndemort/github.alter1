@@ -67,6 +67,7 @@ async def test_account_memory_and_subscription_routes_share_user(monkeypatch):
     assert '"telegram_linked": true' in account_response.text
     assert '"title": "Goals"' in memory_response.text
     assert '"value": "launch"' in memory_response.text
+    assert '"permanent": true' in memory_response.text
     assert '"active": true' in subscription_response.text
 
 

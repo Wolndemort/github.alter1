@@ -151,7 +151,11 @@ async def memory_route(request: web.Request) -> web.Response:
         active_messages = getattr(active, "raw_messages", None) if active else None
         if active_messages:
             extras.append({"category": "current_context", "title": "Текущий разговор", "items": [{"label": item.get("role", ""), "value": item.get("content", "")} for item in active_messages[-10:] if item.get("content")]})
-        return web.json_response({"sections": memory_sections(user.memory, extras)})
+        return web.json_response({
+            "sections": memory_sections(user.memory, extras),
+            "permanent": True,
+            "description": "ALTER хранит память бессрочно и удаляет её только по твоей команде.",
+        })
 
 
 async def forget_memory_category_route(request: web.Request) -> web.Response:

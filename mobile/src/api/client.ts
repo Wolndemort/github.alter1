@@ -11,7 +11,7 @@ export type AccountResponse = {
   subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean;
 };
 export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
-export type MemoryResponse = { sections: MemorySection[] };
+export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; description?: string };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
