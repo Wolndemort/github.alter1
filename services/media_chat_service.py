@@ -49,7 +49,7 @@ def validate_media(content_type: str, data: bytes) -> str:
 async def _active_session(db: AsyncSession, user_id: int) -> Session:
     result = await db.execute(select(Session).where(
         Session.user_id == user_id, Session.is_processed.is_(False)
-    ).order_by(Session.started_at.desc()))
+    ).order_by(Session.started_at.desc()).limit(1))
     session = result.scalar_one_or_none()
     if session is None:
         session = Session(user_id=user_id, raw_messages=[])

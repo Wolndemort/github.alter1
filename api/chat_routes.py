@@ -110,7 +110,7 @@ async def new_session_route(request: web.Request) -> web.Response:
             raise web.HTTPPaymentRequired(text="active subscription required")
         active = (await session.execute(select(ChatSession).where(
             ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)
-        ).order_by(ChatSession.started_at.desc()))).scalar_one_or_none()
+        ).order_by(ChatSession.started_at.desc()).limit(1))).scalar_one_or_none()
         if active is not None and active.raw_messages:
             await process_session(active, session)
         # Leave an empty active session as an explicit boundary. Otherwise the
@@ -127,7 +127,7 @@ async def history_route(request: web.Request) -> web.Response:
         from data.models import Session as ChatSession
         result = await session.execute(select(ChatSession).where(
             ChatSession.user_id == user_id,
-        ).order_by(ChatSession.started_at.desc()))
+        ).order_by(ChatSession.started_at.desc()).limit(1))
         active = result.scalar_one_or_none()
         messages = [
             {"role": item.get("role"), "content": str(item.get("content") or "")}

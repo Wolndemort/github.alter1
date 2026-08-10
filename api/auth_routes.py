@@ -138,7 +138,7 @@ async def memory_route(request: web.Request) -> web.Response:
         from utils.memory_view import memory_sections
         event_result = await session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user_id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
         chunk_result = await session.execute(select(MemoryChunk).where(MemoryChunk.user_id == user_id).order_by(MemoryChunk.created_at.desc()).limit(20))
-        active_result = await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()))
+        active_result = await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()).limit(1))
         events = event_result.scalars().all() if hasattr(event_result, "scalars") else []
         chunks = chunk_result.scalars().all() if hasattr(chunk_result, "scalars") else []
         active = active_result.scalar_one_or_none() if hasattr(active_result, "scalar_one_or_none") else None
@@ -172,7 +172,7 @@ async def forget_memory_category_route(request: web.Request) -> web.Response:
             await session.commit()
             return web.json_response({"ok": True, "deleted": bool(deleted.rowcount) if hasattr(deleted, "rowcount") else True, "category": category})
         if category == "current_context":
-            active = (await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()))).scalar_one_or_none()
+            active = (await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()).limit(1))).scalar_one_or_none()
             if active:
                 active.raw_messages = []
                 await session.commit()
