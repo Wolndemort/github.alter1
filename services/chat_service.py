@@ -12,7 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import generate_reply, stream_text_reply
-from utils.prompts import ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
+from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
 from utils.memory_store import merge_memory_facts
@@ -197,7 +197,7 @@ class ChatService:
             recalled = await recall(db, user_id, text)
             if recalled:
                 memory["related_previous_context"] = recalled
-        system = "\n\n".join((ALTER_SYSTEM_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+        system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         parts = []
         async for delta in stream_text_reply(working):

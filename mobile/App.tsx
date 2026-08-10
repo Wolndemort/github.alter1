@@ -316,6 +316,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [legalBusy, setLegalBusy] = useState(false);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
+  const [memoryNotice, setMemoryNotice] = useState(false);
   const [reminders, setReminders] = useState<{ id: number; text: string; remind_at: string }[]>([]);
   const [remindersVisible, setRemindersVisible] = useState(false);
   // Reminders are created from the main chat (text or voice), not by a fixed
@@ -394,6 +395,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   useEffect(() => {
     if (items.length > 0) api.memory(token).then(setMemoryData).catch(() => undefined);
   }, [token, items.length]);
+  useEffect(() => {
+    const latestUser = [...items].reverse().find((item) => item.role === "user");
+    if (latestUser && /запомни|помни|не забывай/i.test(latestUser.text)) {
+      setMemoryNotice(true);
+      const timer = setTimeout(() => setMemoryNotice(false), 5000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [items]);
   useEffect(() => {
     const timer = setInterval(() => {
         const cutoff = Date.now();
@@ -709,6 +719,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
     {items.length === 0 ? <EmptyChat onPrompt={(value) => { setMessage(value); resetIdle(); }} /> : null}
     <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <>{item.text ? (item.streaming ? <Text style={styles.message}>{item.text}<Text style={styles.cursor}>▋</Text></Text> : <TypingText text={item.text} />) : <ThinkingDots />} {item.text && !item.streaming ? <View style={answerActionStyles.row}><Pressable onPress={() => { const prompt = promptFromHistory(item.id); if (prompt) send(prompt); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Повторить запрос"><Text style={answerActionStyles.icon}>↻</Text></Pressable><Pressable onPress={() => send("Продолжи последний ответ, добавив следующий практический шаг.")} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Продолжить ответ"><Text style={answerActionStyles.icon}>→</Text></Pressable><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View> : null}</> : <Text style={[styles.message, styles.userMessage, { color: "#050505" }]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}{item.audioUri ? <Pressable onPress={() => downloadMedia(item, "audio")} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать аудио"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать аудио</Text><Text style={mediaDownloadStyles.name}>{item.audioFilename || item.audioMime || "Аудиофайл"}</Text></View></Pressable> : null}</View>} />
+    {memoryNotice ? <Pressable style={styles.memoryNotice} onPress={openMemory}><Text style={styles.memoryNoticeText}>✓ Запомнил важное. Управлять памятью →</Text></Pressable> : null}
+    {items.length > 0 && !message && !busy ? <View style={styles.quickActionRow}><Pressable onPress={() => send("Сделай последний ответ короче и конкретнее.")} style={styles.quickAction}><Text style={styles.quickActionText}>Короче</Text></Pressable><Pressable onPress={() => send("Какой следующий практический шаг?")} style={styles.quickAction}><Text style={styles.quickActionText}>Следующий шаг</Text></Pressable><Pressable onPress={() => send("Составь из этого короткий план действий.")} style={styles.quickAction}><Text style={styles.quickActionText}>План</Text></Pressable><Pressable onPress={openMemory} style={styles.quickAction}><Text style={styles.quickActionText}>Память</Text></Pressable></View> : null}
     {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {!attachment ? (() => { const latestImage = [...items].reverse().find((item) => item.mediaUri && item.mediaMime?.startsWith("image/")); return latestImage ? <Pressable onPress={() => editMedia(latestImage)} disabled={busy} accessibilityLabel="Редактировать последнее изображение"><Text style={mediaStyles.generateAction}>✏️ Редактировать последнее изображение</Text></Pressable> : null; })() : null}
     {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
@@ -848,6 +860,11 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).quickPromptTitle = { color: "#ffffff", fontSize: 13, fontWeight: "800", marginBottom: 5 };
 (styles as Record<string, unknown>).quickPromptText = { color: "#999999", fontSize: 11, lineHeight: 15 };
 (styles as Record<string, unknown>).emptyHint = { color: "#666666", fontSize: 11, letterSpacing: 0.6, textAlign: "center", marginTop: 4 };
+(styles as Record<string, unknown>).memoryNotice = { marginHorizontal: 12, marginBottom: 3, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#151515", borderWidth: 1, borderColor: "#4a4a4a" };
+(styles as Record<string, unknown>).memoryNoticeText = { color: "#ffffff", fontSize: 12, textAlign: "center" };
+(styles as Record<string, unknown>).quickActionRow = { flexDirection: "row", gap: 7, paddingHorizontal: 12, paddingBottom: 5, overflow: "hidden" };
+(styles as Record<string, unknown>).quickAction = { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 14, backgroundColor: "#111111", borderWidth: 1, borderColor: "#333333" };
+(styles as Record<string, unknown>).quickActionText = { color: "#cccccc", fontSize: 11, fontWeight: "700" };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
