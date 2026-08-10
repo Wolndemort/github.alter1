@@ -25,7 +25,12 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         issues.append("too_long")
     if text.count("?") > 1:
         issues.append("too_many_questions")
-    leaked_markers = ("tool_calls", '"status":', "system prompt", "developer message", "chain of thought")
+    leaked_markers = (
+        "tool_calls", '"status":', "system prompt", "developer message", "chain of thought",
+        "we need to answer", "we need to browse", "let's do a search", "let's simulate",
+        "as ai,", "as an ai", "search terms:", "we should use", "need to check",
+        "internal reasoning", "internal notes", "final answer:",
+    )
     reasoning_phrases = (
         "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",
         "я должен ответить", "нужно ответить пользователю", "следует ответить",

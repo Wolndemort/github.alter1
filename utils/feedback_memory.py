@@ -1,6 +1,8 @@
 """Turn answer ratings into compact, reusable personal style guidance."""
 from __future__ import annotations
 
+from utils.quality import has_internal_leak
+
 
 def feedback_context(settings: dict | None, limit: int = 6) -> list[dict[str, str]]:
     values = (settings or {}).get("reply_feedback", [])
@@ -11,7 +13,7 @@ def feedback_context(settings: dict | None, limit: int = 6) -> list[dict[str, st
         if not isinstance(item, dict) or item.get("rating") not in {"positive", "negative"}:
             continue
         answer = str(item.get("answer") or "").strip()
-        if not answer:
+        if not answer or has_internal_leak(answer):
             continue
         result.append({
             "rating": str(item["rating"]),
