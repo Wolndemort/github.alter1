@@ -233,6 +233,16 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
     return _route_with_available_models(list(dict.fromkeys(filter(None, primary))))
 
 
+def _response_token_budget(messages, requested: int | None, task: str | None) -> int:
+    """Keep casual replies fast while preserving room for real reasoning."""
+    if requested:
+        return requested
+    text = _request_text(messages)
+    if task not in {"reasoning", "planning"} and len(text) < 240:
+        return min(config.MAX_OUTPUT_TOKENS, 320)
+    return config.MAX_OUTPUT_TOKENS
+
+
 def _provider_status_code(error: Exception) -> int | None:
     value = getattr(error, "status_code", None) or getattr(error, "status", None)
     return value if isinstance(value, int) else None
@@ -328,7 +338,7 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS,
+                max_tokens=_response_token_budget(messages, max_tokens, task),
                 **kwargs,
             )
         except Exception as error:
@@ -362,7 +372,7 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
             stream = await client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=max_tokens or config.MAX_OUTPUT_TOKENS,
+                max_tokens=_response_token_budget(messages, max_tokens, task),
                 stream=True,
             )
             emitted = False

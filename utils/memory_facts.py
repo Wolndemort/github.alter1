@@ -36,6 +36,19 @@ def extract_user_facts(text: str) -> dict:
         return {}
     result: dict = {}
 
+    # Communication preferences are durable and high-signal: unlike a mood,
+    # they should shape future replies until the user changes them.
+    style_patterns = (
+        ("concise", r"(?:отвечай|пиши|говори)\s+(?:мне\s+)?(?:короче|кратко|по делу)"),
+        ("detailed", r"(?:отвечай|пиши|говори)\s+(?:мне\s+)?(?:подробнее|развёрнуто|детальнее)"),
+        ("casual", r"(?:без официоза|неформально|как друг|по-простому|попроще)"),
+        ("humorous", r"(?:с юмором|пошути|можно пошутить|повеселее)"),
+        ("direct", r"(?:жёстче|прямее|без смягчения|говори прямо)"),
+    )
+    styles = [name for name, pattern in style_patterns if re.search(pattern, value, re.I)]
+    if styles:
+        result["preferences"] = {"response_style": styles[-1]}
+
     patterns = (
         ("identity", "name", r"\b(?:меня зовут|мо[её] имя)\s+(?P<value>[^.!?\n]{2,80})"),
         ("identity", "age", r"\b(?:мне|мой возраст)\s+(?P<value>\d{1,3})\s*(?:лет|года|год)?"),
