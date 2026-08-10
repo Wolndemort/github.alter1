@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 META_KEY = "_meta"
 
@@ -12,6 +12,9 @@ def _now(value: datetime | None = None) -> datetime:
 
 
 def _expires(category: str, key: str, value: str, now: datetime) -> str | None:
+    # ALTER memory is permanent; facts change only when the user corrects or
+    # explicitly deletes them.
+    return None
     # Temporary states must not live forever; stable identity and preferences do.
     if key == "current_mood" or category == "important_events":
         return (now + timedelta(days=30)).isoformat()
@@ -58,22 +61,5 @@ def merge_memory_facts(current: dict | None, incoming: dict | None, *, now: date
 
 
 def purge_expired_memory(memory: dict | None, *, now: datetime | None = None) -> dict:
-    """Remove only expired current facts; preserve their metadata history."""
-    result = deepcopy(memory) if isinstance(memory, dict) else {}
-    metadata = result.get(META_KEY) if isinstance(result.get(META_KEY), dict) else {}
-    stamp = _now(now)
-    for category, fields in list(metadata.items()):
-        if not isinstance(fields, dict) or not isinstance(result.get(category), dict):
-            continue
-        for key, entry in list(fields.items()):
-            try:
-                expires = datetime.fromisoformat(str(entry.get("expires_at", "")))
-            except (TypeError, ValueError):
-                continue
-            if expires <= stamp:
-                result[category].pop(key, None)
-                entry["expired_at"] = stamp.isoformat()
-                entry.pop("expires_at", None)
-        if not result.get(category):
-            result.pop(category, None)
-    return result
+    # Compatibility shim: permanent memory is never silently purged.
+    return deepcopy(memory) if isinstance(memory, dict) else {}

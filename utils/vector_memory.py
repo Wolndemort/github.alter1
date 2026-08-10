@@ -1,7 +1,6 @@
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
-from sqlalchemy import delete, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from data.models import MemoryChunk
 from utils.ap_logic import client
@@ -34,7 +33,6 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
             ).limit(1))
             if existing.scalar_one_or_none() is not None:
                 return
-        ttl_days = 730 if source in {"explicit_memory", "important_event"} else 365
         db.add(MemoryChunk(
             user_id=user_id,
             content=content,
@@ -43,7 +41,7 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
             source=source[:32],
             category=(categories or [None])[0],
             importance=1.0 if source in {"explicit_memory", "important_event"} else 0.5,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=ttl_days),
+            expires_at=None,
         ))
     except Exception:
         increment("memory.vector.save_failure")
@@ -62,13 +60,11 @@ async def recall(
         limit = limit or config.MEMORY_RECALL_LIMIT
         max_distance = config.MEMORY_RECALL_MAX_DISTANCE if max_distance is None else max_distance
         distance = MemoryChunk.embedding.cosine_distance(vector)
-        now = datetime.now(timezone.utc)
         result = await db.execute(
             select(MemoryChunk.content)
             .where(
                 MemoryChunk.user_id == user_id,
                 distance <= max_distance,
-                or_(MemoryChunk.expires_at.is_(None), MemoryChunk.expires_at > now),
             )
             .order_by((distance - (MemoryChunk.importance * 0.05)).asc(), MemoryChunk.created_at.desc())
             .limit(limit)
@@ -83,19 +79,5 @@ async def recall(
 
 
 async def purge_expired(db: AsyncSession, limit: int = 1000) -> int:
-    """Delete expired episodic memories in bounded batches."""
-    expired_ids = (await db.execute(
-        select(MemoryChunk.id)
-        .where(MemoryChunk.expires_at <= datetime.now(timezone.utc))
-        .order_by(MemoryChunk.id)
-        .limit(limit)
-    )).scalars().all()
-    if not expired_ids:
-        return 0
-    result = await db.execute(
-        delete(MemoryChunk)
-        .where(MemoryChunk.id.in_(expired_ids))
-        .execution_options(synchronize_session=False)
-    )
-    await db.commit()
-    return int(result.rowcount or 0)
+    # Compatibility shim: ALTER's memory is permanent by product design.
+    return 0
