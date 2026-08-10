@@ -55,3 +55,42 @@ async def test_sound_effect_requests_a_usable_default_duration(monkeypatch):
     call = Client.calls[0]
     assert call[1].endswith("/v1/sound-generation")
     assert call[2]["json"]["duration_seconds"] == 8
+
+
+@pytest.mark.asyncio
+async def test_design_voice_persists_preview_as_a_real_voice(monkeypatch):
+    class VoiceResponse(Response):
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    class VoiceClient(Client):
+        async def post(self, url, **kwargs):
+            self.calls.append(("post", url, kwargs))
+            if url.endswith("/design"):
+                return VoiceResponse({"previews": [{"generated_voice_id": "preview-123"}]})
+            return VoiceResponse({"voice_id": "voice-123"})
+
+    Client.calls = []
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", VoiceClient)
+
+    result = await elevenlabs_media.design_voice("calm narrator")
+
+    assert result["voice_id"] == "voice-123"
+    assert Client.calls[-1][1].endswith("/v1/text-to-voice")
+
+
+@pytest.mark.asyncio
+async def test_design_voice_wraps_provider_timeout(monkeypatch):
+    class TimeoutClient(Client):
+        async def post(self, url, **kwargs):
+            raise TimeoutError("provider timed out")
+
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", TimeoutClient)
+
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
+        await elevenlabs_media.design_voice("calm narrator")

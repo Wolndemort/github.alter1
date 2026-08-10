@@ -90,15 +90,49 @@ async def list_models() -> list:
 async def design_voice(description: str) -> dict:
     if not description.strip():
         raise ElevenLabsError("voice description is required")
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
-            "https://api.elevenlabs.io/v1/text-to-voice/design",
-            headers={"xi-api-key": _key(), "Content-Type": "application/json"},
-            json={"voice_description": description[:1000]},
-        )
-    if response.status_code >= 400:
-        raise ElevenLabsError("ElevenLabs voice generation failed")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise ElevenLabsError("ElevenLabs returned an invalid voice response")
-    return payload
+    try:
+        # Voice Design can take a while, but an unbounded provider request
+        # leaves both Telegram and the mobile client waiting forever.
+        async with httpx.AsyncClient(timeout=40) as client:
+            response = await client.post(
+                "https://api.elevenlabs.io/v1/text-to-voice/design",
+                headers={"xi-api-key": _key(), "Content-Type": "application/json"},
+                json={"voice_description": description[:1000]},
+            )
+            if response.status_code >= 400:
+                raise ElevenLabsError("ElevenLabs voice generation failed")
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ElevenLabsError("ElevenLabs returned an invalid voice response")
+
+            # The current API returns a generated_voice_id inside previews.
+            # Turn that preview into a persistent voice before returning it to
+            # clients; the preview id is not suitable for speech-to-speech.
+            previews = payload.get("previews")
+            preview = previews[0] if isinstance(previews, list) and previews else None
+            generated_id = (
+                preview.get("generated_voice_id")
+                if isinstance(preview, dict)
+                else None
+            )
+            if generated_id and not (payload.get("voice_id") or payload.get("id")):
+                created = await client.post(
+                    "https://api.elevenlabs.io/v1/text-to-voice",
+                    headers={"xi-api-key": _key(), "Content-Type": "application/json"},
+                    json={
+                        "voice_name": "ALTER voice",
+                        "voice_description": description[:1000],
+                        "generated_voice_id": generated_id,
+                    },
+                )
+                if created.status_code >= 400:
+                    raise ElevenLabsError("ElevenLabs voice creation failed")
+                created_payload = created.json()
+                if not isinstance(created_payload, dict):
+                    raise ElevenLabsError("ElevenLabs returned an invalid created voice response")
+                return {**payload, **created_payload}
+            return payload
+    except ElevenLabsError:
+        raise
+    except (httpx.HTTPError, TimeoutError, ValueError) as exc:
+        raise ElevenLabsError("ElevenLabs voice generation is temporarily unavailable") from exc
