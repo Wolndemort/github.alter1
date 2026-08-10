@@ -1121,6 +1121,7 @@ async def cmd_new_session(message: types.Message, db_session: AsyncSession):
     session = await get_active_session(user.id, db_session)
     if session:
         await process_session(session, db_session)
+    db_session.add(Session(user_id=user.id, raw_messages=[]))
     await db_session.commit()
     await message.answer("Новый разговор начат.", reply_markup=memory_keyboard())
 
@@ -1405,7 +1406,16 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     session = result.scalar_one_or_none()
 
     if not session:
-        session = Session(user_id=user.id, raw_messages=[])
+        previous_result = await db_session.execute(select(Session).where(
+            Session.user_id == user.id,
+        ).order_by(Session.started_at.desc()).limit(1))
+        previous = previous_result.scalar_one_or_none()
+        carried = [
+            {key: item[key] for key in ("role", "content") if key in item}
+            for item in (previous.raw_messages or [])[-40:]
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
+        ] if previous is not None else []
+        session = Session(user_id=user.id, raw_messages=carried)
         db_session.add(session)
         await db_session.flush()
 

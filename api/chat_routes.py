@@ -113,8 +113,10 @@ async def new_session_route(request: web.Request) -> web.Response:
         ).order_by(ChatSession.started_at.desc()))).scalar_one_or_none()
         if active is not None and active.raw_messages:
             await process_session(active, session)
-        else:
-            await session.commit()
+        # Leave an empty active session as an explicit boundary. Otherwise the
+        # next message would automatically inherit the previous conversation.
+        session.add(ChatSession(user_id=user_id, raw_messages=[]))
+        await session.commit()
     return web.json_response({"ok": True})
 
 
@@ -125,7 +127,6 @@ async def history_route(request: web.Request) -> web.Response:
         from data.models import Session as ChatSession
         result = await session.execute(select(ChatSession).where(
             ChatSession.user_id == user_id,
-            ChatSession.is_processed.is_(False),
         ).order_by(ChatSession.started_at.desc()))
         active = result.scalar_one_or_none()
         messages = [

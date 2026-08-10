@@ -60,7 +60,19 @@ class ChatService:
         ).order_by(Session.started_at.desc()))
         session = result.scalar_one_or_none()
         if session is None:
-            session = Session(user_id=user_id, raw_messages=[])
+            # The inactivity worker marks old sessions as processed. Carry the
+            # latest dialogue into the next session so a follow-up such as
+            # “change item 2” still has the plan it refers to.
+            previous_result = await db.execute(select(Session).where(
+                Session.user_id == user_id,
+            ).order_by(Session.started_at.desc()).limit(1))
+            previous = previous_result.scalar_one_or_none()
+            carried = [
+                {key: item[key] for key in ("role", "content") if key in item}
+                for item in (previous.raw_messages or [])[-40:]
+                if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
+            ] if previous is not None else []
+            session = Session(user_id=user_id, raw_messages=carried)
             db.add(session)
             await db.flush()
         _append(session, "user", text)
