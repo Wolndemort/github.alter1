@@ -368,6 +368,8 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
     messages = _bounded_api_messages(messages)
     route = select_model_route(messages, task)
     last_error = None
+    started_at = time.perf_counter()
+    first_token_recorded = False
     for model in route:
         try:
             stream = await client.chat.completions.create(
@@ -383,8 +385,12 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                 text = getattr(delta, "content", None) if delta else None
                 if text:
                     emitted = True
+                    if not first_token_recorded:
+                        first_token_recorded = True
+                        increment("ai.reply.first_token", duration_ms=int((time.perf_counter() - started_at) * 1000), model=model)
                     yield text
             if emitted:
+                increment("ai.reply.stream_completed", duration_ms=int((time.perf_counter() - started_at) * 1000), model=model)
                 return
             raise RuntimeError("Streaming model returned an empty response")
         except Exception as error:
