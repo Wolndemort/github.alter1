@@ -17,12 +17,12 @@ def _key() -> str:
 
 
 async def sound_effect(prompt: str) -> bytes:
-    prompt = f"{prompt[:850]}. Pure instrumental/environmental sound effect only; no speech, no voices, no dialogue, no people talking."
+    prompt = f"{prompt[:850]}. Pure instrumental/environmental sound effect only; no speech, no voices, no dialogue, no people talking. Generate only the requested natural environmental sound."
     async with httpx.AsyncClient(timeout=90) as client:
         response = await client.post(
             "https://api.elevenlabs.io/v1/sound-generation",
             headers={"xi-api-key": _key(), "Accept": "audio/mpeg"},
-            json={"text": f"{prompt[:850]}. Generate only the requested natural environmental sound; absolutely no human voice, speech, words, singing, dialogue, or narration.", "duration_seconds": 8, "prompt_influence": 1.0},
+            json={"text": prompt[:1000], "duration_seconds": 8, "prompt_influence": 1.0},
         )
     if response.status_code >= 400:
         raise ElevenLabsError("ElevenLabs sound generation failed")

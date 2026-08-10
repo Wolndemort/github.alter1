@@ -199,7 +199,7 @@ export class AlterApi {
   }
   voices(token: string) { return this.request<{ voices?: unknown[] }>("/api/v1/audio/voices", {}, token); }
   models(token: string) { return this.request<{ models: unknown[] }>("/api/v1/audio/models", {}, token); }
-  voiceGeneration(token: string, description: string) { return this.request<Record<string, unknown>>("/api/v1/audio/voice-generation", { method: "POST", body: JSON.stringify({ description }) }, token); }
+  voiceGeneration(token: string, description: string) { return this.request<{ voice_id?: string; [key: string]: unknown }>("/api/v1/audio/voice-generation", { method: "POST", body: JSON.stringify({ description }) }, token); }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }
   registerPushToken(token: string, pushToken: string) { return this.request<{ ok: boolean }>("/api/v1/push-token", { method: "POST", body: JSON.stringify({ token: pushToken }) }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
