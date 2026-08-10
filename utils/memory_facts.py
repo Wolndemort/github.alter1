@@ -1,39 +1,80 @@
-"""Deterministic extraction of high-value user facts."""
+"""Conservative, provider-independent extraction of durable user facts.
 
+This runs on every message. It intentionally prefers a small false-negative
+rate over filling the user's memory with guesses or facts about other people.
+The slower session summarizer remains responsible for complex open loops.
+"""
 from __future__ import annotations
 
 import re
 
 
-_VEHICLE_PATTERNS = (
-    re.compile(r"\b(?:у\s+меня|моя|мой)\s+(?:машина|авто|тачка)\s*(?:это|[-:])?\s*(?P<value>[^.!?\n]{2,120})", re.I),
-    re.compile(r"\b(?:машина|авто|тачка)\s+(?:у\s+меня\s+)?(?:это\s+)?(?P<value>[A-Za-zА-Яа-я0-9][^.!?\n]{1,119})", re.I),
-)
+def _clean(value: str, limit: int = 160) -> str:
+    return re.sub(r"\s+", " ", value).strip(" .,!?:;—-\n\t")[:limit]
 
-# Keep explicit, high-confidence facts available immediately to every client.
-# The legacy patterns above are retained for backward compatibility with old
-# stored/test data, but these patterns match normal UTF-8 Russian input.
-_EXPLICIT_PATTERNS = (
-    (re.compile(r"\b(?:меня зовут|моё имя|мое имя)\s+(?P<value>[^.!?\n]{2,80})", re.I), "identity", "name"),
-    (re.compile(r"\b(?:я живу в|я из)\s+(?P<value>[^.!?\n]{2,80})", re.I), "identity", "city"),
-    (re.compile(r"\b(?:я работаю|моя работа|моя профессия)\s+(?:в|—|-)?\s*(?P<value>[^.!?\n]{2,120})", re.I), "skills_career", "job"),
-    (re.compile(r"\b(?:я изучаю|я учусь|моя цель)\s+(?P<value>[^.!?\n]{2,120})", re.I), "goals_habits", "focus"),
-    (re.compile(r"\b(?:мне нравится|я люблю|я предпочитаю)\s+(?P<value>[^.!?\n]{2,120})", re.I), "preferences", "likes"),
-)
+
+def _match(text: str, pattern: str) -> str | None:
+    found = re.search(pattern, text, re.I)
+    return _clean(found.group("value")) if found else None
+
+
+def _add(result: dict, category: str, key: str, value: str) -> None:
+    if not value:
+        return
+    result.setdefault(category, {})[key] = value
 
 
 def extract_user_facts(text: str) -> dict:
-    value = " ".join(str(text or "").split()).strip(" .,!?:;-\n\t")
-    for pattern, category, key in _EXPLICIT_PATTERNS:
-        match = pattern.search(value)
-        if match:
-            fact = match.group("value").strip(" .,!?:;-\n\t")
-            if fact:
-                return {category: {key: fact[:120]}}
-    for pattern in _VEHICLE_PATTERNS:
-        match = pattern.search(value)
-        if match:
-            vehicle = match.group("value").strip(" .,!?:;-\n\t")
-            if vehicle:
-                return {"preferences": {"vehicle": vehicle[:120]}}
-    return {}
+    """Return high-confidence facts explicitly stated about the user.
+
+    The output keeps the legacy ``category -> fields`` contract used by the
+    existing JSONB memory and API. Questions, advice, and third-person facts
+    are deliberately ignored.
+    """
+    value = " ".join(str(text or "").split()).strip()
+    if not value or value.endswith("?"):
+        return {}
+    result: dict = {}
+
+    patterns = (
+        ("identity", "name", r"\b(?:меня зовут|мо[её] имя)\s+(?P<value>[^.!?\n]{2,80})"),
+        ("identity", "city", r"\b(?:я живу в|я из|проживаю в)\s+(?P<value>[^.!?\n]{2,80})"),
+        ("skills_career", "job", r"\b(?:я работаю|моя работа|моя профессия)\s+(?:в|—|-)?\s*(?P<value>[^.!?\n]{2,120})"),
+        ("education", "focus", r"\b(?:я изучаю|я учусь|мо[яю] специальност[ьи])\s+(?P<value>[^.!?\n]{2,120})"),
+        ("goals_habits", "goal", r"\b(?:моя цель|я хочу|планирую|собираюсь)\s+(?P<value>[^.!?\n]{2,140})"),
+        ("family", "family", r"\b(?:у меня есть|в моей семье)\s+(?P<value>[^.!?\n]{2,120})"),
+        ("relationships", "relationship", r"\b(?:я встречаюсь|я женат|я замужем|у меня отношения)\s*(?P<value>[^.!?\n]{0,100})"),
+        ("preferences", "vehicle", r"\b(?:у меня|моя|мой)\s+(?:машина|авто|тачка)\s*(?:это|[-:])?\s*(?P<value>[^.!?\n]{2,120})"),
+        ("health_sport", "health", r"\b(?:у меня|я страдаю от|мне поставили)\s+(?P<value>(?:аллергия|астма|диабет|мигрень|бессонница|давление)[^.!?\n]{0,100})"),
+        ("health_sport", "sport", r"\b(?:я занимаюсь|тренируюсь|хожу на)\s+(?P<value>(?:спортом|бегом|плаванием|фитнесом|йогой|борьбой|теннисом|футболом)[^.!?\n]{0,80})"),
+    )
+    for category, key, pattern in patterns:
+        candidate = _match(value, pattern)
+        if candidate:
+            _add(result, category, key, candidate)
+
+    # Preference statements are classified by their object, not blindly put
+    # into one generic bucket. This covers natural phrases like "люблю кино".
+    preference = _match(value, r"\b(?:мне нравится|я люблю|я предпочитаю|мне по душе)\s+(?P<value>[^.!?\n]{2,140})")
+    if preference:
+        lower = preference.casefold()
+        category = "preferences"
+        key = "likes"
+        if re.search(r"одежд|стил|кроссов|костюм|цвет", lower): category, key = "style_clothing", "style"
+        elif re.search(r"парфюм|дух|аромат", lower): category, key = "style_clothing", "perfume"
+        elif re.search(r"музык|песн|исполнител", lower): category, key = "music", "likes"
+        elif re.search(r"фильм|сериал|кино", lower): category, key = "films_series", "likes"
+        elif re.search(r"игр|поиграть|playstation|xbox", lower): category, key = "games", "likes"
+        elif re.search(r"хобби|увлечен", lower): category, key = "interests_hobbies", "hobbies"
+        _add(result, category, key, preference)
+
+    mood = _match(value, r"\b(?:я чувствую себя|моё настроение|мое настроение)\s+(?P<value>[^.!?\n]{2,100})")
+    if mood:
+        _add(result, "psycho_vibe", "current_mood", mood)
+
+    # Explicit plans/events are useful later but remain separate from stable
+    # identity facts so they can be expired or converted into reminders.
+    event = _match(value, r"\b(?:у меня|мне предстоит|я иду на|я еду на)\s+(?P<value>(?:экзамен|собеседование|операци[яю]|поездк[ау]|встречу|концерт|день рождения)[^.!?\n]{0,120})")
+    if event:
+        _add(result, "important_events", "current", event)
+    return result

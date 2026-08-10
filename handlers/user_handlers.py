@@ -30,6 +30,8 @@ from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
+from utils.memory_facts import extract_user_facts
+from utils.helpers import merge_memory
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
@@ -1295,6 +1297,10 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             logging.exception("Text video generation failed")
             await message.answer("Не получилось создать видео. Проверь Fal.ai и попробуй ещё раз.")
         return
+    extracted_facts = extract_user_facts(message.text)
+    if extracted_facts:
+        user.memory = merge_memory(dict(user.memory or {}), extracted_facts)
+        flag_modified(user, "memory")
     explicit_fact = explicit_memory_fact(message.text)
     if explicit_fact:
         memory = dict(user.memory or {})

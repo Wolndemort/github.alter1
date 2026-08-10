@@ -10,6 +10,7 @@ CATEGORY_LABELS = {
     "family": "Семья", "worldview": "Взгляды и ценности", "politics": "Политические взгляды",
     "preferences": "Предпочтения", "travel": "Путешествия", "finance": "Финансовые планы",
     "important_events": "Важные события", "open_loops": "Незавершённые темы",
+    "style_clothing": "Стиль и одежда", "music": "Музыка", "films_series": "Фильмы и сериалы", "games": "Игры",
 }
 KEY_LABELS = {"name": "Имя", "age": "Возраст", "city": "Город", "job": "Работа", "vehicle": "Автомобиль", "language": "Язык", "title": "Тема", "description": "Описание", "follow_up_question": "Вопрос для возвращения", "follow_up_at": "Вернуться"}
 
