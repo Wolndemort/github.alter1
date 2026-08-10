@@ -108,3 +108,15 @@ async def test_chat_service_saves_vehicle_fact_immediately(monkeypatch):
     result = await ChatService().reply(db, 9, "У меня машина BMW X5")
     assert result.reply == "Запомнил"
     assert user.memory["preferences"]["vehicle"] == "BMW X5"
+
+
+@pytest.mark.asyncio
+async def test_chat_service_saves_explicit_memory_fact_for_mobile(monkeypatch):
+    user = User(id=10, first_name="Adam", memory={}, tech_stack={})
+    db = Db(user, active=None, events=[])
+    async def remember(*args, **kwargs): pass
+    async def reply(messages, memory): return "Запомнил"
+    monkeypatch.setattr("services.chat_service.remember", remember)
+    monkeypatch.setattr("services.chat_service.generate_reply", reply)
+    await ChatService().reply(db, 10, "Запомни, что я люблю бегать по утрам")
+    assert "я люблю бегать по утрам" in user.memory["preferences"]["explicit_facts"]

@@ -19,6 +19,7 @@ from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
+from utils.intent import explicit_memory_fact
 from datetime import timedelta
 
 
@@ -69,6 +70,15 @@ class ChatService:
             return ChatResult(reply=reply, session_id=session.id)
 
         new_facts = extract_user_facts(text)
+        explicit_fact = explicit_memory_fact(text)
+        if explicit_fact:
+            new_facts = dict(new_facts)
+            preferences = dict(new_facts.get("preferences") or {})
+            explicit_facts = list(preferences.get("explicit_facts") or [])
+            if explicit_fact not in explicit_facts:
+                explicit_facts.append(explicit_fact)
+            preferences["explicit_facts"] = explicit_facts[-20:]
+            new_facts["preferences"] = preferences
         if new_facts:
             user.memory = merge_memory(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
