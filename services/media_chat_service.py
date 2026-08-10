@@ -15,6 +15,8 @@ from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
 from services.media_generation import generate_image, generate_video
 from utils.vector_memory import recall, remember
+from services.elevenlabs_media import ElevenLabsError, speech_to_speech
+from services.voice_commands import is_voice_change_request, requested_voice_id
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,18 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     prompt = validate_message(prompt or default_prompt)
     if kind == "audio":
         from utils.audio_actions import process_audio_action
+        if is_voice_change_request(prompt):
+            voice_id = requested_voice_id(prompt, (user.tech_stack or {}).get("generated_voice_id"), config.ELEVENLABS_VOICE_ID)
+            if not voice_id:
+                raise ValueError("Сначала создай голос или укажи voice_id.")
+            try:
+                transformed = await speech_to_speech(data, voice_id, filename)
+            except ElevenLabsError as exc:
+                raise ValueError(str(exc)) from exc
+            _append(session, "user", prompt)
+            _append(session, "assistant", "Изменил голос записи.")
+            await db.commit()
+            return MediaChatResult(reply="Изменил голос записи.", session_id=session.id, audio=transformed, audio_filename="alter-voice.mp3")
         # A mobile voice command is inside the uploaded audio, not in the
         # multipart text field. Transcribe it before routing audio actions;
         # otherwise ALTER treats "наложи дождь..." as ordinary chat and only

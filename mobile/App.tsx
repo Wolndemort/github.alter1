@@ -302,6 +302,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [autoVoiceReplies, setAutoVoiceReplies] = useState(false);
   const [ttsVoice, setTtsVoice] = useState("alloy");
   const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+  const [voiceCreatorVisible, setVoiceCreatorVisible] = useState(false);
+  const [voiceDescription, setVoiceDescription] = useState("");
   const [emailVisible, setEmailVisible] = useState(false);
   const [openSection, setOpenSection] = useState<"profile" | "connections" | "tools" | "settings" | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number } | null>(null);
@@ -585,6 +587,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const next = !checkinsEnabled; setCheckinsEnabled(next);
     try { await api.setCheckins(token, next); } catch (err) { setCheckinsEnabled(!next); setMenuError(err instanceof Error ? err.message : "Не удалось изменить check-in"); }
   };
+  const createVoice = async () => {
+    const description = voiceDescription.trim();
+    if (!description || busy) return;
+    setBusy(true); setMenuError("");
+    try {
+      await api.voiceGeneration(token, description);
+      setVoiceCreatorVisible(false); setVoiceDescription("");
+      setItems((old) => [...old, { id: `${Date.now()}voice`, role: "assistant", text: "Голос создан и сохранён. Прикрепи голосовое и напиши: «измени мой голос на созданный»." }]);
+    } catch (err) { setMenuError(userFacingError(err)); }
+    finally { setBusy(false); }
+  };
   const pickMediaLibrary = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
@@ -675,6 +688,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         <View style={premiumStyles.menuAction}><Pressable style={{ flex: 1 }} onPress={async () => { const next = !voiceReplies; setVoiceReplies(next); try { await api.updateSettings(token, { voice_replies: next }); } catch (err) { setVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Голосовые ответы · {voiceReplies ? "включены" : "выключены"}</Text></Pressable><Pressable onPress={() => voiceReplies && setVoiceMenuOpen((value) => !value)} accessibilityLabel="Настроить голосовые ответы"><Text style={premiumStyles.menuActionArrow}>{voiceReplies ? (voiceMenuOpen ? "⌃" : "⌄") : "○"}</Text></Pressable></View>
         {voiceReplies && voiceMenuOpen ? <View style={premiumStyles.submenu}><Pressable style={premiumStyles.submenuAction} onPress={async () => { const next = !autoVoiceReplies; setAutoVoiceReplies(next); try { await api.updateSettings(token, { voice_auto_replies: next }); } catch (err) { setAutoVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Озвучивать автоматически</Text><Text style={premiumStyles.menuActionArrow}>{autoVoiceReplies ? "✓" : "○"}</Text></Pressable><Pressable style={premiumStyles.submenuAction} onPress={async () => { const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"]; const next = voices[(voices.indexOf(ttsVoice) + 1) % voices.length]; const preview = "Привет, я ALTER, твой персональный ассистент."; setTtsVoice(next); try { await api.updateSettings(token, { tts_voice: next }); await playVoiceReply(preview, "voice-preview"); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось выбрать голос"); } }}><Text style={premiumStyles.menuActionText}>Голос · {ttsVoice === "elevenlabs" ? "ElevenLabs Premium" : ttsVoice}</Text><Text style={premiumStyles.menuActionArrow}>›</Text></Pressable></View> : null}
+        <Pressable style={premiumStyles.menuAction} onPress={() => setVoiceCreatorVisible(true)}><Text style={premiumStyles.menuActionText}>Создать голос</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         </View> : null}
         <Text style={premiumStyles.version}>ALTER · 0.1.0</Text><Pressable style={[premiumStyles.menuAction, premiumStyles.menuLogout]} onPress={() => { setMenuVisible(false); onLogout(); }}><Text style={premiumStyles.menuActionText}>Выйти</Text><Text style={premiumStyles.menuActionArrow}>↗</Text></Pressable>
         </ScrollView>
@@ -688,6 +702,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Pressable style={[planStyles.card, planStyles.featured]} onPress={() => buySubscription("ego")}><Text style={planStyles.badge}>БОЛЬШЕ ВОЗМОЖНОСТЕЙ</Text><Text style={planStyles.name}>ALTER Ego</Text><Text style={planStyles.price}>2 990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Всё из Personal · ElevenLabs · изменение и очистка голоса · создание звуков и медиа · расширенные квоты · приоритет</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
       <Pressable onPress={() => setPlansVisible(false)}><Text style={planStyles.cancel}>Закрыть</Text></Pressable>
     </View></View>
+  </Modal>
+  <Modal visible={voiceCreatorVisible} transparent animationType="fade" onRequestClose={() => setVoiceCreatorVisible(false)}>
+    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ELEVENLABS</Text><Text style={permissionStyles.title}>Создать голос</Text><Text style={permissionStyles.body}>Опиши голос обычными словами. Например: спокойный низкий голос для подкаста.</Text><TextInput value={voiceDescription} onChangeText={setVoiceDescription} placeholder="Описание голоса" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><Pressable style={[permissionStyles.primary, { opacity: voiceDescription.trim() && !busy ? 1 : 0.45 }]} onPress={createVoice} disabled={!voiceDescription.trim() || busy}><Text style={permissionStyles.primaryText}>{busy ? "Создаём…" : "Создать голос"}</Text></Pressable><Pressable onPress={() => setVoiceCreatorVisible(false)}><Text style={permissionStyles.later}>Отмена</Text></Pressable></View></View>
   </Modal>
   <Modal visible={remindersVisible} animationType="slide" onRequestClose={() => { setRemindersVisible(false); setMenuVisible(true); }}>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setRemindersVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
@@ -745,6 +762,7 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).memoryForget = { color: "#aaa", fontSize: 12 };
 (styles as Record<string, unknown>).clearMemoryButton = { marginHorizontal: 20, marginBottom: 30, borderWidth: 1, borderColor: "#5b3042", borderRadius: 12, paddingVertical: 13, alignItems: "center" };
 (styles as Record<string, unknown>).clearMemoryText = { color: "#ffb4c8", fontWeight: "700" };
+(styles as Record<string, unknown>).voiceDescriptionInput = { minHeight: 90, maxHeight: 150, backgroundColor: "#181818", borderRadius: 12, color: "#fff", padding: 14, textAlignVertical: "top", marginBottom: 14 };
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({

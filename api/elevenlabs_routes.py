@@ -3,6 +3,7 @@ import base64
 
 from aiohttp import web
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from api.auth_routes import _bearer, _json
 from config import config
@@ -184,7 +185,18 @@ async def voice_generation_route(request: web.Request) -> web.Response:
         raise web.HTTPPaymentRequired(text="active subscription required")
     payload = await _json(request)
     try:
-        return web.json_response(await design_voice(str(payload.get("description") or "")))
+        generated = await design_voice(str(payload.get("description") or ""))
+        voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip() if isinstance(generated, dict) else ""
+        if voice_id:
+            async with async_session() as session:
+                user = await session.get(User, user_id)
+                if user is not None:
+                    settings = dict(user.tech_stack or {})
+                    settings["generated_voice_id"] = voice_id
+                    user.tech_stack = settings
+                    flag_modified(user, "tech_stack")
+                    await session.commit()
+        return web.json_response({**generated, "voice_id": voice_id or None} if isinstance(generated, dict) else generated)
     except ElevenLabsError as exc:
         raise web.HTTPBadGateway(text=str(exc))
 

@@ -76,10 +76,15 @@ def settings_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+VOICE_CREATE_BUTTON = "🎙 Создать голос"
+VOICE_LIST_BUTTON = "🎚 Мои голоса"
+
+
 def voice_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=VOICE_ON_BUTTON), KeyboardButton(text=VOICE_OFF_BUTTON)],
+            [KeyboardButton(text=VOICE_CREATE_BUTTON), KeyboardButton(text=VOICE_LIST_BUTTON)],
             [KeyboardButton(text="\u2b05\ufe0f \u041d\u0430\u0437\u0430\u0434")],
         ], resize_keyboard=True,
     )

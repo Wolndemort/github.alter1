@@ -36,9 +36,12 @@ from config import config
 from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from services import google_calendar
+from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices
+from services.voice_commands import is_voice_generation_request, voice_description
 from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
 from utils.quota import charge_user_id_credits
 from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
+from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 import logging
 
@@ -250,6 +253,22 @@ async def button_voice(message: types.Message):
     await message.answer("Настройка голосовых ответов:", reply_markup=voice_keyboard())
 
 
+@router.message(F.text == VOICE_CREATE_BUTTON)
+async def button_voice_create(message: types.Message):
+    await message.answer("Напиши или скажи описание голоса. Например: «Создай спокойный низкий голос для подкаста»." )
+
+
+@router.message(F.text == VOICE_LIST_BUTTON)
+async def button_voice_list(message: types.Message):
+    try:
+        payload = await list_voices()
+        voices = payload.get("voices", []) if isinstance(payload, dict) else []
+        names = [str(item.get("name") or item.get("voice_id")) for item in voices[:20]]
+        await message.answer("Доступные голоса:\n" + ("\n".join(f"• {name}" for name in names) if names else "Список пуст."))
+    except ElevenLabsError:
+        await message.answer("Не удалось загрузить голоса ElevenLabs.")
+
+
 @router.message(F.text == VOICE_ON_BUTTON)
 async def button_voice_on(message: types.Message, db_session: AsyncSession):
     await cmd_voice_on(message, db_session)
@@ -446,6 +465,26 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             append_session_message(session, "user", text)
             append_session_message(session, "assistant", reply)
             await db_session.commit()
+            return
+        if is_voice_generation_request(text):
+            description = voice_description(text)
+            if not description:
+                await message.answer("Опиши голос подробнее и отправь команду ещё раз.")
+                return
+            try:
+                generated = await design_voice(description)
+                voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip()
+                if voice_id:
+                    settings = dict(user.tech_stack or {})
+                    settings["generated_voice_id"] = voice_id
+                    user.tech_stack = settings
+                    await db_session.commit()
+                    await message.answer("Голос создан и сохранён. Теперь отправь голосовое с командой «измени мой голос на созданный».")
+                else:
+                    await message.answer("ElevenLabs не вернул идентификатор созданного голоса.")
+            except ElevenLabsError:
+                logging.exception("Voice generation from voice command failed")
+                await message.answer("Не удалось создать голос сейчас. Проверь доступ ElevenLabs.")
             return
         requested_generation = generation_kind(text)
         if requested_generation == "image":
@@ -1181,6 +1220,26 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     if is_capabilities_request(message.text):
         await message.answer(capabilities_reply())
         await db_session.commit()
+        return
+    if is_voice_generation_request(message.text):
+        description = voice_description(message.text)
+        if not description:
+            await message.answer("Опиши голос: например, «создай спокойный низкий голос для подкаста».")
+            return
+        try:
+            generated = await design_voice(description)
+            voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip()
+            if voice_id:
+                settings = dict(user.tech_stack or {})
+                settings["generated_voice_id"] = voice_id
+                user.tech_stack = settings
+                await db_session.commit()
+                await message.answer("Голос создан и сохранён. Прикрепи голосовое и напиши: «измени мой голос на созданный».")
+            else:
+                await message.answer("ElevenLabs создал голос, но не вернул его идентификатор.")
+        except ElevenLabsError:
+            logging.exception("Voice generation failed")
+            await message.answer("Не удалось создать голос. Проверь доступ ElevenLabs и попробуй ещё раз.")
         return
     requested_generation = generation_kind(message.text)
     if requested_generation == "image":

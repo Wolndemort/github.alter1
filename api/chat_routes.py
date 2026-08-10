@@ -20,6 +20,8 @@ from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
 from utils.quota import charge_user_id_credits
 from services.media_jobs import cancel_job, get_job, history, submit_job
+from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices, speech_to_speech
+from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.audio_actions import detect_audio_action, process_audio_action
 from config import config
 
@@ -43,6 +45,29 @@ async def chat_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+        message_text = str(payload.get("message") or "").strip()
+        if is_voice_generation_request(message_text):
+            description = voice_description(message_text)
+            if not description:
+                raise web.HTTPBadRequest(text="опиши голос: например, спокойный низкий голос для подкаста")
+            try:
+                generated = await design_voice(description)
+            except ElevenLabsError as exc:
+                raise web.HTTPBadGateway(text=str(exc))
+            voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip()
+            if voice_id:
+                settings = dict(user.tech_stack or {})
+                settings["generated_voice_id"] = voice_id
+                user.tech_stack = settings
+                await session.commit()
+            return web.json_response({"reply": "Голос создан и сохранён. Теперь прикрепи голосовое и напиши: «измени мой голос на созданный»." if voice_id else "Сервис создал голос, но не вернул его идентификатор.", "session_id": 0, "voice_id": voice_id or None, "voice_generation": generated})
+        if message_text.casefold().startswith(("покажи доступные голоса", "покажи голоса", "какие есть голоса")):
+            try:
+                voices = await list_voices()
+            except ElevenLabsError as exc:
+                raise web.HTTPBadGateway(text=str(exc))
+            items = voices.get("voices", []) if isinstance(voices, dict) else []
+            return web.json_response({"reply": "Доступные голоса: " + ", ".join(str(item.get("name") or item.get("voice_id")) for item in items[:30]), "voices": items})
         if detect_audio_action(payload.get("message", "")) == "effect":
             audio_redis = create_redis()
             try:
