@@ -17,7 +17,7 @@ import { FAQ_TEXT } from "./src/faq";
 
 const Stack = createNativeStackNavigator();
 type AuthProps = { onAuthenticated: (token: string) => void };
-type ChatItem = { id: string; role: string; text: string; createdAt?: number; mediaUri?: string; mediaMime?: string; mediaFilename?: string; feedback?: "positive" | "negative" };
+type ChatItem = { id: string; role: string; text: string; createdAt?: number; mediaUri?: string; mediaMime?: string; mediaFilename?: string; audioUri?: string; audioMime?: string; audioFilename?: string; feedback?: "positive" | "negative" };
 
 export function userFacingError(error: unknown): string {
   const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : 0;
@@ -408,13 +408,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     animation.start();
     return () => animation.stop();
   }, [logoPulse]);
-  useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); }; }, [resetIdle]);
+  useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); voicePlaybackSerial.current += 1; const sound = activeVoiceSound.current; activeVoiceSound.current = null; if (sound) sound.unloadAsync().catch(() => undefined); }; }, [resetIdle]);
   const stopVoicePlayback = async () => {
     voicePlaybackSerial.current += 1;
     const sound = activeVoiceSound.current;
     activeVoiceSound.current = null;
     if (sound) {
-      try { await sound.stopAsync(); } catch { /* already stopped */ }
+      try { await sound.setStatusAsync({ shouldPlay: false }); } catch { /* already stopped */ }
       try { await sound.unloadAsync(); } catch { /* already unloaded */ }
     }
     setPlayingVoiceId(null);
@@ -451,6 +451,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     });
     if (serial !== voicePlaybackSerial.current) return;
     const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: 1.0 });
+    if (serial !== voicePlaybackSerial.current) {
+      await loaded.sound.unloadAsync().catch(() => undefined);
+      return;
+    }
     activeVoiceSound.current = loaded.sound;
     loaded.sound.setOnPlaybackStatusUpdate((status) => {
       if ("didJustFinish" in status && status.didJustFinish) {
@@ -460,12 +464,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       }
     });
   };
-  const downloadMedia = async (item: ChatItem) => {
-    if (!item.mediaUri || !FileSystem.documentDirectory) return;
+  const downloadMedia = async (item: ChatItem, kind: "media" | "audio" = "media") => {
+    const uriValue = kind === "audio" ? item.audioUri : item.mediaUri;
+    const mime = kind === "audio" ? item.audioMime : item.mediaMime;
+    const itemFilename = kind === "audio" ? item.audioFilename : item.mediaFilename;
+    if (!uriValue || !FileSystem.documentDirectory) return;
     try {
-      const comma = item.mediaUri.indexOf(",");
-      const base64 = comma >= 0 ? item.mediaUri.slice(comma + 1) : item.mediaUri;
-      const filename = item.mediaFilename || `alter-${Date.now()}.${(item.mediaMime || "application/octet-stream").split("/")[1] || "bin"}`;
+      const comma = uriValue.indexOf(",");
+      const base64 = comma >= 0 ? uriValue.slice(comma + 1) : uriValue;
+      const filename = itemFilename || `alter-${Date.now()}.${(mime || "application/octet-stream").split("/")[1] || "bin"}`;
       const uri = `${FileSystem.documentDirectory}${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
@@ -490,7 +497,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const userMessageId = `${Date.now()}u`;
     autoScrollAfterUpdate.current = true;
     Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? " " : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply, ...(result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}) }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessage(token, text, location); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; setItems((old) => [...old, { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
     catch (err) { if (text) setMessage((current) => current || text); setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: userFacingError(err) }]); }
     finally { setBusy(false); setActivity(""); }
   };
@@ -608,7 +615,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     if (!description || busy) return;
     setBusy(true); setMenuError("");
     try {
-      await api.voiceGeneration(token, description);
+      const result = await api.voiceGeneration(token, description);
+      if (typeof result.voice_id !== "string" || !result.voice_id.trim()) throw new Error("Сервис не вернул идентификатор созданного голоса");
       setVoiceCreatorVisible(false); setVoiceDescription("");
       setItems((old) => [...old, { id: `${Date.now()}voice`, role: "assistant", text: "Голос создан и сохранён. Прикрепи голосовое и напиши: «измени мой голос на созданный»." }]);
     } catch (err) { setMenuError(userFacingError(err)); }
@@ -654,9 +662,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <View style={styles.header}><Pressable style={premiumStyles.headerAction} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={premiumStyles.headerActionText}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><Pressable style={premiumStyles.refreshAction} onPress={() => setNewChatPromptVisible((value) => !value)} accessibilityLabel="Новый чат"><Text style={premiumStyles.refreshIcon}>↻</Text></Pressable></View>
     {newChatPromptVisible ? <View style={premiumStyles.newChatPrompt}><Text style={premiumStyles.newChatPromptText}>Начать новый чат?</Text><View style={premiumStyles.newChatActions}><Pressable onPress={() => setNewChatPromptVisible(false)} accessibilityLabel="Отменить новый чат"><Text style={premiumStyles.newChatAction}>×</Text></Pressable><Pressable onPress={startNewChat} accessibilityLabel="Подтвердить новый чат"><Text style={premiumStyles.newChatAction}>✓</Text></Pressable></View></View> : null}
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}</View>} />
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <><TypingText text={item.text} /><View style={answerActionStyles.row}><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View></> : <Text style={[styles.message, styles.userMessage]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}{item.audioUri ? <Pressable onPress={() => downloadMedia(item, "audio")} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать аудио"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать аудио</Text><Text style={mediaDownloadStyles.name}>{item.audioFilename || item.audioMime || "Аудиофайл"}</Text></View></Pressable> : null}</View>} />
     {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "analyzing" ? "Изучаю вложение…" : "Думаю над ответом…"}</Text></View> : null}
     {!attachment ? (() => { const latestImage = [...items].reverse().find((item) => item.mediaUri && item.mediaMime?.startsWith("image/")); return latestImage ? <Pressable onPress={() => editMedia(latestImage)} disabled={busy} accessibilityLabel="Редактировать последнее изображение"><Text style={mediaStyles.generateAction}>✏️ Редактировать последнее изображение</Text></Pressable> : null; })() : null}
+    {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={send} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={send} disabled={busy} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
@@ -898,5 +907,5 @@ const mediaStyles = StyleSheet.create({
   attachmentText: { color: "#ddd", fontSize: 13 }, removeAttachment: { color: "#fff", fontSize: 20, paddingLeft: 12 },
   attachButton: { width: 62, height: 38, alignItems: "center", justifyContent: "center" }, attachLabel: { color: "#ffffff", fontSize: 12 }, attachIcon: { color: "#ffffff", fontSize: 23, lineHeight: 24, includeFontPadding: false, textAlign: "center" },
   voiceHalo: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceHaloActive: { opacity: 0.72 }, voiceButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, voiceButtonActive: { opacity: 0.72 }, voiceIcon: { color: "#ffffff", fontSize: 14, fontWeight: "800", letterSpacing: 0.8 },
-  sendButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, sendIcon: { color: "#ffffff", fontSize: 21, fontWeight: "700" }, inputMask: { display: "none" }, inputGlow: { height: 0.5, backgroundColor: "#ffffff", opacity: 0.72, shadowColor: "#ffffff", shadowOpacity: 0.45, shadowRadius: 4, elevation: 2 },
+  sendButton: { width: 34, height: 38, alignItems: "center", justifyContent: "center" }, stopAudioButton: { marginHorizontal: 12, marginBottom: 4, paddingVertical: 8, alignItems: "center", borderRadius: 10, backgroundColor: "#1d1d1d" }, sendIcon: { color: "#ffffff", fontSize: 21, fontWeight: "700" }, inputMask: { display: "none" }, inputGlow: { height: 0.5, backgroundColor: "#ffffff", opacity: 0.72, shadowColor: "#ffffff", shadowOpacity: 0.45, shadowRadius: 4, elevation: 2 },
 });

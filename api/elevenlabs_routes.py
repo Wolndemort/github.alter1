@@ -39,7 +39,7 @@ async def sound_effect_route(request: web.Request) -> web.Response:
         await close_redis(redis)
     try:
         return web.Response(body=await sound_effect(prompt), content_type="audio/mpeg")
-    except ElevenLabsError as exc:
+    except (ElevenLabsError, TypeError, ValueError) as exc:
         raise web.HTTPBadGateway(text=str(exc))
 
 
@@ -62,7 +62,7 @@ async def isolate_audio_route(request: web.Request) -> web.Response:
         await close_redis(redis)
     try:
         return web.Response(body=await isolate_audio(data, field.filename or "audio"), content_type="audio/mpeg")
-    except ElevenLabsError as exc:
+    except (ElevenLabsError, TypeError, ValueError) as exc:
         raise web.HTTPBadGateway(text=str(exc))
 
 
@@ -197,7 +197,7 @@ async def voice_generation_route(request: web.Request) -> web.Response:
                     flag_modified(user, "tech_stack")
                     await session.commit()
         return web.json_response({**generated, "voice_id": voice_id or None} if isinstance(generated, dict) else generated)
-    except ElevenLabsError as exc:
+    except (ElevenLabsError, TypeError, ValueError) as exc:
         raise web.HTTPBadGateway(text=str(exc))
 
 

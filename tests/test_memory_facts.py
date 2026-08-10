@@ -38,3 +38,15 @@ def test_extracts_social_travel_skills_projects_books_food_and_technology():
     assert facts["books"]["likes"] == "Дюну"
     assert facts["food_drinks"]["likes"] == "мясо"
     assert facts["technology"]["devices"] == "Android"
+
+
+def test_extracts_age_language_colleagues_religion_values_and_finance():
+    facts = extract_user_facts("Мне  thirty лет")
+    assert facts == {}
+    facts = extract_user_facts("Мне 30 лет. Я говорю на русском. Мои коллеги хорошие. Я атеист. Для меня важно развитие. Я коплю на квартиру")
+    assert facts["identity"]["age"] == "30"
+    assert facts["identity"]["language"] == "русском"
+    assert facts["social"]["colleagues"] == "хорошие"
+    assert facts["worldview"]["religion"] == "атеист"
+    assert facts["worldview"]["values"] == "развитие"
+    assert facts["finance"]["situation"] == "квартиру"
