@@ -11,7 +11,8 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
 import { FAQ_TEXT } from "./src/faq";
 

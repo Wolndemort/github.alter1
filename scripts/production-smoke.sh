@@ -23,6 +23,10 @@ check_status() {
 check_status 200 "$BASE_URL/health"
 check_status 200 "$BASE_URL/ready"
 
+# Streaming route must exist and reject unauthenticated callers cleanly.
+check_status 401 "$BASE_URL/api/v1/chat/stream" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d '{"message":"ping"}'
+
 # Public webhook must reject malformed payloads without exposing a traceback.
 check_status 400 "$BASE_URL/webhooks/yookassa" \
   -H 'Content-Type: application/json' -d '{'
