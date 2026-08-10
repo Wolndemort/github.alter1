@@ -596,6 +596,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       catch (err) { setMemoryError(userFacingError(err)); }
     } },
   ]);
+  const clearContext = () => Alert.alert("Очистить контекст?", "Удалятся найденные фрагменты прошлых разговоров. Факты о тебе останутся.", [
+    { text: "Отмена", style: "cancel" }, { text: "Очистить", style: "destructive", onPress: async () => {
+      try { await api.clearContext(token); setMemoryData((current) => current ? { sections: current.sections.filter((section) => section.category !== "episodic_context") } : current); }
+      catch (err) { setMemoryError(userFacingError(err)); }
+    } },
+  ]);
   const openReminders = async () => {
     setRemindersVisible(true); setMenuVisible(false);
     try { setReminders((await api.reminders(token)).reminders); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить напоминания"); }
@@ -752,7 +758,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}>
       <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Память</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setMemoryVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <Text style={{ color: "#888", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 20 }}>ALTER сама запоминает важные факты. Скажи в чате «запомни…», если хочешь сохранить что-то точно.</Text>
-      {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <><FlatList data={memorySections} keyExtractor={(item) => item.category} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><View style={styles.memorySectionHeader}><Text style={styles.memoryKey}>{item.title}</Text><Pressable onPress={() => forgetMemoryCategory(item.category, item.title)} accessibilityLabel={`Забыть категорию ${item.title}`}><Text style={styles.memoryForget}>Забыть</Text></Pressable></View>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} /><Pressable style={styles.clearMemoryButton} onPress={clearMemory} accessibilityLabel="Очистить всю память"><Text style={styles.clearMemoryText}>Очистить всю память</Text></Pressable></>}
+       {memoryLoading ? <ActivityIndicator color="#fff" /> : memoryError ? <Text style={styles.error}>{memoryError}</Text> : memorySections.length === 0 ? <Text style={styles.emptyMemory}>Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</Text> : <><FlatList data={memorySections} keyExtractor={(item) => item.category} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><View style={styles.memorySectionHeader}><Text style={styles.memoryKey}>{item.title}</Text><Pressable onPress={() => forgetMemoryCategory(item.category, item.title)} accessibilityLabel={`Забыть категорию ${item.title}`}><Text style={styles.memoryForget}>Забыть</Text></Pressable></View>{item.items.map((fact, index) => <Text key={item.title + index} style={styles.memoryValue}>{fact.label ? fact.label + ": " + fact.value : fact.value}</Text>)}</View>} /><Pressable style={styles.clearMemoryButton} onPress={clearContext} accessibilityLabel="Очистить контекст прошлых разговоров"><Text style={styles.clearMemoryText}>Очистить контекст</Text></Pressable><Pressable style={styles.clearMemoryButton} onPress={clearMemory} accessibilityLabel="Очистить всю память"><Text style={styles.clearMemoryText}>Очистить всю память</Text></Pressable></>}
     </SafeAreaView>
   </Modal>
   <Modal visible={faqVisible} animationType="slide" onRequestClose={() => setFaqVisible(false)}>

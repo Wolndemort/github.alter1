@@ -64,12 +64,16 @@ async def generation_allowed(user: User, cost: int) -> bool:
         await close_redis(redis)
 
 
-async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False):
+async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False, question: str | None = None):
     """Send text and, when enabled, a voice copy. TTS failure never hides the text."""
     feedback_markup = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="👍 Полезно", callback_data="reply_feedback:positive"),
         InlineKeyboardButton(text="👎 Мимо", callback_data="reply_feedback:negative"),
     ]])
+    if question:
+        settings = dict(user.tech_stack or {})
+        settings["last_feedback_question"] = str(question)[:300]
+        user.tech_stack = settings
     try:
         await message.answer(reply, reply_markup=feedback_markup)
     except TypeError:
@@ -97,7 +101,8 @@ async def handle_reply_feedback(callback: types.CallbackQuery, db_session: Async
         settings = dict(user.tech_stack or {})
         feedback = list(settings.get("reply_feedback") or [])
         answer = str(getattr(getattr(callback, "message", None), "text", "") or "").strip()
-        feedback.append({"rating": rating, "answer": answer[:700], "at": datetime.now(timezone.utc).isoformat()})
+        question = str(settings.pop("last_feedback_question", "") or "").strip()
+        feedback.append({"rating": rating, "answer": answer[:700], "question": question[:300], "at": datetime.now(timezone.utc).isoformat()})
         settings["reply_feedback"] = feedback[-100:]
         user.tech_stack = settings
         await db_session.commit()
@@ -750,9 +755,9 @@ async def animate_media_video(callback: types.CallbackQuery):
     await callback.answer("Оживление видео подключено; сейчас провайдер вернёт статус после запуска задачи.", show_alert=True)
 
 
-def format_memory(memory: dict) -> str:
+def format_memory(memory: dict, extra_sections=None) -> str:
     from utils.memory_view import format_memory as render_memory
-    return render_memory(memory)
+    return render_memory(memory, extra_sections)
 
 
 async def get_active_session(user_id: int, db_session: AsyncSession) -> Session | None:
@@ -1033,7 +1038,17 @@ async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, co
 @router.message(Command("memory"))
 async def cmd_memory(message: types.Message, db_session: AsyncSession):
     user = await get_or_create_user(message, db_session)
-    text = format_memory(user.memory or {})
+    events = (await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))).scalars().all()
+    chunks = (await db_session.execute(select(MemoryChunk).where(MemoryChunk.user_id == user.id).order_by(MemoryChunk.created_at.desc()).limit(20))).scalars().all()
+    active = (await db_session.execute(select(Session).where(Session.user_id == user.id, Session.is_processed.is_(False)).order_by(Session.started_at.desc()))).scalar_one_or_none()
+    extras = []
+    if events:
+        extras.append({"category": "important_events", "title": "Важные события", "items": [{"label": event.event_type, "value": event.title + (f": {event.description}" if event.description else "")} for event in events]})
+    if chunks:
+        extras.append({"category": "episodic_context", "title": "Контекст прошлых разговоров", "items": [{"label": chunk.source, "value": chunk.content} for chunk in chunks]})
+    if active and active.raw_messages:
+        extras.append({"category": "current_context", "title": "Текущий разговор", "items": [{"label": item.get("role", ""), "value": item.get("content", "")} for item in active.raw_messages[-10:] if item.get("content")]})
+    text = format_memory(user.memory or {}, extras)
     # Telegram rejects messages longer than 4096 characters.
     chunks = [text[i:i + 4000] for i in range(0, len(text), 4000)] or [text]
     for index, chunk in enumerate(chunks):
@@ -1050,6 +1065,23 @@ async def cmd_forget(message: types.Message, command: CommandObject, db_session:
         await message.answer("Укажи категорию, например: /forget skills_career", reply_markup=memory_keyboard())
         return
     user = await get_or_create_user(message, db_session)
+    if category == "episodic_context":
+        await db_session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user.id))
+        await db_session.commit()
+        await message.answer("Забыл контекст прошлых разговоров.", reply_markup=memory_keyboard())
+        return
+    if category == "important_events":
+        await db_session.execute(delete(ImportantEvent).where(ImportantEvent.user_id == user.id))
+        await db_session.commit()
+        await message.answer("Забыл важные события.", reply_markup=memory_keyboard())
+        return
+    if category == "current_context":
+        active = (await db_session.execute(select(Session).where(Session.user_id == user.id, Session.is_processed.is_(False)).order_by(Session.started_at.desc()))).scalar_one_or_none()
+        if active:
+            active.raw_messages = []
+            await db_session.commit()
+        await message.answer("Забыл текущий разговор.", reply_markup=memory_keyboard())
+        return
     memory = dict(user.memory or {})
     if category not in memory:
         await message.answer(f"Категория «{category}» не найдена в памяти.", reply_markup=memory_keyboard())
@@ -1252,6 +1284,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         return
 
     user = await get_or_create_user(message, db_session)
+    settings = dict(user.tech_stack or {})
+    settings["last_feedback_question"] = message.text[:300]
+    user.tech_stack = settings
     if is_capabilities_request(message.text):
         await message.answer(capabilities_reply())
         await db_session.commit()
@@ -1388,8 +1423,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     # unrelated topics into an otherwise normal reply.
     recalled = []
     if (
-        len(message.text.strip()) >= config.MEMORY_AUTO_RECALL_MIN_CHARS
-        or should_recall_context(message.text)
+        should_recall_context(message.text)
     ):
         recalled = await recall(db_session, user.id, message.text)
     if recalled:
@@ -1428,7 +1462,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     append_session_message(session, "assistant", reply)
     # Vector memory is for the user's own durable context, not AI prose or
     # temporary research about third parties.
-    await remember(db_session, user.id, message.text, source="explicit_memory" if explicit_fact else "user_message")
+    await remember(db_session, user.id, message.text, source="explicit_memory" if explicit_fact else "user_message", categories=list(extracted_facts or {}))
 
     try:
         await db_session.commit()

@@ -44,3 +44,23 @@ def memory_reason(text: str, source: str = "user_message") -> str:
     if _THIRD_PERSON.search(text or ""):
         return "third_person"
     return "no_durable_user_fact"
+
+
+def sanitize_summary(value: dict | None) -> dict:
+    """Drop obvious model hallucinations before merging an inactive session."""
+    if not isinstance(value, dict):
+        return {}
+    def clean(item):
+        if isinstance(item, dict):
+            return {key: cleaned for key, raw in item.items() if (cleaned := clean(raw)) not in (None, "", [], {})}
+        if isinstance(item, list):
+            return [cleaned for raw in item if (cleaned := clean(raw)) not in (None, "", [], {})]
+        if isinstance(item, str):
+            text = " ".join(item.split()).strip()
+            if _THIRD_PERSON.search(text) and not re.search(r"\b(?:мои|моя|мой|у меня|я)\b", text, re.IGNORECASE):
+                return None
+            if len(text) > 1000:
+                return text[:1000]
+            return text
+        return item
+    return clean(value) or {}

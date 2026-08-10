@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from aiohttp import web
 from aiogram import Bot
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
@@ -131,12 +131,26 @@ async def account_route(request: web.Request) -> web.Response:
 async def memory_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
-        from data.models import User
+        from data.models import ImportantEvent, MemoryChunk, Session as ChatSession, User
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         from utils.memory_view import memory_sections
-        return web.json_response({"sections": memory_sections(user.memory)})
+        event_result = await session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user_id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
+        chunk_result = await session.execute(select(MemoryChunk).where(MemoryChunk.user_id == user_id).order_by(MemoryChunk.created_at.desc()).limit(20))
+        active_result = await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()))
+        events = event_result.scalars().all() if hasattr(event_result, "scalars") else []
+        chunks = chunk_result.scalars().all() if hasattr(chunk_result, "scalars") else []
+        active = active_result.scalar_one_or_none() if hasattr(active_result, "scalar_one_or_none") else None
+        extras = []
+        if events:
+            extras.append({"category": "important_events", "title": "Важные события", "items": [{"label": event.event_type, "value": event.title + (f": {event.description}" if event.description else "")} for event in events]})
+        if chunks:
+            extras.append({"category": "episodic_context", "title": "Контекст прошлых разговоров", "items": [{"label": chunk.source, "value": chunk.content} for chunk in chunks]})
+        active_messages = getattr(active, "raw_messages", None) if active else None
+        if active_messages:
+            extras.append({"category": "current_context", "title": "Текущий разговор", "items": [{"label": item.get("role", ""), "value": item.get("content", "")} for item in active_messages[-10:] if item.get("content")]})
+        return web.json_response({"sections": memory_sections(user.memory, extras)})
 
 
 async def forget_memory_category_route(request: web.Request) -> web.Response:
@@ -145,10 +159,24 @@ async def forget_memory_category_route(request: web.Request) -> web.Response:
     if not category or len(category) > 64 or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for char in category):
         raise web.HTTPBadRequest(text="invalid memory category")
     async with async_session() as session:
-        from data.models import User
+        from data.models import ImportantEvent, MemoryChunk, Session as ChatSession, User
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
+        if category == "episodic_context":
+            deleted = await session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user_id))
+            await session.commit()
+            return web.json_response({"ok": True, "deleted": bool(deleted.rowcount) if hasattr(deleted, "rowcount") else True, "category": category})
+        if category == "important_events":
+            deleted = await session.execute(delete(ImportantEvent).where(ImportantEvent.user_id == user_id))
+            await session.commit()
+            return web.json_response({"ok": True, "deleted": bool(deleted.rowcount) if hasattr(deleted, "rowcount") else True, "category": category})
+        if category == "current_context":
+            active = (await session.execute(select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.is_processed.is_(False)).order_by(ChatSession.started_at.desc()))).scalar_one_or_none()
+            if active:
+                active.raw_messages = []
+                await session.commit()
+            return web.json_response({"ok": True, "deleted": bool(active), "category": category})
         memory = dict(user.memory or {})
         existed = category in memory
         memory.pop(category, None)
@@ -161,14 +189,28 @@ async def forget_memory_category_route(request: web.Request) -> web.Response:
 async def clear_memory_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
-        from data.models import User
+        from data.models import ImportantEvent, MemoryChunk, User
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         user.memory = {}
+        await session.execute(delete(ImportantEvent).where(ImportantEvent.user_id == user_id))
+        await session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user_id))
         flag_modified(user, "memory")
         await session.commit()
         return web.json_response({"ok": True})
+
+
+async def clear_context_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import MemoryChunk, User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        await session.execute(delete(MemoryChunk).where(MemoryChunk.user_id == user_id))
+        await session.commit()
+    return web.json_response({"ok": True})
 
 
 async def usage_route(request: web.Request) -> web.Response:
@@ -309,6 +351,7 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/memory", memory_route)
     app.router.add_delete("/api/v1/memory/{category}", forget_memory_category_route)
     app.router.add_delete("/api/v1/memory", clear_memory_route)
+    app.router.add_delete("/api/v1/context", clear_context_route)
     app.router.add_get("/api/v1/usage", usage_route)
     app.router.add_get("/api/v1/subscription", subscription_route)
     app.router.add_patch("/api/v1/subscription/auto-renew", auto_renew_route)

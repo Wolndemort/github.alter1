@@ -51,7 +51,7 @@ async def test_chat_service_creates_session_recalls_memory_and_persists(monkeypa
 
     async def fake_recall(db, user_id, text):
         recalled.append((user_id, text)); return ["previous context"]
-    async def fake_remember(db, user_id, text, source):
+    async def fake_remember(db, user_id, text, source, categories=None):
         assert source == "user_message"
     async def fake_reply(messages, memory):
         assert memory["goals"] == ["launch"]
@@ -63,7 +63,7 @@ async def test_chat_service_creates_session_recalls_memory_and_persists(monkeypa
     monkeypatch.setattr("services.chat_service.generate_reply", fake_reply)
     monkeypatch.setattr("services.chat_service.config.MEMORY_AUTO_RECALL_MIN_CHARS", 1)
 
-    result = await ChatService().reply(db, 5, "A sufficiently long message")
+    result = await ChatService().reply(db, 5, "Вернись к предыдущему контексту")
 
     assert result.reply == "assistant reply"
     assert result.session_id == 12

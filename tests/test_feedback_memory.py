@@ -18,3 +18,7 @@ def test_feedback_is_compact_and_keeps_only_actionable_examples():
 def test_feedback_survives_memory_prompt_normalization():
     value = normalize_memory({"response_feedback": [{"rating": "negative", "answer": "мимо"}]})
     assert value["response_feedback"][0]["rating"] == "negative"
+
+
+def test_internal_planning_text_is_not_learned_as_feedback():
+    assert feedback_context({"reply_feedback": [{"rating": "positive", "answer": "We need to answer user: let's do a search"}]}) == []

@@ -17,7 +17,7 @@ async def embed(text: str) -> list[float]:
     return response.data[0].embedding
 
 
-async def remember(db: AsyncSession, user_id: int, text: str, source="conversation") -> None:
+async def remember(db: AsyncSession, user_id: int, text: str, source="conversation", categories: list[str] | None = None) -> None:
     text = str(text or "").strip()
     if len(text) < 20:
         return
@@ -41,6 +41,7 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
             content_hash=content_hash,
             embedding=await embed(content),
             source=source[:32],
+            category=(categories or [None])[0],
             importance=1.0 if source in {"explicit_memory", "important_event"} else 0.5,
             expires_at=datetime.now(timezone.utc) + timedelta(days=ttl_days),
         ))
@@ -69,7 +70,7 @@ async def recall(
                 distance <= max_distance,
                 or_(MemoryChunk.expires_at.is_(None), MemoryChunk.expires_at > now),
             )
-            .order_by(distance)
+            .order_by((distance - (MemoryChunk.importance * 0.05)).asc(), MemoryChunk.created_at.desc())
             .limit(limit)
         )
         values = list(result.scalars())

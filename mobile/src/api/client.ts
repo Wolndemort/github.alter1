@@ -150,6 +150,7 @@ export class AlterApi {
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   forgetMemoryCategory(token: string, category: string) { return this.request<{ ok: boolean; deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(category)}`, { method: "DELETE" }, token); }
   clearMemory(token: string) { return this.request<{ ok: boolean }>("/api/v1/memory", { method: "DELETE" }, token); }
+  clearContext(token: string) { return this.request<{ ok: boolean }>("/api/v1/context", { method: "DELETE" }, token); }
   usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }

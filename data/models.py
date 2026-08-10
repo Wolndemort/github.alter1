@@ -123,6 +123,7 @@ class MemoryChunk(Base):
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     embedding: Mapped[list] = mapped_column(Vector(1536))
     source: Mapped[str] = mapped_column(String(32), server_default='conversation')
+    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     importance: Mapped[float] = mapped_column(Float, default=0.5, server_default='0.5')
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

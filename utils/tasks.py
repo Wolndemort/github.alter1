@@ -19,6 +19,8 @@ from utils.memory_store import merge_memory_facts
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
 from utils.vector_memory import purge_expired
+from utils.memory_store import purge_expired_memory
+from utils.memory_quality import sanitize_summary
 from utils.push_notifications import send_push
 
 
@@ -114,7 +116,7 @@ async def save_unique_event(event: dict, user_id: int, db) -> None:
 
 async def process_session(session: Session, db) -> bool:
     """Summarize one inactive session and persist its durable memory."""
-    facts = await summarize_session(session.raw_messages)
+    facts = sanitize_summary(await summarize_session(session.raw_messages))
     if not facts:
         # A failed/empty summary must not leave the session active forever.
         # The next "new chat" should always start from a clean context.
@@ -203,6 +205,17 @@ async def monitor_memory_cleanup():
                 removed = await purge_expired(db)
                 if removed:
                     logging.info("Expired vector memories removed: %s", removed)
+                users = (await db.execute(select(User).order_by(User.id).limit(500))).scalars().all()
+                structured_removed = 0
+                for user in users:
+                    cleaned = purge_expired_memory(user.memory or {})
+                    if cleaned != (user.memory or {}):
+                        user.memory = cleaned
+                        flag_modified(user, "memory")
+                        structured_removed += 1
+                if structured_removed:
+                    await db.commit()
+                    logging.info("Expired structured memories removed: %s", structured_removed)
         except Exception:
             logging.exception("Vector memory cleanup failed")
         await asyncio.sleep(86400)

@@ -147,6 +147,11 @@ def test_quality_eval_detects_internal_leak_and_missing_sources():
     assert "missing_source_attribution" in result.issues
 
 
+def test_quality_eval_detects_english_planning_leak():
+    result = assess_reply("We need to answer user. Let's do a search. Search terms: university admission")
+    assert "internal_details" in result.issues
+
+
 def test_quality_eval_detects_russian_reasoning_leak():
     result = assess_reply(
         "Пользователь хочет понять проблему. Сначала нужно понять запрос. "

@@ -28,7 +28,7 @@ def _value(value):
         return ", ".join(_value(item) for item in value if item not in (None, ""))
     return str(value)
 
-def memory_sections(memory):
+def memory_sections(memory, extra_sections=None):
     """Return labels and values only; never expose storage keys."""
     sections = []
     for category, facts in (memory or {}).items():
@@ -41,10 +41,10 @@ def memory_sections(memory):
                  else [{"label": "", "value": _value(facts)}])
         if items:
             sections.append({"category": str(category), "title": CATEGORY_LABELS.get(str(category), _label(category)), "items": items})
-    return sections
+    return sections + [section for section in (extra_sections or []) if section.get("items")]
 
-def format_memory(memory):
-    sections = memory_sections(memory)
+def format_memory(memory, extra_sections=None):
+    sections = memory_sections(memory, extra_sections)
     if not sections:
         return "🧠 Пока ALTER ничего важного о тебе не запомнил."
     lines = ["🧠 Что ALTER помнит о тебе:"]

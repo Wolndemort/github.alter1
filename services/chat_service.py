@@ -19,7 +19,7 @@ from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
-from utils.intent import explicit_memory_fact
+from utils.intent import explicit_memory_fact, should_recall_context
 from utils.feedback_memory import feedback_context
 from datetime import timedelta
 
@@ -102,7 +102,7 @@ class ChatService:
                   for event in events_result.scalars()]
         if events:
             memory["important_events"] = events
-        if len(text) >= config.MEMORY_AUTO_RECALL_MIN_CHARS:
+        if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
                 memory["related_previous_context"] = recalled
@@ -141,6 +141,6 @@ class ChatService:
         else:
             reply = await generate_reply(list(session.raw_messages), memory)
         _append(session, "assistant", reply)
-        await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message")
+        await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
         await db.commit()
         return ChatResult(reply=reply, session_id=session.id)
