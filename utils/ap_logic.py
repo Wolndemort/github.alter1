@@ -21,7 +21,7 @@ from utils.metrics import increment
 from utils.quality import assess_reply, has_internal_leak
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
-MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "finance", "important_events", "open_loops"}
+MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops"}
 KEY_ALIASES = {"имя": "name", "возраст": "age", "город": "city", "работа": "job", "профессия": "job"}
 TOOL_DEFINITIONS = [
     {

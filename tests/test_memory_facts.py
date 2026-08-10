@@ -27,3 +27,14 @@ def test_extracts_health_sport_family_and_events():
 def test_does_not_store_questions_or_third_person_facts():
     assert extract_user_facts("Какая музыка тебе нравится?") == {}
     assert extract_user_facts("У него новая машина") == {}
+
+
+def test_extracts_social_travel_skills_projects_books_food_and_technology():
+    facts = extract_user_facts("Мои друзья живут рядом. Я умею программировать. Я работаю над ALTER. Я был в Грузии. Я читаю Дюну. Я не ем мясо. Я пользуюсь Android")
+    assert facts["social"]["friends"] == "живут рядом"
+    assert facts["skills_career"]["skills"] == "программировать"
+    assert facts["projects"]["current"] == "ALTER"
+    assert facts["travel"]["places"] == "Грузии"
+    assert facts["books"]["likes"] == "Дюну"
+    assert facts["food_drinks"]["likes"] == "мясо"
+    assert facts["technology"]["devices"] == "Android"
