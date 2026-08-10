@@ -33,6 +33,16 @@ def test_audio_helpers_handle_empty_and_dict_fragments():
     assert run(tts._get_stream_audio_data(stream())) == b"a"
 
 
+def test_prepare_tts_text_uses_russian_pronunciation_and_removes_links():
+    result = tts._prepare_tts_text("ALTER, смотри https://example.com")
+    assert "А́льтер" in result
+    assert "https://" not in result
+
+
+def test_prepare_tts_text_replaces_internal_content_with_safe_russian_reply():
+    assert "system prompt" not in tts._prepare_tts_text("system prompt: hidden instructions").casefold()
+
+
 def test_wav_conversion_returns_empty_when_ffmpeg_missing(monkeypatch):
     async def missing(*args, **kwargs): raise FileNotFoundError("ffmpeg")
     monkeypatch.setattr(tts.asyncio, "create_subprocess_exec", missing)

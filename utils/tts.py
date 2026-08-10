@@ -11,6 +11,7 @@ import httpx
 from config import config
 from utils.ap_logic import client
 from utils.metrics import increment
+from utils.quality import sanitize_public_reply
 
 
 def _get_audio_data(response) -> bytes:
@@ -70,6 +71,14 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
     return output.getvalue()
 
 
+def _prepare_tts_text(text: str) -> str:
+    """Prepare visible text for speech without sending links or markup aloud."""
+    value = re.sub(r"```[^`]*```", "", sanitize_public_reply(text), flags=re.DOTALL)
+    value = re.sub(r"https?://\S+", "ссылка", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return re.sub(r"\bALTER\b", "А́льтер", value, flags=re.IGNORECASE)[:config.TTS_MAX_CHARS]
+
+
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
     logging.info("TTS voice request selected=%s", voice or config.TTS_VOICE)
@@ -95,7 +104,11 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
                     f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
                     headers={"xi-api-key": config.ELEVENLABS_API_KEY.get_secret_value(), "Accept": "audio/pcm"},
                     params={"output_format": "pcm_24000"},
-                    json={"text": text[:config.TTS_MAX_CHARS], "model_id": config.ELEVENLABS_MODEL},
+                    json={
+                        "text": _prepare_tts_text(text),
+                        "model_id": config.ELEVENLABS_MODEL or "eleven_multilingual_v2",
+                        "voice_settings": {"stability": 0.58, "similarity_boost": 0.82, "style": 0.08, "use_speaker_boost": True},
+                    },
                 )
                 response.raise_for_status()
                 pcm = response.content
@@ -117,13 +130,13 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
         provider_voice = config.TTS_VOICE if voice == "elevenlabs" else (voice or config.TTS_VOICE)
         # Make the brand pronunciation unambiguous for Russian speech models:
         # ALTER is the assistant's name, pronounced "А́льтер".
-        spoken_text = re.sub(r"\bALTER\b", "А́льтер", text, flags=re.IGNORECASE)
+        spoken_text = _prepare_tts_text(text)
         response = await client.chat.completions.create(
             model=config.TTS_MODEL,
             modalities=["text", "audio"],
             audio={"voice": provider_voice, "format": "pcm16"},
             messages=[
-                {"role": "system", "content": "Read the user's text exactly as written. ALTER is the assistant's name and must be pronounced in Russian as А́льтер. Do not summarize, paraphrase, add, remove, or reinterpret any words."},
+                {"role": "system", "content": "Прочитай пользовательский текст дословно на русском языке. Не пересказывай, не сокращай, не добавляй и не объясняй его. Название ALTER произноси как «А́льтер»."},
                 {"role": "user", "content": spoken_text[:config.TTS_MAX_CHARS]},
             ],
             # Keep voice replies understandable without allowing huge audio output.

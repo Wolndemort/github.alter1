@@ -25,9 +25,15 @@ export class ApiError extends Error {
   }
 }
 
-function readableErrorBody(body: string, status: number): string {
-  const plain = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  return plain.length > 240 ? `${plain.slice(0, 237)}...` : plain || `Request failed (HTTP ${status})`;
+function readableErrorBody(_body: string, status: number): string {
+  const messages: Record<number, string> = {
+    400: "Проверь запрос и попробуй ещё раз.", 401: "Сессия закончилась. Войди в ALTER снова.",
+    402: "Для этого действия нужна активная подписка.", 404: "Запрошенные данные не найдены.",
+    409: "Запрос уже выполняется. Подожди результат.", 413: "Файл слишком большой. Выбери файл меньшего размера.",
+    429: "Лимит исчерпан. Попробуй позже.", 502: "Внешний сервис временно недоступен. Попробуй позже.",
+    503: "Сервис временно недоступен. Попробуй ещё раз позже.",
+  };
+  return messages[status] || "Не удалось выполнить запрос. Попробуй ещё раз позже.";
 }
 
 export class AlterApi {
@@ -166,14 +172,14 @@ export class AlterApi {
   }
   async soundEffect(token: string, prompt: string) {
     const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/sound-effects", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ prompt }) });
-    if (!response.ok) throw new ApiError(response.status, await response.text());
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody("", response.status));
     return response.blob();
   }
   async isolateAudio(token: string, uri: string) {
     const form = new FormData();
     form.append("file", { uri, type: "audio/m4a", name: "alter-audio.m4a" } as unknown as Blob);
     const response = await fetch(this.baseUrl.replace(/\/$/, "") + "/api/v1/audio/isolate", { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
-    if (!response.ok) throw new ApiError(response.status, await response.text());
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody("", response.status));
     return response.blob();
   }
   async processAudio(token: string, prompt: string, uri?: string) {
@@ -220,7 +226,7 @@ export class AlterApi {
   }
   async youtubeAudio(token: string, url: string) {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/youtube/audio`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
-    if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Request failed");
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody("", response.status));
     return response.blob();
   }
   youtubeSearch(token: string, query: string) {

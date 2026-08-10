@@ -28,7 +28,9 @@ export function userFacingError(error: unknown): string {
   if (status === 413) return "Файл слишком большой. Выбери файл меньшего размера.";
   if (status === 429) return "Лимит исчерпан. Попробуй позже.";
   if (status >= 500) return "Сервис временно недоступен. Попробуй ещё раз через минуту.";
-  return message || "Не удалось выполнить запрос.";
+  if (status === 0 && message === "Сетевая ошибка") return message;
+  if (status === 0 && /сетевая|интернет/i.test(message)) return "Сетевая ошибка. Проверь интернет и попробуй ещё раз.";
+  return "Не удалось выполнить запрос. Попробуй ещё раз позже.";
 }
 export function getExpiredChatIds(items: ChatItem[], now: number, timeoutMs = 60000): string[] {
   const cutoff = now - timeoutMs;
@@ -349,7 +351,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     return () => subscription.remove();
   }, [token]);
   useEffect(() => {
-    api.history(token).then((result) => setItems(result.messages.map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content })))).catch(() => undefined);
+    api.history(token).then((result) => setItems(result.messages.filter((item) => item.role === "user" || item.role === "assistant").map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content })))).catch(() => undefined);
   }, [token]);
   useEffect(() => {
     const key = `alter_draft_${token}`;

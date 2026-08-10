@@ -33,7 +33,7 @@ describe("AlterApi", () => {
   it("turns HTTP failures into ApiError", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: false, status: 401, text: async () => "unauthorized" });
     await expect(new AlterApi("https://alter.example").me("bad"))
-      .rejects.toEqual(new ApiError(401, "unauthorized"));
+      .rejects.toEqual(new ApiError(401, "Сессия закончилась. Войди в ALTER снова."));
   });
 
   it("verifies an email code", async () => {

@@ -16,6 +16,7 @@ from services.media_chat_service import reply as media_reply
 from services.media_generation import MediaGenerationError, fal_capabilities, generate_image, generate_video
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
+from utils.quality import sanitize_public_reply
 from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
 from utils.quota import charge_user_id_credits
@@ -127,7 +128,11 @@ async def history_route(request: web.Request) -> web.Response:
             ChatSession.is_processed.is_(False),
         ).order_by(ChatSession.started_at.desc()))
         active = result.scalar_one_or_none()
-        messages = list(active.raw_messages or []) if active else []
+        messages = [
+            {"role": item.get("role"), "content": str(item.get("content") or "")}
+            for item in (active.raw_messages or [])
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
+        ] if active else []
     return web.json_response({"session_id": active.id if active else None, "messages": messages[-100:]})
 
 
@@ -319,7 +324,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
     finally:
         await close_redis(redis)
     payload = await _json(request)
-    text = str(payload.get("text") or "").strip()
+    text = sanitize_public_reply(payload.get("text"))
     if not text:
         raise web.HTTPBadRequest(text="text required")
     async with async_session() as session:

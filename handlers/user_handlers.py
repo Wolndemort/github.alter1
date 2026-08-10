@@ -47,6 +47,7 @@ from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
 from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
+from utils.quality import sanitize_public_reply
 import logging
 
 router = Router()
@@ -66,6 +67,7 @@ async def generation_allowed(user: User, cost: int) -> bool:
 
 async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False, question: str | None = None):
     """Send text and, when enabled, a voice copy. TTS failure never hides the text."""
+    reply = sanitize_public_reply(reply)
     feedback_markup = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="👍 Полезно", callback_data="reply_feedback:positive"),
         InlineKeyboardButton(text="👎 Мимо", callback_data="reply_feedback:negative"),
@@ -812,7 +814,8 @@ def recent_context(messages: list, limit: int = 40, max_chars: int = 12000) -> l
     """Keep the newest turns while bounding prompt size and preserving order."""
     selected = []
     chars = 0
-    for item in reversed(list(messages or [])[-limit:]):
+    allowed = [item for item in (messages or []) if isinstance(item, dict) and item.get("role", "user") in {"user", "assistant"}]
+    for item in reversed(allowed[-limit:]):
         content = str(item.get("content", "")) if isinstance(item, dict) else str(item)
         if selected and chars + len(content) > max_chars:
             break
@@ -980,7 +983,8 @@ async def cmd_start_welcome(message: types.Message, db_session: AsyncSession, co
             await db_session.commit()
         except ValueError as exc:
             await db_session.rollback()
-            await message.answer(str(exc))
+            logging.warning("Telegram link validation failed: %s", str(exc)[:200])
+            await message.answer("Не удалось подключить Telegram. Проверь ссылку и попробуй ещё раз.")
             return
         await message.answer("Telegram подключён. Теперь приложение и бот используют одну память и одну подписку.")
         return

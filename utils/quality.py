@@ -4,6 +4,9 @@ from dataclasses import dataclass
 import re
 
 
+PUBLIC_FALLBACK = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — отвечу коротко и по делу."
+
+
 @dataclass(frozen=True)
 class ReplyQuality:
     score: int
@@ -25,6 +28,17 @@ def has_language_mismatch(reply: str, request: str) -> bool:
     russian_request = sum(char.lower() in russian_chars for char in source) / len(source)
     latin_answer = sum(char.isascii() and char.isalpha() for char in answer) / len(answer)
     return russian_request >= 0.35 and latin_answer >= 0.55
+
+
+def sanitize_public_reply(reply: str) -> str:
+    """Never expose prompts, roles, tool payloads, or planner notes to clients."""
+    value = str(reply or "").strip()
+    lowered = value.casefold()
+    forbidden = (
+        "<user_memory>", "</user_memory>", "system prompt", "developer message",
+        "response policy", "tool_calls", "chain of thought", "internal reasoning",
+    )
+    return PUBLIC_FALLBACK if not value or any(marker in lowered for marker in forbidden) or has_internal_leak(value) else value
 
 
 def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:

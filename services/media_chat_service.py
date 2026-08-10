@@ -18,6 +18,7 @@ from utils.vector_memory import recall, remember
 from services.elevenlabs_media import ElevenLabsError, speech_to_speech
 from services.voice_commands import is_voice_change_request, requested_voice_id
 from utils.feedback_memory import feedback_context
+from utils.quality import sanitize_public_reply
 from utils.intent import should_recall_context
 
 
@@ -139,7 +140,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         recalled = await recall(db, user_id, prompt)
         if recalled:
             memory["related_previous_context"] = recalled
-    answer = await generate_media_reply(prompt, media, memory=memory, conversation_context=session.raw_messages[:-1])
+    answer = sanitize_public_reply(await generate_media_reply(prompt, media, memory=memory, conversation_context=session.raw_messages[:-1]))
     _append(session, "assistant", answer)
     await remember(db, user_id, prompt, source="user_message")
     await db.commit()

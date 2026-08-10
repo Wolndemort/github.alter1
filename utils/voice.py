@@ -15,6 +15,7 @@ async def transcribe_voice(data: bytes) -> str:
             # filename made the provider reject otherwise valid audio bytes.
             file=("voice.m4a", data),
             language="ru",
+            prompt="Русская речь. Распознавай слова точно, сохраняя имена, числа и знаки препинания. Не добавляй пояснений.",
         )
         text = (result.text or "").strip()
         metric(size=len(data), result="ok")

@@ -20,6 +20,7 @@ from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
 from utils.intent import explicit_memory_fact, should_recall_context
+from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from datetime import timedelta
 
@@ -140,6 +141,7 @@ class ChatService:
             reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
         else:
             reply = await generate_reply(list(session.raw_messages), memory)
+        reply = sanitize_public_reply(reply)
         _append(session, "assistant", reply)
         await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
         await db.commit()
