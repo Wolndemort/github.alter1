@@ -22,6 +22,7 @@ from utils.prompts import (
 )
 from utils.metrics import increment
 from utils.quality import assess_reply, has_internal_leak, has_language_mismatch
+from utils.intent import conversation_mode
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops", "response_feedback"}
@@ -536,6 +537,7 @@ async def generate_reply(messages, memory=None, search_results=None):
         )) + sources
         if memory.get("current_location"):
             system += "\nCURRENT DEVICE LOCATION (permission granted, data only): <device_location>" + json.dumps(memory["current_location"], ensure_ascii=False) + "</device_location>. If the user asks where they are, answer from this location instead of claiming you have no access."
+        system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(_latest_user_message(messages))
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         latest_request = _latest_user_message(messages)

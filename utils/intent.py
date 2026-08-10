@@ -59,6 +59,20 @@ def should_recall_context(text):
     """Recall long-term context only for an explicit conversational reference."""
     return _matches(text, CONTEXT_REFERENCE_PATTERNS)
 
+
+def conversation_mode(text: str) -> str:
+    """Pick a lightweight response mode without an extra model round-trip."""
+    value = (text or "").casefold()
+    if should_recall_context(value):
+        return "continuation"
+    if re.search(r"\b(?:устал|тяжело|грустно|тревож|плохо|не вывожу|нет сил|бесит|разочарован)", value):
+        return "support"
+    if re.search(r"\b(?:выбрать|решить|сравни|стоит ли|лучше|за или|сомневаюсь)", value):
+        return "decision"
+    if re.search(r"\b(?:план|шаги|распиши|организуй|подготовь|составь|успеть|дедлайн)", value):
+        return "planning"
+    return "conversation"
+
 def explicit_memory_fact(text):
     match = re.search(r"(?:\u0437\u0430\u043f\u043e\u043c\u043d\u0438|\u0437\u0430\u043f\u0438\u0448\u0438|\u0441\u043e\u0445\u0440\u0430\u043d\u0438)\s*(?:[,!:;-]\s*)?(?:\u0447\u0442\u043e\s+)?(.+)", text or "", re.I)
     return match.group(1).strip(" .,!\\n") if match else None

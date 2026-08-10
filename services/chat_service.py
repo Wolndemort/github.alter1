@@ -21,7 +21,7 @@ from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
-from utils.intent import explicit_memory_fact, should_recall_context
+from utils.intent import conversation_mode, explicit_memory_fact, should_recall_context
 from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from datetime import timedelta
@@ -218,6 +218,7 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
         system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+        system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         parts = []
         async for delta in stream_text_reply(working):
