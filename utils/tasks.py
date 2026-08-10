@@ -37,6 +37,21 @@ def telegram_chat_id(user: User) -> int | None:
     return user.id
 
 
+def active_open_loops(memory: dict | None) -> list:
+    raw = (memory or {}).get("open_loops") or []
+    if isinstance(raw, dict):
+        raw = [raw]
+    return [item for item in raw if not isinstance(item, dict) or item.get("status", "active") in {"active", "snoozed"}]
+
+
+def proactive_allowed(user: User, now: datetime, session: Session | None, interval_hours: int) -> bool:
+    if (user.tech_stack or {}).get("proactive_enabled", True) is False:
+        return False
+    if user.last_checkin_at and user.last_checkin_at > now - timedelta(hours=interval_hours):
+        return False
+    return not (session and session.updated_at and session.updated_at > now - timedelta(minutes=30))
+
+
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
     """Create one gentle follow-up when a user mentions a health problem."""
     for message in messages or []:
@@ -288,6 +303,7 @@ async def monitor_reminders(bot: Bot):
 
 
 async def monitor_checkins(bot: Bot):
+    """Send one contextual pulse only when it can genuinely help."""
     while True:
         try:
             async with async_session() as db:
@@ -307,9 +323,18 @@ async def monitor_checkins(bot: Bot):
                     interval = max(1, min(168, int(user_setting(user, "checkin_interval_hours", 24))))
                     if user.last_checkin_at and user.last_checkin_at > now - timedelta(hours=interval):
                         continue
+                    session_result = await db.execute(select(Session).where(
+                        Session.user_id == user.id,
+                    ).order_by(Session.updated_at.desc()).limit(1))
+                    session = session_result.scalar_one_or_none()
+                    # Do not interrupt a fresh conversation. The active chat
+                    # itself is more important than a background nudge.
+                    if not proactive_allowed(user, now, session, interval):
+                        continue
                     # Сначала возвращаемся к конкретным незавершённым темам и событиям,
                     # а не к общему настроению: так не теряются обещанные follow-up.
-                    context = (memory.get("open_loops") or memory.get("health_sport") or
+                    active_loops = active_open_loops(memory)
+                    context = (active_loops or memory.get("health_sport") or
                                memory.get("important_events") or memory.get("goals_habits") or
                                memory.get("skills_career"))
                     if isinstance(context, dict):
@@ -321,10 +346,6 @@ async def monitor_checkins(bot: Bot):
                         events = memory["important_events"]
                         event = events[-1] if isinstance(events, list) else events
                         context = event.get("title") if isinstance(event, dict) else str(event)
-                    session_result = await db.execute(select(Session).where(
-                        Session.user_id == user.id,
-                    ).order_by(Session.updated_at.desc()).limit(1))
-                    session = session_result.scalar_one_or_none()
                     question = await generate_contextual_checkin(
                         user.first_name,
                         context,

@@ -32,7 +32,7 @@ async def settings_route(request: web.Request) -> web.Response:
 async def update_settings_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
-    allowed = {"voice_replies", "voice_auto_replies", "tts_voice", "reply_feedback", "checkin_interval_hours", "health_followup_hours", "quiet_start", "quiet_end"}
+    allowed = {"voice_replies", "voice_auto_replies", "proactive_enabled", "tts_voice", "reply_feedback", "checkin_interval_hours", "health_followup_hours", "quiet_start", "quiet_end"}
     unknown = set(payload) - allowed
     if unknown: raise web.HTTPBadRequest(text="unknown setting")
     settings = dict(payload)
@@ -46,6 +46,8 @@ async def update_settings_route(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="invalid voice_replies")
     if "voice_auto_replies" in settings and not isinstance(settings["voice_auto_replies"], bool):
         raise web.HTTPBadRequest(text="invalid voice_auto_replies")
+    if "proactive_enabled" in settings and not isinstance(settings["proactive_enabled"], bool):
+        raise web.HTTPBadRequest(text="invalid proactive_enabled")
     if "tts_voice" in settings and settings["tts_voice"] not in {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"}:
         raise web.HTTPBadRequest(text="invalid tts_voice")
     if "reply_feedback" in settings and (not isinstance(settings["reply_feedback"], list) or len(settings["reply_feedback"]) > 100):
