@@ -21,7 +21,7 @@ class Setting(BaseSettings):
     OPENROUTER_FALLBACK_MODEL: str = "inclusionai/ling-2.6-flash"
     OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-oss-120b"
     # Safety switch: never spend money unless this is explicitly enabled.
-    OPENROUTER_ALLOW_PAID_FALLBACK: bool = False
+    OPENROUTER_ALLOW_PAID_FALLBACK: bool = True
     OWNER_TELEGRAM_IDS: str = "1271717628"
     OWNER_EMAILS: str = ""
     SUPPORT_USERNAME: str = "Adam_Omarov"
