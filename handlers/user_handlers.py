@@ -41,6 +41,7 @@ from services.voice_commands import is_voice_generation_request, voice_descripti
 from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
 from utils.quota import charge_user_id_credits
 from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
+from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 import logging
@@ -492,7 +493,7 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                 await message.answer("Лимит кредитов для генерации изображения исчерпан.")
                 return
             artifact = await generate_image(text, options=parse_media_options(text, "image"))
-            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.")
+            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.", reply_markup=generated_image_keyboard())
             append_session_message(session, "user", text)
             append_session_message(session, "assistant", "Создал изображение.")
             await db_session.commit()
@@ -615,7 +616,7 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
                     await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename))
                 else:
                     artifact = await generate_image(prompt, source, parse_media_options(prompt, "image"))
-                    await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename))
+                    await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), reply_markup=generated_image_keyboard())
             else:
                 buffer = await message.bot.download(message.video, destination=BytesIO())
                 artifact = await generate_video(prompt, ("video/mp4", buffer.getvalue()), parse_media_options(prompt, "video"))
@@ -710,6 +711,34 @@ async def improve_media_photo(callback: types.CallbackQuery, db_session: AsyncSe
 @router.callback_query(F.data == "media:analyze")
 async def analyze_media_again(callback: types.CallbackQuery):
     await callback.answer("Анализ уже показан сообщением ALTER выше.")
+
+
+@router.callback_query(F.data == "media:edit_generated")
+async def edit_generated_image(callback: types.CallbackQuery, db_session: AsyncSession):
+    """Re-edit the generated image without requiring the user to re-upload it."""
+    message = callback.message
+    user = await get_telegram_user(callback.from_user.id, db_session) if callback.from_user else None
+    if user and not await generation_allowed(user, config.MEDIA_GENERATION_CREDITS):
+        await callback.answer("Лимит кредитов для генерации медиа исчерпан.", show_alert=True)
+        return
+    if not message or not message.photo:
+        await callback.answer("Исходное изображение недоступно.", show_alert=True)
+        return
+    try:
+        buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
+        artifact = await generate_image(
+            "Сделай изображение более аккуратным и кинематографичным, сохранив основной сюжет и ключевые детали.",
+            ("image/jpeg", buffer.getvalue()),
+        )
+        await message.answer_photo(
+            BufferedInputFile(artifact.data, filename=artifact.filename),
+            caption="Готово — отредактировал изображение.",
+            reply_markup=generated_image_keyboard(),
+        )
+        await callback.answer()
+    except Exception:
+        logging.exception("Generated image edit failed")
+        await callback.answer("Редактирование сейчас недоступно — проверь баланс Fal AI.", show_alert=True)
 
 
 @router.callback_query(F.data == "media:animate")
@@ -1248,7 +1277,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                 await message.answer("Лимит кредитов для генерации изображения исчерпан.")
                 return
             artifact = await generate_image(message.text, options=parse_media_options(message.text, "image"))
-            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.")
+            await message.answer_photo(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — создал изображение.", reply_markup=generated_image_keyboard())
         except Exception:
             logging.exception("Text image generation failed")
             await message.answer("Не получилось создать изображение. Проверь Fal.ai и попробуй ещё раз.")

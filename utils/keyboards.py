@@ -90,6 +90,12 @@ def voice_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def generated_image_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Редактировать", callback_data="media:edit_generated")],
+    ])
+
+
 def media_actions_keyboard() -> InlineKeyboardMarkup:
     """Human-readable actions shown under every Telegram media turn."""
     return InlineKeyboardMarkup(inline_keyboard=[
