@@ -1125,6 +1125,7 @@ async def cmd_remind(message: types.Message, command: CommandObject, db_session:
 
 @router.message(Command("reminders"))
 async def cmd_reminders(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
     result = await db_session.execute(select(Reminder).where(
         Reminder.user_id == user.id,
         Reminder.is_sent.is_(False),
@@ -1141,6 +1142,7 @@ async def cmd_reminders(message: types.Message, db_session: AsyncSession):
 
 @router.message(Command("cancel_reminder"))
 async def cmd_cancel_reminder(message: types.Message, command: CommandObject, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
     try:
         reminder_id = int((command.args or "").strip())
     except ValueError:

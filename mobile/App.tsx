@@ -511,6 +511,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { const result = await api.startTelegramLink(token); await Linking.openURL(result.url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось открыть Telegram"); }
   };
+  const openCalendarConnect = async () => {
+    setMenuError("");
+    try { const result = await api.calendarConnect(token); await Linking.openURL(result.authorization_url); }
+    catch (err) { setMenuError(err instanceof Error ? err.message : "Google Calendar пока не настроен на сервере"); }
+  };
   const buySubscription = async (plan: "personal" | "ego") => {
     setMenuError("");
     try { const result = await api.createPayment(token, plan); await Linking.openURL(result.payment_url); }
@@ -686,6 +691,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>{account?.telegram_linked ? "TELEGRAM · ПОДКЛЮЧЁН" : "TELEGRAM · НЕ ПОДКЛЮЧЁН"}</Text>
         {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · НЕ АКТИВИРОВАН</Text>}
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
+        <Pressable style={premiumStyles.menuAction} onPress={openCalendarConnect}><Text style={premiumStyles.menuActionText}>Подключить Google Calendar</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "tools" ? null : "tools")}><Text style={premiumStyles.sectionLabel}>ИНСТРУМЕНТЫ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "tools" ? "⌃" : "⌄"}</Text></Pressable>

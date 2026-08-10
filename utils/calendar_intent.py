@@ -25,6 +25,10 @@ def _datetime_pair(text: str):
 
 def is_calendar_request(text: str) -> bool:
     value = (text or "").casefold()
+    has_object = any(word in value for word in ("календарь", "встреч", "созвон", "событ"))
+    has_action = any(word in value for word in ("покажи", "добавь", "создай", "запиши", "удали", "отмени", "подключи", "соедини", "статус", "что у меня", "какие у меня"))
+    if has_object and not has_action:
+        return False
     if any(word in value for word in (
         "расписани", "запланируй", "запланировать", "перенеси", "перенести",
         "отмени встреч", "отменить встреч",

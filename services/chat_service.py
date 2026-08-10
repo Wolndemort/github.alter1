@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
-from data.models import ImportantEvent, Session, User
+from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import generate_reply
 from utils.vector_memory import recall, remember
 from utils.helpers import merge_memory
@@ -18,6 +18,8 @@ from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
+from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
+from datetime import timedelta
 
 
 @dataclass(frozen=True)
@@ -91,8 +93,31 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
 
-        calendar_reply = await handle_calendar_request(text, user)
-        if calendar_reply is not None:
+        parsed_reminder = parse_reminder(text)
+        if parsed_reminder:
+            remind_at, reminder_text = parsed_reminder
+            db.add(Reminder(user_id=user.id, remind_at=remind_at,
+                            follow_up_at=remind_at + timedelta(hours=2),
+                            text=reminder_text[:500]))
+            reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+        elif is_reminder_request(text):
+            reminder_text = extract_reminder_text(text)
+            reply = ("Что именно напомнить и во сколько?" if not reminder_text else
+                     f"Укажи время для напоминания про «{reminder_text}». Например: завтра в 10:00 или через 2 часа.")
+        else:
+            reply = None
+
+        health_words = ("здоров", "самочувств", "болит", "температур", "давлен", "кашел", "боль")
+        if reply is None and user.checkins_enabled and any(word in text.casefold() for word in health_words):
+            followup_at = datetime.now(timezone.utc) + timedelta(hours=4)
+            db.add(Reminder(user_id=user.id, kind="health_checkin",
+                            remind_at=followup_at, follow_up_at=followup_at + timedelta(hours=2),
+                            text="Как ты себя чувствуешь после разговора о здоровье?"))
+
+        calendar_reply = await handle_calendar_request(text, user) if reply is None else None
+        if reply is not None:
+            pass
+        elif calendar_reply is not None:
             reply = calendar_reply
         elif is_weather_request(text):
             city = parse_weather_city(text)
