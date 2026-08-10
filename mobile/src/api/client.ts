@@ -12,6 +12,8 @@ export type AccountResponse = {
 };
 export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
 export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; description?: string };
+export type MyDayItem = { kind: string; title: string; detail: string; at: string | null; priority: string };
+export type MyDayResponse = { date: string; focus: MyDayItem[]; next_step: { title: string; prompt: string }; counts: { reminders: number; open_loops: number; goals: number }; memory_permanent: boolean };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
@@ -181,6 +183,7 @@ export class AlterApi {
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
   acceptLegal(token: string) { return this.request<{ ok: boolean; legal_accepted: boolean }>("/api/v1/legal/accept", { method: "POST" }, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
+  myDay(token: string) { return this.request<MyDayResponse>("/api/v1/my-day", {}, token); }
   forgetMemoryCategory(token: string, category: string) { return this.request<{ ok: boolean; deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(category)}`, { method: "DELETE" }, token); }
   clearMemory(token: string) { return this.request<{ ok: boolean }>("/api/v1/memory", { method: "DELETE" }, token); }
   clearContext(token: string) { return this.request<{ ok: boolean }>("/api/v1/context", { method: "DELETE" }, token); }

@@ -13,7 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AccountResponse, LocationContext, MemoryResponse, api } from "./src/api/client";
+import { AccountResponse, LocationContext, MemoryResponse, MyDayResponse, api } from "./src/api/client";
 import { FAQ_TEXT } from "./src/faq";
 
 const Stack = createNativeStackNavigator();
@@ -315,6 +315,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [memoryData, setMemoryData] = useState<MemoryResponse | null>(null);
   const [memoryVisible, setMemoryVisible] = useState(false);
+  const [myDayVisible, setMyDayVisible] = useState(false);
+  const [myDayData, setMyDayData] = useState<MyDayResponse | null>(null);
+  const [myDayLoading, setMyDayLoading] = useState(false);
   const [faqVisible, setFaqVisible] = useState(false);
   const [legalVisible, setLegalVisible] = useState(false);
   const [legalChecked, setLegalChecked] = useState(false);
@@ -641,6 +644,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     catch (err) { setMemoryError(err instanceof Error ? err.message : "Не удалось загрузить память"); }
     finally { setMemoryLoading(false); }
   };
+  const openMyDay = async () => {
+    setMyDayVisible(true); setMyDayLoading(true); setMenuVisible(false);
+    try { setMyDayData(await api.myDay(token)); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось собрать твой день"); }
+    finally { setMyDayLoading(false); }
+  };
   const forgetMemoryCategory = (category: string, title: string) => Alert.alert("Забыть категорию?", `Удалить из памяти «${title}»?`, [
     { text: "Отмена", style: "cancel" },
     { text: "Забыть", style: "destructive", onPress: async () => {
@@ -778,6 +786,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "tools" ? null : "tools")}><Text style={premiumStyles.sectionLabel}>ИНСТРУМЕНТЫ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "tools" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "tools" ? <View style={premiumStyles.sectionBody}>
+        <Pressable style={premiumStyles.menuAction} onPress={openMyDay}><Text style={premiumStyles.menuActionText}>Мой день</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={() => { setMenuVisible(false); setHistoryVisible(true); }}><Text style={premiumStyles.menuActionText}>История чата</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openFaq}><Text style={premiumStyles.menuActionText}>FAQ · как пользоваться</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
@@ -811,6 +820,16 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setRemindersVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <Text style={{ color: "#999", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 21 }}>Скажи ALTER в основном чате, о чём и к какому времени напомнить. Можно голосом.</Text>
       {reminders.length === 0 ? <Text style={styles.emptyMemory}>Активных напоминаний пока нет.</Text> : <FlatList data={reminders} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{item.text}</Text><Text style={styles.memoryKey}>{new Date(item.remind_at).toLocaleString()}</Text><Pressable style={premiumStyles.menuAction} onPress={async () => { await api.deleteReminder(token, item.id); setReminders((old) => old.filter((entry) => entry.id !== item.id)); }}><Text style={premiumStyles.menuActionText}>Удалить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable></View>} />}
+    </SafeAreaView>
+  </Modal>
+  <Modal visible={myDayVisible} animationType="slide" onRequestClose={() => setMyDayVisible(false)}>
+    <SafeAreaView style={styles.memoryScreen}>
+      <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Мой день</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMyDayVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+      <Text style={styles.myDayIntro}>ALTER собрал важное из памяти, целей и напоминаний. Не всё сразу — только то, к чему стоит вернуться.</Text>
+      {myDayLoading ? <ActivityIndicator color="#fff" /> : <ScrollView contentContainerStyle={styles.memoryList}>
+        <Pressable style={styles.nextStepCard} onPress={() => { setMyDayVisible(false); send(myDayData?.next_step.prompt || "Помоги мне выбрать одно главное дело на сегодня"); }}><Text style={styles.nextStepKicker}>ЛУЧШИЙ СЛЕДУЮЩИЙ ШАГ</Text><Text style={styles.nextStepTitle}>{myDayData?.next_step.title || "Выбрать главное на сегодня"}</Text><Text style={styles.nextStepAction}>Открыть в чате →</Text></Pressable>
+        {myDayData?.focus.length ? myDayData.focus.map((item, index) => <View key={`${item.kind}-${item.title}-${index}`} style={styles.dayItem}><View style={styles.dayItemDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.memoryKey}>{item.detail}{item.at ? ` · ${new Date(item.at).toLocaleString()}` : ""}</Text></View></View>) : <Text style={styles.emptyMemory}>Пока ничего не нужно удерживать в фокусе. Напиши ALTER, что для тебя важно.</Text>}
+      </ScrollView>}
     </SafeAreaView>
   </Modal>
   <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
@@ -889,6 +908,13 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).permanentMemoryCard = { marginHorizontal: 20, marginBottom: 4, padding: 14, borderRadius: 14, backgroundColor: "#171717", borderWidth: 1, borderColor: "#4a4a4a" };
 (styles as Record<string, unknown>).permanentMemoryTitle = { color: "#fff", fontSize: 13, fontWeight: "700", marginBottom: 5 };
 (styles as Record<string, unknown>).permanentMemoryText = { color: "#aaa", fontSize: 12, lineHeight: 18 };
+(styles as Record<string, unknown>).myDayIntro = { color: "#aaa", paddingHorizontal: 20, paddingBottom: 8, fontSize: 14, lineHeight: 21 };
+(styles as Record<string, unknown>).nextStepCard = { marginHorizontal: 20, marginBottom: 8, padding: 16, borderRadius: 16, backgroundColor: "#f4f4f4" };
+(styles as Record<string, unknown>).nextStepKicker = { color: "#777", fontSize: 10, letterSpacing: 1.5, marginBottom: 8 };
+(styles as Record<string, unknown>).nextStepTitle = { color: "#080808", fontSize: 18, fontWeight: "700", lineHeight: 23 };
+(styles as Record<string, unknown>).nextStepAction = { color: "#555", marginTop: 12, fontSize: 12, fontWeight: "700" };
+(styles as Record<string, unknown>).dayItem = { flexDirection: "row", gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#292929" };
+(styles as Record<string, unknown>).dayItemDot = { width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff", marginTop: 7 };
 (styles as Record<string, unknown>).quickActionRow = { flexDirection: "row", gap: 7, paddingHorizontal: 12, paddingBottom: 5, overflow: "hidden" };
 (styles as Record<string, unknown>).quickAction = { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 14, backgroundColor: "#111111", borderWidth: 1, borderColor: "#333333" };
 (styles as Record<string, unknown>).quickActionText = { color: "#cccccc", fontSize: 11, fontWeight: "700" };

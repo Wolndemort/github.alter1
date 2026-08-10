@@ -158,6 +158,54 @@ async def memory_route(request: web.Request) -> web.Response:
         })
 
 
+async def my_day_route(request: web.Request) -> web.Response:
+    """Return one calm, actionable view of the user's current context."""
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import ImportantEvent, Reminder, User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        now = datetime.now(timezone.utc)
+        reminders = (await session.execute(select(Reminder).where(
+            Reminder.user_id == user_id, Reminder.is_sent.is_(False), Reminder.remind_at >= now,
+        ).order_by(Reminder.remind_at).limit(8))).scalars().all()
+        events = (await session.execute(select(ImportantEvent).where(
+            ImportantEvent.user_id == user_id,
+        ).order_by(ImportantEvent.occurred_at.desc()).limit(5))).scalars().all()
+        memory = dict(user.memory or {})
+        focus: list[dict] = []
+        for item in reminders:
+            focus.append({"kind": "reminder", "title": item.text, "detail": "Напоминание", "at": item.remind_at.isoformat(), "priority": "high"})
+        loops = memory.get("open_loops") or []
+        if isinstance(loops, dict):
+            loops = [loops]
+        for item in loops[:5] if isinstance(loops, list) else []:
+            if isinstance(item, dict):
+                title = str(item.get("title") or item.get("description") or "Незавершённая тема").strip()
+                detail = str(item.get("follow_up_question") or item.get("description") or "Вернуться к этому").strip()
+            else:
+                title, detail = str(item), "Незавершённая тема"
+            if title:
+                focus.append({"kind": "open_loop", "title": title[:200], "detail": detail[:300], "at": None, "priority": "normal"})
+        goals = memory.get("goals_habits") or {}
+        if isinstance(goals, dict):
+            for key, value in list(goals.items())[:3]:
+                if value:
+                    focus.append({"kind": "goal", "title": str(value)[:200], "detail": "Твоя цель", "at": None, "priority": "normal"})
+        for event in events[:3]:
+            focus.append({"kind": "event", "title": event.title, "detail": event.description or event.event_type, "at": event.occurred_at.isoformat() if event.occurred_at else None, "priority": event.importance})
+        focus = focus[:12]
+        next_item = focus[0] if focus else None
+        return web.json_response({
+            "date": now.date().isoformat(),
+            "focus": focus,
+            "next_step": ({"title": next_item["title"], "prompt": f"Помоги мне сделать следующий шаг по теме: {next_item['title']}"} if next_item else {"title": "Выбрать главное на сегодня", "prompt": "Помоги мне выбрать одно главное дело на сегодня"}),
+            "counts": {"reminders": len(reminders), "open_loops": len(loops) if isinstance(loops, list) else 0, "goals": len(goals) if isinstance(goals, dict) else 0},
+            "memory_permanent": True,
+        })
+
+
 async def forget_memory_category_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     category = str(request.match_info.get("category") or "").strip()
@@ -355,6 +403,7 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/auth/resend-verification", resend_verification_route)
     app.router.add_get("/api/v1/account", account_route)
     app.router.add_get("/api/v1/memory", memory_route)
+    app.router.add_get("/api/v1/my-day", my_day_route)
     app.router.add_delete("/api/v1/memory/{category}", forget_memory_category_route)
     app.router.add_delete("/api/v1/memory", clear_memory_route)
     app.router.add_delete("/api/v1/context", clear_context_route)
