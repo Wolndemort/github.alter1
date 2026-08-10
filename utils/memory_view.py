@@ -53,3 +53,25 @@ def format_memory(memory, extra_sections=None):
         for item in section["items"]:
             lines.append(f"• {item['label']}: {item['value']}" if item["label"] else f"• {item['value']}")
     return "\n".join(lines)
+
+
+def memory_audit(memory: dict | None) -> list[dict]:
+    """Expose safe provenance controls without exposing storage internals."""
+    value = memory if isinstance(memory, Mapping) else {}
+    metadata = value.get("_meta") if isinstance(value.get("_meta"), Mapping) else {}
+    result = []
+    for category, fields in metadata.items():
+        if not isinstance(fields, Mapping):
+            continue
+        for key, entry in fields.items():
+            if not isinstance(entry, Mapping):
+                continue
+            result.append({
+                "category": str(category),
+                "key": str(key),
+                "confirmed": bool(entry.get("confirmed", False)),
+                "first_seen": entry.get("first_seen"),
+                "last_seen": entry.get("last_seen"),
+                "replacements": len(entry.get("history") or []),
+            })
+    return result
