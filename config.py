@@ -10,16 +10,16 @@ class Setting(BaseSettings):
     # Environment variables still take precedence over these values.
     OPENROUTER_MODEL: str = "openai/gpt-5.6-luna"
     # Override these with an available OpenRouter :free model in .env.
-    OPENROUTER_FREE_MODEL: str = "google/gemma-4-31b-it:free"
-    OPENROUTER_FREE_MODEL_2: str = "inclusionai/ling-3.0-flash:free"
-    OPENROUTER_FREE_MODEL_3: str = "nvidia/nemotron-3-super-120b-a12b:free"
-    OPENROUTER_FREE_MODEL_4: str = "google/gemma-4-26b-a4b-it:free"
-    OPENROUTER_FREE_MODEL_5: str = "openai/gpt-oss-20b:free"
+    OPENROUTER_FREE_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    OPENROUTER_FREE_MODEL_2: str = "openai/gpt-oss-20b:free"
+    OPENROUTER_FREE_MODEL_3: str = "google/gemma-4-31b-it:free"
+    OPENROUTER_FREE_MODEL_4: str = ""
+    OPENROUTER_FREE_MODEL_5: str = ""
     OPENROUTER_FREE_VISION_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_VISION_MODEL_2: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     OPENROUTER_REASONING_MODEL: str = "inclusionai/ling-2.6-1t"
     OPENROUTER_FALLBACK_MODEL: str = "inclusionai/ling-2.6-flash"
-    OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-5.6-terra"
+    OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-oss-120b"
     # Safety switch: never spend money unless this is explicitly enabled.
     OPENROUTER_ALLOW_PAID_FALLBACK: bool = False
     OWNER_TELEGRAM_IDS: str = "1271717628"
@@ -107,14 +107,14 @@ class Setting(BaseSettings):
     MEDIA_JOB_TTL_SECONDS: int = 86400
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
-    AI_TIMEOUT_SECONDS: int = 20
+    AI_TIMEOUT_SECONDS: int = 15
     # Temporarily move models that return transient provider errors to the end
     # of the fallback route instead of retrying them on every new message.
     AI_MODEL_COOLDOWN_SECONDS: int = 60
-    AI_DEEP_REVIEW_ENABLED: bool = True
+    AI_DEEP_REVIEW_ENABLED: bool = False
     AI_DEEP_REVIEW_MAX_TOKENS: int = 900
     TOOL_MAX_ROUNDS: int = 2
-    AI_MAX_PROMPT_CHARS: int = 12000
+    AI_MAX_PROMPT_CHARS: int = 8000
     PAYMENT_WEBHOOK_HOST: str = "0.0.0.0"
     PAYMENT_WEBHOOK_PORT: int = 8080
     PAYMENT_WEBHOOK_PATH: str = "/webhooks/yookassa"
