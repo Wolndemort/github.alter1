@@ -49,13 +49,13 @@ class GuardMiddleware(BaseMiddleware):
             try:
                 data["billing_allowed"] = await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
             except RedisError:
-                logging.exception("Redis billing check failed; allowing request")
-                data["billing_allowed"] = True
+                logging.exception("Redis billing check failed; blocking request")
+                data["billing_allowed"] = False
             try:
                 data["spam_allowed"] = await allow_request(self.redis, user.id, self.spam_limit, self.spam_window)
             except RedisError:
-                logging.exception("Redis spam check failed; allowing request")
-                data["spam_allowed"] = True
+                logging.exception("Redis spam check failed; blocking request")
+                data["spam_allowed"] = False
             db_user = await resolve_telegram_user(data["db_session"], user.id) if data.get("db_session") is not None else None
             owner_access = has_owner_access(user.id, getattr(data.get("db_user"), "email", None)) or has_owner_access(user.id, getattr(db_user, "email", None))
             if data.get("db_session") is not None and not owner_access and not _billing_exempt(event):

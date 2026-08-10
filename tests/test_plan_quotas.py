@@ -29,11 +29,11 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_plan_limits_are_personal_1000_and_ego_5000():
+def test_plan_limits_are_personal_1000_and_ego_3500():
     personal = User(id=1, first_name="Personal", memory={}, tech_stack={})
     ego = User(id=2, first_name="Ego", memory={}, tech_stack={"subscription_plan": "ego"})
     assert credits_limit(personal) == 1000
-    assert credits_limit(ego) == 5000
+    assert credits_limit(ego) == 3500
 
 
 def test_personal_is_rejected_after_1000_credits():
@@ -43,11 +43,11 @@ def test_personal_is_rejected_after_1000_credits():
     assert run(credits_used(redis, 1)) == 1000
 
 
-def test_ego_can_use_5000_credits_and_is_rejected_after_that():
+def test_ego_can_use_3500_credits_and_is_rejected_after_that():
     redis = FakeRedis()
-    assert run(charge_credits(redis, 2, 5000, 5000)) is True
-    assert run(charge_credits(redis, 2, 1, 5000)) is False
-    assert run(credits_used(redis, 2)) == 5000
+    assert run(charge_credits(redis, 2, 3500, 3500)) is True
+    assert run(charge_credits(redis, 2, 1, 3500)) is False
+    assert run(credits_used(redis, 2)) == 3500
 
 
 def test_owner_generation_is_free_and_does_not_need_redis():

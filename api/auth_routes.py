@@ -16,7 +16,7 @@ from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from datetime import datetime, timezone
 from services.account_linking import resolve_telegram_user
-from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit
+from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit, effective_plan
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
 
 _resolved_telegram_username: str | None = None
@@ -116,14 +116,15 @@ async def account_route(request: web.Request) -> web.Response:
         account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         if user is None or account is None:
             raise web.HTTPUnauthorized(text="account not found")
+        owner = has_owner_access(user.id, account.email)
         return web.json_response({
             "id": user.id, "name": user.first_name, "email": account.email,
             "telegram_linked": account.telegram_user_id is not None,
-            "owner": has_owner_access(user.id, account.email),
+            "owner": owner,
             "payment_method_saved": bool(user.payment_method_id),
             "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
-            "subscription_plan": (user.tech_stack or {}).get("subscription_plan", "personal"),
+            "subscription_plan": effective_plan(user.id, user, account.email),
             "legal_accepted": user.legal_accepted_at is not None,
         })
 
@@ -225,7 +226,8 @@ async def usage_route(request: web.Request) -> web.Response:
         used = await credits_used(redis, user_id)
     finally:
         await close_redis(redis)
-    limit = credits_limit(user)
+    plan = effective_plan(user_id, user)
+    limit = int(plan_info(plan)["credits"])
     return web.json_response({"used": used, "limit": limit, "remaining": max(0, limit - used)})
 
 
@@ -237,10 +239,10 @@ async def subscription_route(request: web.Request) -> web.Response:
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
-        current_plan = normalize_plan((user.tech_stack or {}).get("subscription_plan"))
+        current_plan = effective_plan(user.id, user, account.email if account else None)
         return web.json_response({
             "active": has_owner_access(user.id, account.email if account else None) or has_active_subscription(user),
-            "price_rub": str(price()), "days": config.SUBSCRIPTION_DAYS,
+            "price_rub": str(price(current_plan)), "days": config.SUBSCRIPTION_DAYS,
             "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "auto_renew": user.auto_renew,
             "plan": current_plan,

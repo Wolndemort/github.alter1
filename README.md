@@ -6,7 +6,7 @@
 
 - Backend: 249 тестов проходят локально; mobile TypeScript и тесты проходят.
 - Тарифы: ALTER Personal — 990 ₽/30 дней; ALTER Ego — 2990 ₽/30 дней.
-- Квоты: Personal — 1000 кредитов/месяц, Ego — 5000 кредитов/месяц. Telegram и мобильное приложение используют общий Redis-счётчик.
+- Квоты: Personal — 1000 кредитов/месяц, Ego — 3500 кредитов/месяц. Telegram и мобильное приложение используют общий Redis-счётчик.
 - YooKassa: карта и СБП, проверка суммы/status/metadata, idempotency, webhook и автопродление.
 - Production smoke: `scripts/production-smoke.sh`; readiness: `/health` и `/ready`.
 - `gym_nginx` владеет 80/443 и проксирует ALTER через `web_network`; ALTER host-порты не публикует.

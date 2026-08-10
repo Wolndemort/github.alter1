@@ -54,6 +54,13 @@ def credits_limit(user: User | None) -> int:
     return int(plan_info((user.tech_stack or {}).get("subscription_plan"))["credits"])
 
 
+def effective_plan(user_id: int, user: User | None, email: str | None = None) -> str:
+    """Show owner access as the highest plan in account and usage views."""
+    if has_owner_access(user_id, email):
+        return "ego"
+    return normalize_plan((user.tech_stack or {}).get("subscription_plan")) if user else "personal"
+
+
 def price(plan: object = "personal") -> Decimal:
     try:
         configured = config.SUBSCRIPTION_PRICE_RUB if normalize_plan(plan) == "personal" else config.EGO_PRICE_RUB

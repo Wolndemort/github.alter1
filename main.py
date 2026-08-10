@@ -10,7 +10,9 @@ from data.database import async_session, engine
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
-from utils.redis_store import create_redis, close_redis, allow_http_request
+from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request
+from services.auth_service import verify_token
+from redis.exceptions import RedisError
 from utils.runtime import check_dependencies
 from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
@@ -55,6 +57,18 @@ async def main():
             except Exception:
                 logging.exception("HTTP rate limiter unavailable")
                 raise web.HTTPServiceUnavailable(text="rate limiter unavailable")
+            expensive = request.path.startswith(("/api/v1/chat/", "/api/v1/audio/", "/api/v1/youtube/", "/api/v1/media/"))
+            header = request.headers.get("Authorization", "")
+            if expensive and header.startswith("Bearer ") and config.APP_AUTH_SECRET:
+                try:
+                    user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())
+                    if not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
+                        raise web.HTTPTooManyRequests(text="daily request limit reached")
+                except web.HTTPTooManyRequests:
+                    raise
+                except (RedisError, ValueError):
+                    logging.exception("Authenticated HTTP quota check failed")
+                    raise web.HTTPServiceUnavailable(text="quota service unavailable")
         return await handler(request)
 
     web_app.middlewares.append(http_rate_limit)

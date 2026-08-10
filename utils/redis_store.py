@@ -90,7 +90,7 @@ async def charge_credits(redis: Redis, user_id: int, cost: int, limit: int) -> b
             for _ in range(amount):
                 count = await redis.incr(key)
     except (RedisError, AttributeError):
-        return True
+        return False
     if count == cost:
         await redis.expire(key, 35 * 86400)
     if count > limit:

@@ -36,7 +36,7 @@ from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
-from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan, effective_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from services import google_calendar
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices
@@ -240,8 +240,8 @@ async def button_usage(message: types.Message, db_session: AsyncSession):
         used = await credits_used(redis, user.id)
     finally:
         await close_redis(redis)
-    plan = normalize_plan((user.tech_stack or {}).get("subscription_plan"))
-    limit = credits_limit(user)
+    plan = effective_plan(user.id, user)
+    limit = int(plan_info(plan)["credits"])
     await message.answer(
         f"Тариф: {plan_info(plan)['name']}\n"
         f"Использовано: {used} из {limit} кредитов\n"
