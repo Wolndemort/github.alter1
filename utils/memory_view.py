@@ -31,6 +31,8 @@ def memory_sections(memory):
     """Return labels and values only; never expose storage keys."""
     sections = []
     for category, facts in (memory or {}).items():
+        if str(category).startswith("_"):
+            continue
         if not facts:
             continue
         items = ([{"label": _label(k), "value": _value(v)} for k, v in facts.items() if str(k).casefold() not in _HIDDEN_KEYS and v not in (None, "")] if isinstance(facts, Mapping)

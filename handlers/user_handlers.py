@@ -31,7 +31,7 @@ from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
 from utils.memory_facts import extract_user_facts
-from utils.helpers import merge_memory
+from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
@@ -1299,19 +1299,14 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         return
     extracted_facts = extract_user_facts(message.text)
     if extracted_facts:
-        user.memory = merge_memory(dict(user.memory or {}), extracted_facts)
+        user.memory = merge_memory_facts(dict(user.memory or {}), extracted_facts)
         flag_modified(user, "memory")
     explicit_fact = explicit_memory_fact(message.text)
     if explicit_fact:
-        memory = dict(user.memory or {})
-        category = "identity" if any(word in explicit_fact.casefold() for word in ("машин", "авто", "автомобил", "bmw", "mercedes", "лада")) else "preferences"
-        values = dict(memory.get(category) or {})
-        facts = list(values.get("explicit_facts") or [])
-        if explicit_fact not in facts:
-            facts.append(explicit_fact)
-        values["explicit_facts"] = facts[-20:]
-        memory[category] = values
-        user.memory = memory
+        user.memory = merge_memory_facts(
+            dict(user.memory or {}),
+            {"preferences": {"explicit_facts": [explicit_fact]}},
+        )
         flag_modified(user, "memory")
     if False:  # billing is handled by RedisBillingMiddleware
         await message.answer("Дневной лимит запросов исчерпан. Попробуй завтра.")

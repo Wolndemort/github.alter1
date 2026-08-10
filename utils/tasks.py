@@ -15,7 +15,7 @@ from data.models import ImportantEvent, Reminder, Session
 from data.models import User
 from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
-from utils.helpers import merge_memory
+from utils.memory_store import merge_memory_facts
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
 from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
 from utils.vector_memory import purge_expired
@@ -127,7 +127,7 @@ async def process_session(session: Session, db) -> bool:
     if user is None:
         return False
     current = dict(user.memory or {})
-    user.memory = merge_memory(current, facts)
+    user.memory = merge_memory_facts(current, facts)
     flag_modified(user, "memory")
     for event in extract_important_events(facts):
         await save_unique_event(event, user.id, db)

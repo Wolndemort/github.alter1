@@ -66,6 +66,7 @@ def normalize_memory(value):
     if not isinstance(value, dict): return {}
     result = {}
     for category, facts in value.items():
+        if str(category).startswith("_"): continue
         if category not in MEMORY_CATEGORIES: continue
         if isinstance(facts, dict): facts = {normalize_key(k): v for k, v in facts.items()}
         result[category] = facts

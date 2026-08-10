@@ -13,7 +13,7 @@ from config import config
 from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import generate_reply
 from utils.vector_memory import recall, remember
-from utils.helpers import merge_memory
+from utils.memory_store import merge_memory_facts
 from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
@@ -80,7 +80,7 @@ class ChatService:
             preferences["explicit_facts"] = explicit_facts[-20:]
             new_facts["preferences"] = preferences
         if new_facts:
-            user.memory = merge_memory(dict(user.memory or {}), new_facts)
+            user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
 
         events_result = await db.execute(
