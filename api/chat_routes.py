@@ -103,7 +103,9 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
     user_id = _bearer(request)
     payload = await _json(request)
     text = str(payload.get("message") or "").strip()
-    if not text or is_capabilities_request(text) or is_reminder_request(text) or detect_audio_action(text) == "effect":
+    lowered = text.casefold()
+    tool_words = ("найди", "поищи", "проверь в интернете", "актуальн", "погода", "прогноз", "youtube", "ютуб", "новост", "ссылк", "календар")
+    if not text or is_capabilities_request(text) or is_reminder_request(text) or detect_audio_action(text) == "effect" or any(word in lowered for word in tool_words):
         raise web.HTTPConflict(text="stream unavailable for this request")
     redis = create_redis()
     try:
