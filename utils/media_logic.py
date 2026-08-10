@@ -4,7 +4,7 @@ import logging
 
 from config import config
 from utils.ap_logic import chat_with_fallback, chat_with_tools, client
-from utils.prompts import MEDIA_SYSTEM_PROMPT, MEMORY_POLICY_PROMPT
+from utils.prompts import MEDIA_SYSTEM_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY
 from utils.quality import has_internal_leak
 
 
@@ -32,7 +32,7 @@ async def generate_media_reply(
                 "\nЭто продолжение одного диалога. Учитывай контекст и не начинай разговор заново. "
                 f"Память пользователя: {memory or {}}"
             )
-        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT + "\n\n" + MEMORY_POLICY_PROMPT + context_note}]
+        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT + "\n\n" + MEMORY_POLICY_PROMPT + "\n\n" + PUBLIC_RESPONSE_POLICY + context_note}]
         for turn in (conversation_context or [])[-12:]:
             if turn.get("role") in {"user", "assistant"} and turn.get("content"):
                 messages.append({"role": turn["role"], "content": str(turn["content"])})

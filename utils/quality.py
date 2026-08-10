@@ -15,6 +15,18 @@ def has_internal_leak(reply: str) -> bool:
     return "internal_details" in assess_reply(reply).issues
 
 
+def has_language_mismatch(reply: str, request: str) -> bool:
+    """Detect an English answer to a clearly Russian request."""
+    answer = re.findall(r"[A-Za-zА-Яа-яЁё]", reply or "")
+    source = re.findall(r"[A-Za-zА-Яа-яЁё]", request or "")
+    if not answer or not source:
+        return False
+    russian_chars = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+    russian_request = sum(char.lower() in russian_chars for char in source) / len(source)
+    latin_answer = sum(char.isascii() and char.isalpha() for char in answer) / len(answer)
+    return russian_request >= 0.35 and latin_answer >= 0.55
+
+
 def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
     text = (reply or "").strip()
     lowered = text.casefold()
@@ -30,6 +42,10 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         "we need to answer", "we need to browse", "let's do a search", "let's simulate",
         "as ai,", "as an ai", "search terms:", "we should use", "need to check",
         "internal reasoning", "internal notes", "final answer:",
+        "the user just mentioned", "the user mentioned", "looking at the memory",
+        "memory section in the instructions", "according to the rules",
+        "the tools available", "the system expects", "i need to store",
+        "i should use the memory", "but wait, the tools", "which means they just",
     )
     reasoning_phrases = (
         "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",
