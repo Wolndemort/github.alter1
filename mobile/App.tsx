@@ -5,7 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { Audio } from "expo-av";
+import { AudioModule, AudioPlayer, AudioRecorder, RecordingPresets, createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
 import * as ImagePicker from "expo-image-picker";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
@@ -64,12 +64,13 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
   const line = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    let sound: Audio.Sound | null = null;
+    let sound: AudioPlayer | null = null;
     const soundUrl = process.env.EXPO_PUBLIC_INTRO_SOUND_URL;
     if (soundUrl) {
-      Audio.setAudioModeAsync({ playsInSilentModeIOS: true }).then(async () => {
-        const loaded = await Audio.Sound.createAsync({ uri: soundUrl }, { shouldPlay: true, volume: 0.22 });
-        sound = loaded.sound;
+      setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).then(async () => {
+        sound = createAudioPlayer({ uri: soundUrl });
+        sound.volume = 0.22;
+        sound.play();
       }).catch(() => undefined);
     }
     Animated.parallel([
@@ -80,7 +81,7 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
     const timer = setTimeout(() => {
       Animated.timing(opacity, { toValue: 0, duration: 420, useNativeDriver: true }).start(() => onFinished());
     }, 1850);
-    return () => { clearTimeout(timer); if (sound) sound.unloadAsync().catch(() => undefined); };
+    return () => { clearTimeout(timer); if (sound) { sound.pause(); sound.remove(); } };
   }, [line, opacity, onFinished, scale]);
 
   return <View style={[styles.intro, { backgroundColor: "#050505" }]}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>PERSONAL INTELLIGENCE</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
@@ -207,15 +208,17 @@ function IdleAlterScreen({ opacity }: { opacity: Animated.Value }) {
 }
 
 export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (uri: string) => void; onRecordingChange?: (active: boolean) => void }) {
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const pulse = React.useRef(new Animated.Value(1)).current;
   const pulseLoop = React.useRef<Animated.CompositeAnimation | null>(null);
   const start = async () => {
-    const permission = await Audio.requestPermissionsAsync();
+    const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) return;
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const result = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    setRecording(result.recording);
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    const recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+    setRecording(recorder);
     onRecordingChange?.(true);
     pulseLoop.current = Animated.loop(Animated.sequence([
       Animated.timing(pulse, { toValue: 1.22, duration: 500, useNativeDriver: true }),
@@ -227,8 +230,8 @@ export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (ur
     const current = recording;
     if (!current) return;
     pulseLoop.current?.stop(); pulse.setValue(1);
-    await current.stopAndUnloadAsync();
-    const uri = current.getURI();
+    await current.stop();
+    const uri = current.uri;
     setRecording(null);
     onRecordingChange?.(false);
     if (uri) onRecorded(uri);
@@ -350,7 +353,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
-  const activeVoiceSound = React.useRef<Audio.Sound | null>(null);
+  const activeVoiceSound = React.useRef<AudioPlayer | null>(null);
   const voicePlaybackSerial = React.useRef(0);
   const autoScrollAfterUpdate = React.useRef(false);
   const activeRequestController = React.useRef<AbortController | null>(null);
@@ -452,7 +455,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     animation.start();
     return () => animation.stop();
   }, [logoPulse]);
-  useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); voicePlaybackSerial.current += 1; const sound = activeVoiceSound.current; activeVoiceSound.current = null; if (sound) sound.unloadAsync().catch(() => undefined); }; }, [resetIdle]);
+  useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); voicePlaybackSerial.current += 1; const sound = activeVoiceSound.current; activeVoiceSound.current = null; if (sound) { sound.pause(); sound.remove(); } }; }, [resetIdle]);
   const stopRequest = () => {
     activeRequestController.current?.abort();
     activeRequestController.current = null;
@@ -462,8 +465,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const sound = activeVoiceSound.current;
     activeVoiceSound.current = null;
     if (sound) {
-      try { await sound.setStatusAsync({ shouldPlay: false }); } catch { /* already stopped */ }
-      try { await sound.unloadAsync(); } catch { /* already unloaded */ }
+      try { sound.pause(); } catch { /* already stopped */ }
+      try { sound.remove(); } catch { /* already unloaded */ }
     }
     setPlayingVoiceId(null);
   };
@@ -490,27 +493,28 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     // Recording enables the iOS receiver route and can leave subsequent TTS
     // playback extremely quiet. Explicitly restore speaker playback before
     // every voice response; this also prevents Android earpiece routing.
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: false,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
     });
     if (serial !== voicePlaybackSerial.current) return;
-    const loaded = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: 1.0 });
+    const player = createAudioPlayer({ uri });
+    player.volume = 1.0;
     if (serial !== voicePlaybackSerial.current) {
-      await loaded.sound.unloadAsync().catch(() => undefined);
+      player.remove();
       return;
     }
-    activeVoiceSound.current = loaded.sound;
-    loaded.sound.setOnPlaybackStatusUpdate((status) => {
-      if ("didJustFinish" in status && status.didJustFinish) {
-        if (activeVoiceSound.current === loaded.sound) activeVoiceSound.current = null;
+    activeVoiceSound.current = player;
+    player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) {
+        if (activeVoiceSound.current === player) activeVoiceSound.current = null;
         setPlayingVoiceId(null);
-        loaded.sound.unloadAsync();
+        player.remove();
       }
     });
+    player.play();
   };
   const downloadMedia = async (item: ChatItem, kind: "media" | "audio" = "media") => {
     const uriValue = kind === "audio" ? item.audioUri : item.mediaUri;
