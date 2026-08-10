@@ -97,18 +97,18 @@ export class AlterApi {
     return this.request<MeResponse>("/api/v1/auth/me", {}, token);
   }
 
-  sendMessage(token: string, message: string, location?: LocationContext | null) {
+  sendMessage(token: string, message: string, location?: LocationContext | null, signal?: AbortSignal) {
     return this.request<ChatResponse>("/api/v1/chat/messages", {
-      method: "POST",
+      method: "POST", signal,
       body: JSON.stringify({ message, ...(location ? { location } : {}) }),
     }, token);
   }
-  async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void): Promise<ChatResponse> {
+  async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void, signal?: AbortSignal): Promise<ChatResponse> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/stream`, {
       method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ message, ...(location ? { location } : {}) }),
+      body: JSON.stringify({ message, ...(location ? { location } : {}) }), signal,
     });
-    if (response.status === 404 || response.status === 405 || response.status === 409) return this.sendMessage(token, message, location);
+    if (response.status === 404 || response.status === 405 || response.status === 409) return this.sendMessage(token, message, location, signal);
     if (!response.ok || !response.body) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

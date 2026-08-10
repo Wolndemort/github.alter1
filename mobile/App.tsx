@@ -138,6 +138,7 @@ function EmptyChat({ onPrompt }: { onPrompt: (value: string) => void }) {
     <Text style={styles.emptyLogo}>ALTER</Text>
     <Text style={styles.emptyTitle}>Твой контекст уже здесь</Text>
     <Text style={styles.emptySubtitle}>Напиши, скажи голосом или прикрепи фото. ALTER поможет разобраться и довести дело до результата.</Text>
+    <Pressable style={styles.alterLoopCard} onPress={() => onPrompt("Помоги мне выбрать важное дело, составь план на сегодня и напомни вернуться к нему позже.")}><Text style={styles.alterLoopKicker}>ALTER LOOP</Text><Text style={styles.alterLoopTitle}>Помнит → планирует → возвращает</Text><Text style={styles.alterLoopText}>Скажи, что важно. ALTER сохранит контекст, разложит следующий шаг и поможет не потерять его.</Text></Pressable>
     <View style={styles.quickPromptGrid}>{prompts.map(([title, prompt]) => <Pressable key={title} style={({ pressed }) => [styles.quickPrompt, pressed && styles.quickPromptPressed]} onPress={() => onPrompt(prompt)}><Text style={styles.quickPromptTitle}>{title}</Text><Text style={styles.quickPromptText}>{prompt}</Text></Pressable>)}</View>
     <Text style={styles.emptyHint}>Память · голос · фото · поиск · напоминания</Text>
   </View>;
@@ -351,6 +352,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const activeVoiceSound = React.useRef<Audio.Sound | null>(null);
   const voicePlaybackSerial = React.useRef(0);
   const autoScrollAfterUpdate = React.useRef(false);
+  const activeRequestController = React.useRef<AbortController | null>(null);
   const drawerX = React.useRef(new Animated.Value(-420)).current;
   const logoPulse = React.useRef(new Animated.Value(0.72)).current;
   const idleShade = React.useRef(new Animated.Value(0)).current;
@@ -450,6 +452,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     return () => animation.stop();
   }, [logoPulse]);
   useEffect(() => { resetIdle(); return () => { if (idleTimer.current) clearTimeout(idleTimer.current); voicePlaybackSerial.current += 1; const sound = activeVoiceSound.current; activeVoiceSound.current = null; if (sound) sound.unloadAsync().catch(() => undefined); }; }, [resetIdle]);
+  const stopRequest = () => {
+    activeRequestController.current?.abort();
+    activeRequestController.current = null;
+  };
   const stopVoicePlayback = async () => {
     voicePlaybackSerial.current += 1;
     const sound = activeVoiceSound.current;
@@ -535,13 +541,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const send = async (presetText?: string) => {
     const text = (presetText ?? message).trim(); if ((!text && !attachment) || busy) return;
     const currentAttachment = attachment;
+    const controller = new AbortController();
+    activeRequestController.current = controller;
     const userMessageId = `${Date.now()}u`;
     const pendingId = `${Date.now()}p`;
     autoScrollAfterUpdate.current = true;
     Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? "Голосовое сообщение" : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }, { id: pendingId, role: "assistant", text: "" }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : "thinking");
-    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item))); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
-    catch (err) { if (text) setMessage((current) => current || text); setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: userFacingError(err) } : item)); }
-    finally { setBusy(false); setActivity(""); }
+    try { const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal); if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId); }
+    catch (err) { if ((err as { name?: string })?.name === "AbortError") setItems((old) => old.filter((item) => item.id !== pendingId)); else { if (text) setMessage((current) => current || text); setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: userFacingError(err) } : item)); } }
+    finally { if (activeRequestController.current === controller) activeRequestController.current = null; setBusy(false); setActivity(""); }
   };
   const promptFromHistory = (id: string) => {
     const index = items.findIndex((item) => item.id === id);
@@ -726,6 +734,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={() => send()} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={() => send()} disabled={busy} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
+    {busy && !attachment ? <Pressable style={styles.stopResponseButton} onPress={stopRequest} accessibilityLabel="Остановить ответ"><Text style={styles.stopResponseText}>■ Остановить ответ</Text></Pressable> : null}
+    {!busy && items.some((item) => item.role === "user") ? <Pressable style={styles.editLastButton} onPress={() => { const last = [...items].reverse().find((item) => item.role === "user"); if (last) { setMessage(last.text); resetIdle(); } }} accessibilityLabel="Редактировать последнее сообщение"><Text style={styles.editLastText}>Изменить последнее сообщение</Text></Pressable> : null}
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
   </KeyboardAvoidingView>
   <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
@@ -737,7 +747,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={menuVisible && !memoryVisible && !remindersVisible && !faqVisible && !plansVisible} transparent animationType="none" onRequestClose={() => setMenuVisible(false)}>
     <Pressable style={premiumStyles.drawerBackdrop} onPress={() => setMenuVisible(false)}>
-      <Animated.View style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}> 
+      <Animated.View testID="drawer-card" style={[premiumStyles.menuCard, { transform: [{ translateX: drawerX }] }]}>{/* drawer */}
       <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={premiumStyles.drawerScroll}>
         <Animated.Text style={[premiumStyles.drawerLogo, { opacity: logoPulse }]}>ALTER</Animated.Text>
@@ -862,6 +872,14 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).emptyHint = { color: "#666666", fontSize: 11, letterSpacing: 0.6, textAlign: "center", marginTop: 4 };
 (styles as Record<string, unknown>).memoryNotice = { marginHorizontal: 12, marginBottom: 3, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#151515", borderWidth: 1, borderColor: "#4a4a4a" };
 (styles as Record<string, unknown>).memoryNoticeText = { color: "#ffffff", fontSize: 12, textAlign: "center" };
+(styles as Record<string, unknown>).alterLoopCard = { marginHorizontal: 16, marginBottom: 14, padding: 16, borderRadius: 16, backgroundColor: "#171717", borderWidth: 1, borderColor: "#555" };
+(styles as Record<string, unknown>).alterLoopKicker = { color: "#9f9f9f", fontSize: 10, letterSpacing: 2, marginBottom: 8 };
+(styles as Record<string, unknown>).alterLoopTitle = { color: "#fff", fontSize: 17, fontWeight: "700", marginBottom: 6 };
+(styles as Record<string, unknown>).alterLoopText = { color: "#bdbdbd", fontSize: 13, lineHeight: 19 };
+(styles as Record<string, unknown>).stopResponseButton = { alignSelf: "center", marginBottom: 4, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 14, backgroundColor: "#242424", borderWidth: 1, borderColor: "#555" };
+(styles as Record<string, unknown>).stopResponseText = { color: "#fff", fontSize: 12 };
+(styles as Record<string, unknown>).editLastButton = { alignSelf: "flex-end", marginRight: 16, marginBottom: 4, paddingHorizontal: 10, paddingVertical: 4 };
+(styles as Record<string, unknown>).editLastText = { color: "#888", fontSize: 11 };
 (styles as Record<string, unknown>).quickActionRow = { flexDirection: "row", gap: 7, paddingHorizontal: 12, paddingBottom: 5, overflow: "hidden" };
 (styles as Record<string, unknown>).quickAction = { paddingVertical: 7, paddingHorizontal: 11, borderRadius: 14, backgroundColor: "#111111", borderWidth: 1, borderColor: "#333333" };
 (styles as Record<string, unknown>).quickActionText = { color: "#cccccc", fontSize: 11, fontWeight: "700" };
