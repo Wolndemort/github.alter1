@@ -20,6 +20,7 @@ from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
 from utils.intent import explicit_memory_fact
+from utils.feedback_memory import feedback_context
 from datetime import timedelta
 
 
@@ -88,6 +89,9 @@ class ChatService:
             .order_by(ImportantEvent.occurred_at.desc()).limit(20)
         )
         memory = dict(user.memory or {})
+        feedback = feedback_context(user.tech_stack)
+        if feedback:
+            memory["response_feedback"] = feedback
         if isinstance(location, dict):
             memory["current_location"] = {
                 key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
@@ -137,6 +141,6 @@ class ChatService:
         else:
             reply = await generate_reply(list(session.raw_messages), memory)
         _append(session, "assistant", reply)
-        await remember(db, user_id, text, source="user_message")
+        await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message")
         await db.commit()
         return ChatResult(reply=reply, session_id=session.id)

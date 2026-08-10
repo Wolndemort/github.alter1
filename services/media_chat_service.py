@@ -17,6 +17,7 @@ from services.media_generation import generate_image, generate_video
 from utils.vector_memory import recall, remember
 from services.elevenlabs_media import ElevenLabsError, speech_to_speech
 from services.voice_commands import is_voice_change_request, requested_voice_id
+from utils.feedback_memory import feedback_context
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,9 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             raise ValueError("video could not be processed")
     _append(session, "user", prompt)
     memory = dict(user.memory or {})
+    feedback = feedback_context(user.tech_stack)
+    if feedback:
+        memory["response_feedback"] = feedback
     if len(prompt) >= config.MEMORY_AUTO_RECALL_MIN_CHARS:
         recalled = await recall(db, user_id, prompt)
         if recalled:

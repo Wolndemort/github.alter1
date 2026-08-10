@@ -648,11 +648,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const setFeedback = async (id: string, feedback: "positive" | "negative") => {
+    const answerIndex = items.findIndex((item) => item.id === id);
+    const answer = items[answerIndex];
+    const question = answerIndex > 0 ? [...items.slice(0, answerIndex)].reverse().find((item) => item.role === "user") : undefined;
     setItems((old) => old.map((item) => item.id === id ? { ...item, feedback } : item)); setFeedbackFor(null);
     try {
       const { settings } = await api.settings(token);
       const previous = Array.isArray(settings.reply_feedback) ? settings.reply_feedback : [];
-      await api.updateSettings(token, { reply_feedback: [...previous, { rating: feedback, at: new Date().toISOString() }].slice(-100) });
+      await api.updateSettings(token, { reply_feedback: [...previous, { rating: feedback, answer: answer?.text?.slice(0, 700), question: question?.text?.slice(0, 300), at: new Date().toISOString() }].slice(-100) });
     } catch { /* Rating is optional; keep the local acknowledgement. */ }
   };
   const startNewChat = async () => { if (busy || newChatLoading) return; setNewChatPromptVisible(false); setNewChatLoading(true); try { await api.newSession(token); setItems([]); setMessage(""); setAttachment(null); setMenuVisible(false); resetIdle(); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось начать новый чат"); } finally { setNewChatLoading(false); } };

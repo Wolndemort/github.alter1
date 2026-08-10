@@ -31,6 +31,7 @@ from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
 from utils.memory_facts import extract_user_facts
+from utils.feedback_memory import feedback_context
 from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
@@ -95,7 +96,8 @@ async def handle_reply_feedback(callback: types.CallbackQuery, db_session: Async
     if user:
         settings = dict(user.tech_stack or {})
         feedback = list(settings.get("reply_feedback") or [])
-        feedback.append({"rating": rating, "at": datetime.now(timezone.utc).isoformat()})
+        answer = str(getattr(getattr(callback, "message", None), "text", "") or "").strip()
+        feedback.append({"rating": rating, "answer": answer[:700], "at": datetime.now(timezone.utc).isoformat()})
         settings["reply_feedback"] = feedback[-100:]
         user.tech_stack = settings
         await db_session.commit()
@@ -667,7 +669,7 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
             # The current media turn is supplied separately with the image/
             # video; keep only previous turns in the conversational history.
             conversation_context=recent_context(session.raw_messages[:-1]),
-            memory=dict(user.memory or {}),
+            memory={**dict(user.memory or {}), **({"response_feedback": feedback_context(user.tech_stack)} if feedback_context(user.tech_stack) else {})},
             search_results=web_results,
         )
         if web_results:
@@ -1376,6 +1378,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     events_result = await db_session.execute(select(ImportantEvent).where(ImportantEvent.user_id == user.id).order_by(ImportantEvent.occurred_at.desc()).limit(20))
     events = [{"title": event.title, "event_type": event.event_type, "importance": event.importance, "description": event.description} for event in events_result.scalars()]
     memory_for_reply = dict(user.memory or {})
+    feedback = feedback_context(user.tech_stack)
+    if feedback:
+        memory_for_reply["response_feedback"] = feedback
     if events:
         memory_for_reply["important_events"] = events
     # Short social messages such as "как сам?" are not reliable semantic
@@ -1423,7 +1428,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     append_session_message(session, "assistant", reply)
     # Vector memory is for the user's own durable context, not AI prose or
     # temporary research about third parties.
-    await remember(db_session, user.id, message.text, source="user_message")
+    await remember(db_session, user.id, message.text, source="explicit_memory" if explicit_fact else "user_message")
 
     try:
         await db_session.commit()

@@ -7,6 +7,7 @@ from data.models import MemoryChunk
 from utils.ap_logic import client
 from config import config
 from utils.metrics import increment
+from utils.memory_quality import is_memory_worthy, memory_reason
 
 EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
@@ -19,6 +20,9 @@ async def embed(text: str) -> list[float]:
 async def remember(db: AsyncSession, user_id: int, text: str, source="conversation") -> None:
     text = str(text or "").strip()
     if len(text) < 20:
+        return
+    if not is_memory_worthy(text, source):
+        increment("memory.vector.skipped", reason=memory_reason(text, source))
         return
     try:
         content = text[:8000]

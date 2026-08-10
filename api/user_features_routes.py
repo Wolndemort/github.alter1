@@ -50,6 +50,12 @@ async def update_settings_route(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="invalid tts_voice")
     if "reply_feedback" in settings and (not isinstance(settings["reply_feedback"], list) or len(settings["reply_feedback"]) > 100):
         raise web.HTTPBadRequest(text="invalid reply_feedback")
+    if "reply_feedback" in settings:
+        for item in settings["reply_feedback"]:
+            if not isinstance(item, dict) or item.get("rating") not in {"positive", "negative"}:
+                raise web.HTTPBadRequest(text="invalid reply_feedback item")
+            if len(str(item.get("answer") or "")) > 700 or len(str(item.get("question") or "")) > 300:
+                raise web.HTTPBadRequest(text="reply_feedback item is too long")
     async with async_session() as session:
         user = await session.get(User, user_id)
         if user is None: raise web.HTTPUnauthorized(text="account not found")
