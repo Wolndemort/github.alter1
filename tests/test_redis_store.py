@@ -1,6 +1,6 @@
 import pytest
 
-from utils.redis_store import cache_get, cache_set, charge_credits, charge_request, consume_link_token, create_link_token, state_get, state_set
+from utils.redis_store import cache_get, cache_set, charge_credits, charge_request, consume_link_token, create_link_token, refund_credits, state_get, state_set
 
 
 class FakeRedis:
@@ -50,6 +50,15 @@ async def test_credit_billing_supports_redis_without_incrby():
     assert not await charge_credits(redis, 7, 2, 3)
     key = next(k for k in redis.values if k.startswith("alter:credits:7:"))
     assert redis.values[key] == 2
+
+
+@pytest.mark.asyncio
+async def test_refund_supports_redis_without_decrby():
+    redis = FakeRedis()
+    assert await charge_credits(redis, 8, 2, 3)
+    assert await refund_credits(redis, 8, 2)
+    key = next(k for k in redis.values if k.startswith("alter:credits:8:"))
+    assert redis.values[key] == 0
 
 
 @pytest.mark.asyncio

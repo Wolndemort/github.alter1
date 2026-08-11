@@ -16,5 +16,6 @@ alter_*.json
 owner_check*.json
 capability_smoke*.json
 capability_stateful_smoke*.json
+production_latency*.json
 chatgpt_*.json
 gemini_*.json

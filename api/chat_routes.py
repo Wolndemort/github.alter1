@@ -20,7 +20,7 @@ from utils.tts import synthesize_speech
 from utils.quality import sanitize_public_reply
 from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
-from utils.quota import charge_user_id_credits
+from utils.quota import charge_user_id_credits, refund_user_id_credits
 from services.media_jobs import cancel_job, get_job, history, submit_job
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices, speech_to_speech
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
@@ -304,20 +304,20 @@ async def media_generate_route(request: web.Request) -> web.Response:
             config.FAL_TEXT_VIDEO_CREDITS if kind == "video" and source is None else
             config.MEDIA_GENERATION_CREDITS
         )
+        if kind not in {"image", "video"}:
+            raise web.HTTPBadRequest(text="kind must be image or video")
         redis = create_redis()
         try:
             if not await charge_user_id_credits(redis, user_id, cost, async_session):
                 raise web.HTTPTooManyRequests(text="monthly media limit reached")
-        finally:
-            await close_redis(redis)
-        started_at = time.monotonic()
-        try:
-            if kind not in {"image", "video"}:
-                raise web.HTTPBadRequest(text="kind must be image or video")
+            started_at = time.monotonic()
             artifact = await (generate_video(prompt, source, options) if kind == "video" else generate_image(prompt, source, options))
         except MediaGenerationError as exc:
+            await refund_user_id_credits(redis, user_id, cost, async_session)
             logging.warning("media generation failed user=%s kind=%s provider=%s elapsed_ms=%d error=%s", user_id, kind, config.MEDIA_PROVIDER, int((time.monotonic() - started_at) * 1000), str(exc)[:240])
             raise web.HTTPBadRequest(text=str(exc))
+        finally:
+            await close_redis(redis)
         logging.info("media generation success user=%s kind=%s provider=%s model=%s bytes=%d elapsed_ms=%d cost=%d", user_id, kind, config.MEDIA_PROVIDER, (config.FAL_TEXT_VIDEO_MODEL if kind == "video" and source is None else config.FAL_VIDEO_MODEL if kind == "video" else config.FAL_TEXT_IMAGE_MODEL if source is None else config.FAL_IMAGE_MODEL), len(artifact.data), int((time.monotonic() - started_at) * 1000), cost)
     return web.json_response({
         "media_type": artifact.media_type,
@@ -345,9 +345,12 @@ async def media_job_create_route(request: web.Request) -> web.Response:
     try:
         if not await charge_user_id_credits(redis, user_id, cost, async_session):
             raise web.HTTPTooManyRequests(text="monthly media limit reached")
+        job_id = await submit_job(user_id, kind, prompt, None, options)
+    except Exception:
+        await refund_user_id_credits(redis, user_id, cost, async_session)
+        raise
     finally:
         await close_redis(redis)
-    job_id = await submit_job(user_id, kind, prompt, None, options)
     return web.json_response({"job_id": job_id, "status": "queued", "progress": 0}, status=202)
 
 

@@ -105,6 +105,22 @@ async def charge_credits(redis: Redis, user_id: int, cost: int, limit: int) -> b
     return True
 
 
+async def refund_credits(redis: Redis, user_id: int, cost: int) -> bool:
+    """Return a previously reserved credit amount after provider failure."""
+    key = _credits_key(user_id)
+    amount = max(1, int(cost))
+    try:
+        decrby = getattr(redis, "decrby", None)
+        if callable(decrby):
+            await decrby(key, amount)
+        else:
+            for _ in range(amount):
+                await redis.decr(key)
+        return True
+    except (RedisError, AttributeError):
+        return False
+
+
 async def credits_used(redis: Redis, user_id: int) -> int:
     value = await redis.get(_credits_key(user_id))
     try:

@@ -8,9 +8,11 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
+from data.database import async_session
 from config import config
 from services.media_generation import MediaGenerationError, generate_image, generate_video
 from utils.redis_store import close_redis, create_redis
+from utils.quota import refund_user_id_credits
 
 QUEUE_KEY = "alter:media_jobs"
 
@@ -77,6 +79,10 @@ async def cancel_job(job_id: str, user_id: int) -> bool:
         if job.get("user_id") != user_id or job.get("status") in {"completed", "failed", "cancelled"}:
             return False
         job.update(status="cancelled", progress=0)
+        if not job.get("billing_refunded"):
+            cost = config.FAL_TEXT_VIDEO_CREDITS if job.get("kind") == "video" else config.FAL_TEXT_IMAGE_CREDITS
+            await refund_user_id_credits(redis, user_id, cost, async_session)
+            job["billing_refunded"] = True
         await _save(redis, job_id, job)
         return True
     finally:
@@ -107,6 +113,10 @@ async def _run(payload: dict, redis) -> None:
         raise
     except Exception as exc:
         job.update(status="failed", progress=0, error=str(exc)[:300])
+        if not job.get("billing_refunded"):
+            cost = config.FAL_TEXT_VIDEO_CREDITS if payload.get("kind") == "video" else config.FAL_TEXT_IMAGE_CREDITS
+            await refund_user_id_credits(redis, payload["user_id"], cost, async_session)
+            job["billing_refunded"] = True
         logging.exception("media job failed id=%s", job_id)
     await _save(redis, job_id, job)
 

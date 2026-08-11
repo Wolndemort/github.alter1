@@ -5,7 +5,7 @@ from utils.billing import credits_limit
 from utils.quota import charge_user_id_credits
 from utils.billing import is_owner
 from config import config
-from utils.redis_store import charge_credits, credits_used
+from utils.redis_store import charge_credits, credits_used, refund_credits
 
 
 class FakeRedis:
@@ -53,6 +53,13 @@ def test_ego_can_use_3500_credits_and_is_rejected_after_that():
 
 def test_owner_generation_is_free_and_does_not_need_redis():
     assert run(charge_user_id_credits(None, int(config.OWNER_TELEGRAM_IDS.split(",")[0]), 250)) is True
+
+
+def test_failed_provider_can_refund_reserved_credits():
+    redis = FakeRedis()
+    assert run(charge_credits(redis, 3, 100, 1000)) is True
+    assert run(refund_credits(redis, 3, 100)) is True
+    assert run(credits_used(redis, 3)) == 0
 
 
 def test_generation_costs_are_higher_for_text_to_media():

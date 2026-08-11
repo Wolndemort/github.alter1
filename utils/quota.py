@@ -5,7 +5,7 @@ from data.models import User, WebAccount
 from sqlalchemy import select
 from utils.billing import credits_limit
 from utils.billing import has_owner_access, is_owner
-from utils.redis_store import charge_credits
+from utils.redis_store import charge_credits, refund_credits
 
 
 async def charge_user_credits(redis, user: User, cost: int) -> bool:
@@ -27,3 +27,15 @@ async def charge_user_id_credits(redis, user_id: int, cost: int, session_factory
         if user is None:
             return False
         return await charge_user_credits(redis, user, cost)
+
+
+async def refund_user_id_credits(redis, user_id: int, cost: int, session_factory=async_session) -> bool:
+    """Refund a reservation unless the account bypasses billing."""
+    if is_owner(user_id):
+        return True
+    async with session_factory() as session:
+        account_result = await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))
+        account = account_result.scalar_one_or_none()
+        if account and has_owner_access(user_id, account.email):
+            return True
+    return await refund_credits(redis, user_id, cost)
