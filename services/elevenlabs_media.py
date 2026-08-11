@@ -32,6 +32,7 @@ async def sound_effect(prompt: str) -> bytes:
 
 
 async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
+    data = bytes(data)
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(
             "https://api.elevenlabs.io/v1/audio-isolation",
@@ -44,6 +45,7 @@ async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
 
 
 async def speech_to_text(data: bytes, filename: str = "voice.m4a") -> dict:
+    data = bytes(data)
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
@@ -67,6 +69,7 @@ async def speech_to_text(data: bytes, filename: str = "voice.m4a") -> dict:
 async def speech_to_speech(data: bytes, voice_id: str, filename: str = "voice.m4a") -> bytes:
     if not voice_id.strip():
         raise ElevenLabsError("ElevenLabs voice id is required")
+    data = bytes(data)
     try:
         async with httpx.AsyncClient(timeout=180) as client:
             response = await client.post(
