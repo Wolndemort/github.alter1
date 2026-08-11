@@ -16,3 +16,13 @@ def test_short_stream_has_paid_fallback_after_free_attempt():
 def test_complex_stream_keeps_primary_model_first():
     route = ap_logic._stream_model_route([{"role": "user", "content": "составь подробный план миграции базы данных"}])
     assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL
+
+
+def test_paid_first_mode_prioritizes_reliable_model_and_keeps_free_fallback(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_PAID_FIRST", True)
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
+    monkeypatch.setattr(ap_logic.config, "AI_STREAM_MAX_MODELS", 3)
+    ap_logic._MODEL_COOLDOWN_UNTIL.clear()
+    route = ap_logic._stream_model_route([{"role": "user", "content": "Привет"}])
+    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+    assert ap_logic.config.OPENROUTER_FREE_MODEL_2 in route

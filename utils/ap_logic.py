@@ -253,6 +253,14 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
         paid_models = ([config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL]
                        if is_complex else [config.OPENROUTER_MODEL])
         primary += paid_models + [config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
+    if config.OPENROUTER_PAID_FIRST and config.OPENROUTER_ALLOW_PAID_FALLBACK:
+        paid_preferred = [model for model in (
+            config.OPENROUTER_REASONING_MODEL if is_complex else None,
+            config.OPENROUTER_MODEL,
+        ) if model]
+        paid_tail = [model for model in (config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2) if model]
+        excluded = set(paid_preferred + paid_tail)
+        primary = paid_preferred + [model for model in primary if model not in excluded] + paid_tail
     return _route_with_available_models(list(dict.fromkeys(filter(None, primary))))
 
 
@@ -289,6 +297,8 @@ def _stream_model_route(messages, task: str | None = None) -> list[str]:
         config.OPENROUTER_FALLBACK_MODEL_2,
     ) if model in route and model not in fast_free]
     limit = max(1, config.AI_STREAM_MAX_MODELS)
+    if config.OPENROUTER_PAID_FIRST and config.OPENROUTER_ALLOW_PAID_FALLBACK:
+        return route[:limit]
     # Keep one free attempt, then use a paid fallback only when explicitly enabled.
     candidates = fast_free[:1]
     if config.OPENROUTER_ALLOW_PAID_FALLBACK:

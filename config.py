@@ -22,6 +22,9 @@ class Setting(BaseSettings):
     OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-oss-120b"
     # Safety switch: never spend money unless this is explicitly enabled.
     OPENROUTER_ALLOW_PAID_FALLBACK: bool = True
+    # Prefer a reliable paid model for latency-sensitive chat; free models
+    # remain available as fallback when this switch is enabled.
+    OPENROUTER_PAID_FIRST: bool = False
     # OpenRouter can suppress provider reasoning from the public stream.
     OPENROUTER_EXCLUDE_REASONING: bool = True
     OWNER_TELEGRAM_IDS: str = "1271717628"
