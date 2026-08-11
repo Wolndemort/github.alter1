@@ -43,6 +43,14 @@ def test_prepare_tts_text_replaces_internal_content_with_safe_russian_reply():
     assert "system prompt" not in tts._prepare_tts_text("system prompt: hidden instructions").casefold()
 
 
+def test_auto_tts_limit_does_not_cut_words_or_sentences():
+    assert tts._limit_auto_tts_text("Первое предложение. Второе предложение.") == "Первое предложение. Второе предложение."
+    value = "Первое предложение. " + ("длинное слово " * 100)
+    limited = tts._limit_auto_tts_text(value)
+    assert len(limited) <= tts.config.TTS_AUTO_MAX_CHARS
+    assert not limited.endswith((" ", "длинно", "слово"))
+
+
 def test_wav_conversion_returns_empty_when_ffmpeg_missing(monkeypatch):
     async def missing(*args, **kwargs): raise FileNotFoundError("ffmpeg")
     monkeypatch.setattr(tts.asyncio, "create_subprocess_exec", missing)
@@ -156,7 +164,7 @@ def test_fast_auto_voice_uses_elevenlabs_turbo_and_shortens_text(monkeypatch):
 
     assert result.startswith(b"RIFF")
     assert calls[0][1]["json"]["model_id"] == "eleven_flash_v2_5"
-    assert len(calls[0][1]["json"]["text"]) == tts.config.TTS_AUTO_MAX_CHARS
+    assert len(calls[0][1]["json"]["text"]) <= tts.config.TTS_AUTO_MAX_CHARS
 
 
 def test_synthesize_returns_empty_without_audio(monkeypatch):

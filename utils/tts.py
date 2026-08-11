@@ -79,13 +79,25 @@ def _prepare_tts_text(text: str, max_chars: int | None = None) -> str:
     return re.sub(r"\bALTER\b", "А́льтер", value, flags=re.IGNORECASE)[:config.TTS_MAX_CHARS]
 
 
+def _limit_auto_tts_text(text: str) -> str:
+    """Keep automatic voice replies complete at the configured size limit."""
+    limit = config.TTS_AUTO_MAX_CHARS
+    if len(text) <= limit:
+        return text
+    candidate = text[:limit]
+    sentence_end = max(candidate.rfind(mark) for mark in ".!?…")
+    if sentence_end >= max(0, limit // 2):
+        return candidate[:sentence_end + 1].rstrip()
+    return candidate.rsplit(" ", 1)[0].rstrip(" ,;:-")
+
+
 async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg", fast: bool = False) -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
     premium_available = bool(config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID)
     selected_voice = "elevenlabs" if fast and premium_available else voice
     spoken_text = _prepare_tts_text(text)
     if fast:
-        spoken_text = spoken_text[:config.TTS_AUTO_MAX_CHARS]
+        spoken_text = _limit_auto_tts_text(spoken_text)
     logging.info("TTS voice request selected=%s fast=%s chars=%s", selected_voice or config.TTS_VOICE, fast, len(spoken_text))
     if selected_voice == "elevenlabs" and not (
         config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID
