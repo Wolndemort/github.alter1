@@ -83,11 +83,11 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
     ]).start();
     const timer = setTimeout(() => {
       Animated.timing(opacity, { toValue: 0, duration: 420, useNativeDriver: true }).start(() => onFinished());
-    }, 1850);
+    }, 3200);
     return () => { clearTimeout(timer); if (sound) { sound.pause(); sound.remove(); } };
   }, [line, opacity, onFinished, scale]);
 
-  return <View style={[styles.intro, { backgroundColor: "#050505" }]}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>PERSONAL INTELLIGENCE</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
+  return <View style={[styles.intro, { backgroundColor: "#050505" }]}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>PERSONAL INTELLIGENCE</Text><Text style={[styles.introCaption, { marginTop: 14 }]}>ПАМЯТЬ · ГОЛОС · МЕДИА · ПОИСК · ЗАДАЧИ</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
 }
 
 function TypingText({ text }: { text: string }) {
