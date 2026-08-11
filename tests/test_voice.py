@@ -8,6 +8,8 @@ def run(coro):
 
 
 def test_transcribe_voice_returns_text(monkeypatch):
+    async def normalize(data): return data
+    monkeypatch.setattr(voice, "_normalize_audio", normalize)
     async def transcribe(*args, **kwargs):
         assert args == (b"audio", "voice.m4a")
         return {"text": "Привет, ALTER"}
@@ -17,6 +19,8 @@ def test_transcribe_voice_returns_text(monkeypatch):
 
 
 def test_transcribe_voice_returns_empty_on_provider_error(monkeypatch):
+    async def normalize(data): return data
+    monkeypatch.setattr(voice, "_normalize_audio", normalize)
     async def fail(*args, **kwargs):
         raise RuntimeError("provider down")
 
@@ -25,6 +29,8 @@ def test_transcribe_voice_returns_empty_on_provider_error(monkeypatch):
 
 
 def test_transcribe_voice_returns_empty_for_empty_provider_text(monkeypatch):
+    async def normalize(data): return data
+    monkeypatch.setattr(voice, "_normalize_audio", normalize)
     async def transcribe(*args, **kwargs): return {"text": "  "}
     monkeypatch.setattr(voice, "speech_to_text", transcribe)
     assert run(voice.transcribe_voice(b"audio")) == ""
