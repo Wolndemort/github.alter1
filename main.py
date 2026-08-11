@@ -4,14 +4,16 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from aiohttp import web
+from sqlalchemy import select
 
 from config import config
 from data.database import async_session, engine
+from data.models import WebAccount
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request
-from utils.billing import is_owner
+from utils.billing import has_owner_access, is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
 from utils.runtime import check_dependencies
@@ -63,7 +65,12 @@ async def main():
             if expensive and header.startswith("Bearer ") and config.APP_AUTH_SECRET:
                 try:
                     user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())
-                    if not is_owner(user_id) and not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
+                    owner_access = is_owner(user_id)
+                    if not owner_access:
+                        async with async_session() as session:
+                            account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+                            owner_access = has_owner_access(user_id, account.email if account else None)
+                    if not owner_access and not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
                         raise web.HTTPTooManyRequests(text="daily request limit reached")
                 except web.HTTPTooManyRequests:
                     raise
