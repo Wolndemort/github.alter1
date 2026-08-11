@@ -25,6 +25,28 @@ mock-интеграционные и production smoke-тесты.
 - cancellation is idempotent and scoped to the requesting user;
 - Fal.ai generation is tested only after balance is intentionally added.
 
+## Stateful production smoke
+
+Read-only checks:
+
+```powershell
+py -3 scripts/collect_capability_smoke.py --output capability_smoke.json
+```
+
+The stateful smoke creates a reminder for ten minutes and deletes it
+immediately, then checks workflow read access, action log, media capabilities
+and calendar status. It never starts a paid media job:
+
+```powershell
+py -3 scripts/collect_capability_stateful_smoke.py --output capability_stateful_smoke.json
+```
+
+Workflow mutation is opt-in because it changes the account's active workflow:
+
+```powershell
+py -3 scripts/collect_capability_stateful_smoke.py --check-workflow-mutation --output capability_stateful_smoke.json
+```
+
 ## Current baseline
 
 The existing capability/media regression set passes locally. Fal.ai is left in
