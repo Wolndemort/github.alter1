@@ -41,6 +41,14 @@ def _append(session: Session, role: str, content: str) -> None:
     session.raw_messages = messages[-100:]
 
 
+async def _quality_gated_chunks(streamer, *, chunk_size: int = 96):
+    """Collect, gate, then chunk provider output so reasoning never streams out."""
+    parts = [delta async for delta in streamer]
+    reply = sanitize_public_reply("".join(parts))
+    for index in range(0, len(reply), chunk_size):
+        yield reply[index:index + chunk_size]
+
+
 def validate_message(text: str) -> str:
     value = str(text or "").strip()
     if not value:
@@ -243,12 +251,13 @@ class ChatService:
         system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
-        parts = []
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
-        async for delta in streamer:
-            parts.append(delta)
-            yield delta
-        reply = sanitize_public_reply("".join(parts))
+        gated_chunks = _quality_gated_chunks(streamer)
+        reply_parts = []
+        async for chunk in gated_chunks:
+            reply_parts.append(chunk)
+            yield chunk
+        reply = "".join(reply_parts)
         if not private_mode:
             _append(session, "assistant", reply)
             await remember(db, user_id, text, source="user_message", categories=list(new_facts))

@@ -60,6 +60,10 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         "memory section in the instructions", "according to the rules",
         "the tools available", "the system expects", "i need to store",
         "i should use the memory", "but wait, the tools", "which means they just",
+        "internal response mode", "the memory shows", "character guidelines",
+        "key constraints", "first, i need to", "looking back at the history",
+        "check memory for", "per guidelines", "noting their tone", "my role as alter",
+        "the user is feeling", "the user just shifted", "important: don't",
     )
     reasoning_phrases = (
         "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",

@@ -19,6 +19,11 @@ def test_detects_leak_after_tool_narration():
     assert has_internal_leak("But wait, the tools available don't include that function.")
 
 
+def test_detects_english_reasoning_leak_from_production_benchmark():
+    reply = "Okay, the user is feeling anxious. Looking at the internal response mode, I need to follow the character guidelines."
+    assert has_internal_leak(reply)
+
+
 def test_detects_english_answer_to_russian_request():
     assert has_language_mismatch("Sure, I can help you with that.", "Помоги мне составить план")
     assert not has_language_mismatch("Конечно, помогу.", "Помоги мне составить план")

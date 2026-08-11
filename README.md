@@ -587,6 +587,14 @@ py -m pytest -q tests/test_smart_eval.py
 
 После генерации `utils/quality.py` выполняет быстрый quality gate: проверяет пустоту, чрезмерную длину, лишние вопросы, утечку служебных полей и атрибуцию переданных источников. Ответ не блокируется, а предупреждение попадает в метрики. Это дешёвый runtime-контроль; глубокая фактологическая оценка выполняется отдельными eval-тестами.
 
+### Benchmark качества
+
+Русский eval-набор находится в `evals/russian_v1.json`. Инструкция по сбору
+одинаковых ответов ALTER/ChatGPT/Gemini и offline scoring — в
+[`docs/BENCHMARKING.md`](docs/BENCHMARKING.md). Production e2e smoke —
+`scripts/production-e2e.sh`; он не требует токена для public-проверок и не
+запускает платные benchmark-запросы без явного `--confirm-cost`.
+
 ## Итог текущей итерации
 
 После добавления биллинга, legal consent, webhook и memory lifecycle полный локальный suite проверяется CI; `compileall` проходит.
