@@ -1,8 +1,12 @@
-from utils.scenarios import list_scenarios
+from utils.scenarios import get_scenario, list_scenarios
 
 
-def test_named_scenarios_are_stable_and_actionable():
-    scenarios = list_scenarios()
-    assert len(scenarios) == 7
-    assert {item["id"] for item in scenarios} == {"my_day", "finish_task", "feelings", "hard_conversation", "decision", "project", "important"}
-    assert all(item["prompt"] and item["mode"] for item in scenarios)
+def test_named_scenarios_expose_workflow_presets():
+    items = list_scenarios()
+    assert len(items) == 7
+    assert all(item["workflow_steps"] for item in items)
+    assert get_scenario("decision")["workflow_steps"][-1] == "Выбрать решение и первый шаг"
+
+
+def test_unknown_scenario_is_not_accepted_as_preset():
+    assert get_scenario("unknown") is None

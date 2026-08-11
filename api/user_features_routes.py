@@ -10,7 +10,7 @@ from api.auth_routes import _bearer, _json
 from data.database import async_session
 from data.models import Reminder, User, WebAccount
 from utils.action_log import read_actions
-from utils.scenarios import list_scenarios
+from utils.scenarios import get_scenario, list_scenarios
 from utils.billing import has_owner_access
 from utils.metrics import latency_snapshot, snapshot as metrics_snapshot
 from utils.workflow_state import advance_workflow, start_workflow, workflow_view
@@ -124,9 +124,14 @@ async def workflow_start_route(request: web.Request) -> web.Response:
     payload = await _json(request)
     workflow_id = str(payload.get("workflow_id") or "finish_task").strip()
     goal = str(payload.get("goal") or "").strip()
+    scenario = get_scenario(workflow_id)
+    if scenario and not goal:
+        goal = scenario["prompt"]
     if not goal:
         raise web.HTTPBadRequest(text="goal is required")
     steps = payload.get("steps")
+    if steps is None and scenario:
+        steps = scenario.get("workflow_steps") or None
     if steps is not None and (not isinstance(steps, list) or len(steps) > 12):
         raise web.HTTPBadRequest(text="steps must be a list")
     async with async_session() as session:

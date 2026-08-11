@@ -14,7 +14,7 @@ def append_action(user, action: str, status: str, **metadata) -> None:
     settings = dict(user.tech_stack or {})
     if settings.get("private_mode") is True:
         return
-    allowed = {"route", "tool", "duration_ms", "count"}
+    allowed = {"route", "tool", "duration_ms", "count", "credits", "provider", "model"}
     entry = {
         "action": str(action)[:40],
         "status": str(status)[:24],

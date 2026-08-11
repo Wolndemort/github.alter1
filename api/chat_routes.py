@@ -29,6 +29,7 @@ from utils.capabilities import is_capabilities_request
 from utils.reminders import is_reminder_request
 from utils.request_routing import classify_request
 from utils.metrics import increment
+from utils.action_log import append_action
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -310,10 +311,12 @@ async def media_generate_route(request: web.Request) -> web.Response:
         try:
             if not await charge_user_id_credits(redis, user_id, cost, async_session):
                 raise web.HTTPTooManyRequests(text="monthly media limit reached")
+            append_action(user, "billing", "reserved", credits=cost, provider=config.MEDIA_PROVIDER, route="media")
             started_at = time.monotonic()
             artifact = await (generate_video(prompt, source, options) if kind == "video" else generate_image(prompt, source, options))
         except MediaGenerationError as exc:
             await refund_user_id_credits(redis, user_id, cost, async_session)
+            append_action(user, "billing", "refunded", credits=cost, provider=config.MEDIA_PROVIDER, route="media")
             logging.warning("media generation failed user=%s kind=%s provider=%s elapsed_ms=%d error=%s", user_id, kind, config.MEDIA_PROVIDER, int((time.monotonic() - started_at) * 1000), str(exc)[:240])
             raise web.HTTPBadRequest(text=str(exc))
         finally:

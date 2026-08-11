@@ -17,3 +17,12 @@ def test_private_mode_does_not_write_action_log():
     user = SimpleNamespace(tech_stack={"private_mode": True})
     append_action(user, "chat", "ok", route="fast")
     assert read_actions(user) == []
+
+
+def test_billing_metadata_is_safe_and_visible():
+    user = SimpleNamespace(tech_stack={})
+    append_action(user, "billing", "reserved", credits=100, provider="fal", secret="must not store")
+    entry = read_actions(user)[0]
+    assert entry["credits"] == "100"
+    assert entry["provider"] == "fal"
+    assert "secret" not in entry

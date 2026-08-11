@@ -10,6 +10,25 @@ SCENARIOS = (
     {"id": "important", "title": "Верни меня к тому, что важно", "prompt": "Верни меня к тому, что для меня сейчас важно, учитывая сохранённый контекст.", "mode": "continuation"},
 )
 
+SCENARIO_WORKFLOW_STEPS = {
+    "my_day": ["Собрать обязательства", "Выбрать три приоритета", "Составить реалистичный план дня"],
+    "finish_task": ["Уточнить результат", "Сделать первый практический шаг", "Проверить и закрепить результат"],
+    "feelings": ["Назвать переживания", "Отделить факты от интерпретаций", "Выбрать бережный следующий шаг"],
+    "hard_conversation": ["Определить цель разговора", "Подготовить ключевые фразы", "Провести разговор и разобрать итог"],
+    "decision": ["Сформулировать варианты", "Сравнить критерии и риски", "Выбрать решение и первый шаг"],
+    "project": ["Собрать цели и ограничения", "Разложить задачи и ресурсы", "Выбрать ближайший результат", "Проверить прогресс"],
+    "important": ["Восстановить важный контекст", "Выбрать то, что требует внимания", "Сделать один возвращающий шаг"],
+}
+
+
+def get_scenario(scenario_id: str) -> dict | None:
+    for item in SCENARIOS:
+        if item["id"] == str(scenario_id).strip():
+            result = dict(item)
+            result["workflow_steps"] = list(SCENARIO_WORKFLOW_STEPS.get(item["id"], ()))
+            return result
+    return None
+
 
 def list_scenarios() -> list[dict]:
-    return [dict(item) for item in SCENARIOS]
+    return [get_scenario(item["id"]) for item in SCENARIOS]
