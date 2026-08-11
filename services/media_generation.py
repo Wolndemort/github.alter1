@@ -21,6 +21,19 @@ class MediaGenerationError(ValueError):
     """A safe, user-facing generation error."""
 
 
+def _provider_detail(response: httpx.Response) -> str:
+    """Return short provider diagnostics without exposing credentials."""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = payload.get("detail") or payload.get("error") or payload.get("message")
+        else:
+            detail = payload
+        return str(detail)[:240]
+    except (ValueError, TypeError):
+        return response.text[:240]
+
+
 @dataclass(frozen=True)
 class MediaArtifact:
     media_type: str
@@ -135,12 +148,16 @@ async def _fal_result(model: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 logging.warning("media provider temporary failure model=%s status=%s retry=%s", model, response.status_code, attempt + 1)
                 await asyncio.sleep(min(2 ** attempt, 4))
             assert response is not None
+            logging.info("fal request submitted model=%s status=%s", model, response.status_code)
             if response.status_code in {402, 403}:
+                logging.warning("fal request rejected model=%s status=%s detail=%s", model, response.status_code, _provider_detail(response))
                 raise MediaGenerationError("fal.ai отклонил запрос: проверь баланс и API-ключ.")
             if response.status_code >= 400:
+                logging.warning("fal request failed model=%s status=%s detail=%s", model, response.status_code, _provider_detail(response))
                 raise MediaGenerationError("fal.ai временно недоступен или модель указана неверно.")
             payload = response.json()
             request_id = payload.get("request_id")
+            logging.info("fal response model=%s request_id=%s keys=%s", model, request_id or "sync", sorted(payload.keys())[:20])
             if not request_id:
                 return payload
             status_url = payload.get("status_url") or f"{base}/{model}/requests/{request_id}/status"
@@ -153,11 +170,14 @@ async def _fal_result(model: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 if status.status_code >= 400:
                     raise MediaGenerationError("fal.ai не смог проверить статус задачи.")
                 state = status.json().get("status")
+                logging.info("fal job status model=%s request_id=%s state=%s", model, request_id, state)
                 if state == "COMPLETED":
                     result = await client.get(result_url, headers=headers)
                     if result.status_code >= 400:
                         raise MediaGenerationError("fal.ai не вернул результат задачи.")
-                    return result.json()
+                    payload = result.json()
+                    logging.info("fal job result model=%s request_id=%s keys=%s", model, request_id, sorted(payload.keys())[:20])
+                    return payload
                 if state in {"FAILED", "CANCELLED"}:
                     raise MediaGenerationError("fal.ai не смог обработать запрос.")
                 await asyncio.sleep(1)
@@ -177,6 +197,7 @@ async def _download_artifact(url: str, filename: str) -> MediaArtifact:
             if len(response.content) == 0 or len(response.content) > max_bytes:
                 raise MediaGenerationError("Провайдер вернул файл недопустимого размера.")
             media_type = response.headers.get("content-type", "image/png").split(";", 1)[0]
+            logging.info("media artifact downloaded filename=%s bytes=%s media_type=%s", filename, len(response.content), media_type)
             allowed = {"image/png", "image/jpeg", "image/webp", "video/mp4", "video/webm"}
             if media_type not in allowed:
                 raise MediaGenerationError("Провайдер вернул неподдерживаемый формат файла.")

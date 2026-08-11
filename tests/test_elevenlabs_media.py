@@ -34,7 +34,7 @@ async def test_enabled_elevenlabs_operations_use_expected_endpoints(monkeypatch)
     monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", Client)
     assert (await elevenlabs_media.speech_to_text(b"voice"))["text"] == "Привет"
     assert await elevenlabs_media.speech_to_speech(b"voice", "voice-id") == b"mp3"
-    assert (await elevenlabs_media.design_voice("calm narrator"))["text"] == "Привет"
+    assert (await elevenlabs_media.design_voice("calm low narrator for a podcast"))["text"] == "Привет"
     assert await elevenlabs_media.list_voices()
     assert await elevenlabs_media.list_models()
     urls = [call[1] for call in Client.calls]
@@ -77,7 +77,7 @@ async def test_design_voice_persists_preview_as_a_real_voice(monkeypatch):
     monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
     monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", VoiceClient)
 
-    result = await elevenlabs_media.design_voice("calm narrator")
+    result = await elevenlabs_media.design_voice("calm low narrator for a podcast")
 
     assert result["voice_id"] == "voice-123"
     assert Client.calls[-1][1].endswith("/v1/text-to-voice")
@@ -93,7 +93,13 @@ async def test_design_voice_wraps_provider_timeout(monkeypatch):
     monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", TimeoutClient)
 
     with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
-        await elevenlabs_media.design_voice("calm narrator")
+        await elevenlabs_media.design_voice("calm low narrator for a podcast")
+
+
+@pytest.mark.asyncio
+async def test_design_voice_rejects_provider_minimum_description_locally():
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="20"):
+        await elevenlabs_media.design_voice("спокойный голос")
 
 
 @pytest.mark.asyncio

@@ -111,6 +111,8 @@ class Setting(BaseSettings):
     MEDIA_GENERATION_RETRY_ATTEMPTS: int = 2
     MEDIA_MAX_OUTPUT_BYTES: int = 50 * 1024 * 1024
     MEDIA_VIDEO_MAX_OUTPUT_BYTES: int = 100 * 1024 * 1024
+    # Telegram Bot API rejects oversized uploads; keep a margin below its limit.
+    TELEGRAM_MAX_MEDIA_BYTES: int = 49 * 1024 * 1024
     MEDIA_JOB_TTL_SECONDS: int = 86400
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.

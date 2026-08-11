@@ -2,12 +2,21 @@
 from __future__ import annotations
 
 import httpx
+import logging
 
 from config import config
 
 
 class ElevenLabsError(RuntimeError):
     pass
+
+
+def _provider_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+        return str(payload)[:240]
+    except (ValueError, TypeError):
+        return response.text[:240]
 
 
 def _key() -> str:
@@ -125,8 +134,11 @@ async def list_models() -> list:
 
 
 async def design_voice(description: str) -> dict:
-    if not description.strip():
+    description = description.strip()
+    if not description:
         raise ElevenLabsError("voice description is required")
+    if len(description) < 20:
+        raise ElevenLabsError("Опиши голос подробнее: минимум 20 символов")
     try:
         # Voice Design can take a while, but an unbounded provider request
         # leaves both Telegram and the mobile client waiting forever.
@@ -136,9 +148,12 @@ async def design_voice(description: str) -> dict:
                 headers={"xi-api-key": _key(), "Content-Type": "application/json"},
                 json={"voice_description": description[:1000]},
             )
+            logging.info("ElevenLabs voice design response status=%s", response.status_code)
             if response.status_code >= 400:
+                logging.warning("ElevenLabs voice design rejected status=%s detail=%s", response.status_code, _provider_detail(response))
                 raise ElevenLabsError("ElevenLabs voice generation failed")
             payload = response.json()
+            logging.info("ElevenLabs voice design response keys=%s", sorted(payload.keys())[:20] if isinstance(payload, dict) else type(payload).__name__)
             if not isinstance(payload, dict):
                 raise ElevenLabsError("ElevenLabs returned an invalid voice response")
 
@@ -162,9 +177,12 @@ async def design_voice(description: str) -> dict:
                         "generated_voice_id": generated_id,
                     },
                 )
+                logging.info("ElevenLabs voice persist response status=%s", created.status_code)
                 if created.status_code >= 400:
+                    logging.warning("ElevenLabs voice persist rejected status=%s detail=%s", created.status_code, _provider_detail(created))
                     raise ElevenLabsError("ElevenLabs voice creation failed")
                 created_payload = created.json()
+                logging.info("ElevenLabs voice persist response keys=%s", sorted(created_payload.keys())[:20] if isinstance(created_payload, dict) else type(created_payload).__name__)
                 if not isinstance(created_payload, dict):
                     raise ElevenLabsError("ElevenLabs returned an invalid created voice response")
                 return {**payload, **created_payload}
