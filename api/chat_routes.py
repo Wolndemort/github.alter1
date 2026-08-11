@@ -374,7 +374,14 @@ async def media_job_cancel_route(request: web.Request) -> web.Response:
 
 async def media_history_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
-    return web.json_response({"items": await history(user_id)})
+    # Media payloads can be large (a finished video may be tens of MB). The
+    # history screen needs metadata only; binary data is fetched from the
+    # individual job-status endpoint when the user opens an item.
+    items = [
+        {key: value for key, value in item.items() if key != "data_base64"}
+        for item in await history(user_id)
+    ]
+    return web.json_response({"items": items})
 
 
 async def voice_reply_route(request: web.Request) -> web.Response:
