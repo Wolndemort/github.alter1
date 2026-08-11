@@ -42,9 +42,11 @@ async def chat_route(request: web.Request) -> web.Response:
             account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+        owner_access = has_owner_access(user_id, account.email if account else None)
+        logging.info("chat access user_id=%s account_present=%s owner_access=%s", user_id, bool(account), owner_access)
+        if not owner_access and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
-        if not has_owner_access(user_id, account.email if account else None):
+        if not owner_access:
             redis = create_redis()
             try:
                 if not await charge_user_id_credits(redis, user_id, 1, async_session):
@@ -115,9 +117,11 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
-        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+        owner_access = has_owner_access(user_id, account.email if account else None)
+        logging.info("stream access user_id=%s account_present=%s owner_access=%s", user_id, bool(account), owner_access)
+        if not owner_access and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
-        if not has_owner_access(user_id, account.email if account else None):
+        if not owner_access:
             redis = create_redis()
             try:
                 if not await charge_user_id_credits(redis, user_id, 1, async_session):
