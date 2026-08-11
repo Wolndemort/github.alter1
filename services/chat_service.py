@@ -41,15 +41,35 @@ def _append(session: Session, role: str, content: str) -> None:
     session.raw_messages = messages[-100:]
 
 
-async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bool = False):
-    """Collect, gate, then chunk provider output so reasoning never streams out."""
-    parts = [delta async for delta in streamer]
+async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bool = False, early_stream: bool = False):
+    """Gate output while releasing safe ordinary text early."""
+    parts = []
+    pending = ""
+    emitted = False
+    async for delta in streamer:
+        delta = str(delta or "")
+        parts.append(delta)
+        if not early_stream or tool_mode:
+            continue
+        pending += delta
+        if len(pending) < 192:
+            continue
+        candidate, pending = pending[:-96], pending[-96:]
+        if sanitize_public_reply(candidate) == candidate:
+            emitted = True
+            for index in range(0, len(candidate), chunk_size):
+                yield candidate[index:index + chunk_size]
     reply = sanitize_public_reply("".join(parts))
     trace = tool_trace()
     if tool_mode and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
         failed = any(str(item.get("status") or "") != "ok" for item in trace)
         note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed or not trace else "Источник: подключённый инструмент ALTER."
         reply = f"{reply.rstrip()}\n\n{note}"
+    if emitted and not tool_mode:
+        if pending and sanitize_public_reply(pending) == pending:
+            for index in range(0, len(pending), chunk_size):
+                yield pending[index:index + chunk_size]
+        return
     for index in range(0, len(reply), chunk_size):
         yield reply[index:index + chunk_size]
 
@@ -290,7 +310,7 @@ class ChatService:
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
-        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools)
+        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools, early_stream=not use_tools)
         reply_parts = []
         async for chunk in gated_chunks:
             reply_parts.append(chunk)
