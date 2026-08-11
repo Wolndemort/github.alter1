@@ -81,7 +81,7 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
     planning_hits = sum(phrase in lowered for phrase in reasoning_phrases)
     if any(marker in lowered for marker in leaked_markers) or planning_hits >= 2 or re.search(r"(?:^|\n)\s*(?:анализ|рассуждение|план ответа)\s*:", lowered):
         issues.append("internal_details")
-    if has_sources and "http" not in lowered and "источник" not in lowered and "источники" not in lowered:
+    if has_sources and "http" not in lowered and "source:" not in lowered and "источник" not in lowered and "источники" not in lowered:
         issues.append("missing_source_attribution")
     score = max(0, 100 - len(issues) * 25)
     return ReplyQuality(score=score, issues=tuple(issues))

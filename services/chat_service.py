@@ -45,6 +45,11 @@ async def _quality_gated_chunks(streamer, *, chunk_size: int = 96):
     """Collect, gate, then chunk provider output so reasoning never streams out."""
     parts = [delta async for delta in streamer]
     reply = sanitize_public_reply("".join(parts))
+    trace = tool_trace()
+    if trace and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
+        failed = any(str(item.get("status") or "") != "ok" for item in trace)
+        note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed else "Источник: подключённый инструмент ALTER."
+        reply = f"{reply.rstrip()}\n\n{note}"
     for index in range(0, len(reply), chunk_size):
         yield reply[index:index + chunk_size]
 
