@@ -21,7 +21,8 @@
           "locationWhenInUsePermission": "ALTER использует геолокацию только с твоего разрешения — для погоды и подсказок рядом.",
           "locationAlwaysAndWhenInUsePermission": "ALTER может использовать геолокацию в фоне только если ты отдельно включишь этот режим."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "android": {
       "package": "ru.alterai.mobile",
