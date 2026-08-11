@@ -55,6 +55,8 @@ def proactive_allowed(user: User, now: datetime, session: Session | None, interv
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
     """Create one gentle follow-up when a user mentions a health problem."""
     for message in messages or []:
+        if not isinstance(message, dict):
+            continue
         if message.get("role") != "user":
             continue
         text = str(message.get("content") or "").strip()
@@ -131,7 +133,8 @@ async def save_unique_event(event: dict, user_id: int, db) -> None:
 
 async def process_session(session: Session, db) -> bool:
     """Summarize one inactive session and persist its durable memory."""
-    facts = sanitize_summary(await summarize_session(session.raw_messages))
+    messages = [item for item in (session.raw_messages or []) if isinstance(item, dict)]
+    facts = sanitize_summary(await summarize_session(messages))
     if not facts:
         # A failed/empty summary must not leave the session active forever.
         # The next "new chat" should always start from a clean context.
@@ -143,7 +146,7 @@ async def process_session(session: Session, db) -> bool:
     user = await db.get(User, session.user_id) if hasattr(db, "get") else session.user
     if user is None:
         return False
-    current = dict(user.memory or {})
+    current = dict(user.memory) if isinstance(user.memory, dict) else {}
     user.memory = merge_memory_facts(current, facts)
     flag_modified(user, "memory")
     for event in extract_important_events(facts):
@@ -158,7 +161,7 @@ async def process_session(session: Session, db) -> bool:
         ))
         if existing.scalar_one_or_none() is None:
             db.add(Reminder(user_id=user.id, kind="followup", **followup))
-    health_followup = extract_health_followup(session.raw_messages)
+    health_followup = extract_health_followup(messages)
     if health_followup and user.checkins_enabled:
         hours = max(1, min(48, int(user_setting(user, "health_followup_hours", DEFAULT_HEALTH_FOLLOWUP_HOURS))))
         health_followup["remind_at"] = datetime.now(timezone.utc) + timedelta(hours=hours)
@@ -205,7 +208,7 @@ async def monitor_personality_imprint():
                             await db.rollback()
                     except Exception:
                         await db.rollback()
-                        logging.exception("Failed to process session %s", session.id)
+                        logging.exception("Failed to process session %s", session_id)
         except Exception:
             logging.exception("Background memory monitor failed")
 

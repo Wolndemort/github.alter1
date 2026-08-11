@@ -42,6 +42,10 @@ def test_extract_health_followup_ignores_negative_health_statements():
     assert extract_health_followup([{"role": "user", "content": "ничего не болит"}]) is None
 
 
+def test_extract_health_followup_ignores_malformed_message_items():
+    assert extract_health_followup([["corrupt"], "also corrupt", {"role": "user", "content": "у меня болит голова"}])
+
+
 def test_extract_health_followup_creates_utc_reminder():
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     result = extract_health_followup([{"role": "user", "content": "у меня болит голова"}], now)
@@ -66,3 +70,20 @@ async def test_process_session_is_idempotent_for_events_and_followups(monkeypatc
     assert await process_session(session, db)
     assert session.is_processed and db.commits == 1
     assert len(db.added) == 2
+
+
+@pytest.mark.asyncio
+async def test_process_session_normalizes_corrupt_messages_and_memory(monkeypatch):
+    user = User(id=6, first_name="Test", memory=["corrupt"], tech_stack={})
+    user.checkins_enabled = False
+    session = Session(id=10, user_id=6, raw_messages=[["corrupt"], {"role": "user", "content": "Я живу в Москве"}], user=user)
+    db = SimpleNamespace(added=[], commits=0)
+    async def commit(): db.commits += 1
+    db.commit = commit
+    db.add = lambda value: db.added.append(value)
+    async def summary(messages):
+        assert messages == [{"role": "user", "content": "Я живу в Москве"}]
+        return {"preferences": {"city": "Москва"}}
+    monkeypatch.setattr(tasks, "summarize_session", summary)
+    assert await process_session(session, db)
+    assert isinstance(user.memory, dict)
