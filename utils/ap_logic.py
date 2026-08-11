@@ -322,7 +322,7 @@ def _is_review_artifact(text: str) -> bool:
 
 def _verification_route(messages, task=None) -> list[str]:
     """Prefer a different model for the critic pass when one is available."""
-    route = _stream_model_route(messages, task)
+    route = select_model_route(messages, task)
     return route[1:] + route[:1] if len(route) > 1 else route
 
 
@@ -414,7 +414,7 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
 async def stream_text_reply(messages, max_tokens=None, task=None):
     """Yield plain-text deltas for the low-latency text-chat transport."""
     messages = _bounded_api_messages(messages)
-    route = select_model_route(messages, task)
+    route = _stream_model_route(messages, task)
     last_error = None
     started_at = time.perf_counter()
     first_token_recorded = False
