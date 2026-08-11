@@ -19,10 +19,18 @@ from utils.benchmark import parse_sse_stream
 from utils.eval_suite import load_russian_suite
 
 
+def select_cases(cases: list[dict], case_ids: list[str], limit: int) -> list[dict]:
+    if case_ids:
+        wanted = set(case_ids)
+        cases = [case for case in cases if case["id"] in wanted]
+    return cases[: max(1, min(limit, 100))]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--case-id", action="append", dest="case_ids", default=[], help="run selected case id(s) only")
     parser.add_argument("--confirm-cost", action="store_true")
     parser.add_argument("--base-url", default=os.getenv("ALTER_BASE_URL", "https://api.alterai.ru"))
     args = parser.parse_args()
@@ -31,7 +39,7 @@ def main() -> None:
         raise SystemExit("AUTH_TOKEN is required")
     if not args.confirm_cost:
         raise SystemExit("refusing to spend credits; pass --confirm-cost explicitly")
-    cases = load_russian_suite()[: max(1, min(args.limit, 100))]
+    cases = select_cases(load_russian_suite(), args.case_ids, args.limit)
     records = []
     headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream", "Content-Type": "application/json"}
     with httpx.Client(timeout=90.0, follow_redirects=True) as client:
