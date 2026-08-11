@@ -12,3 +12,5 @@ mobile/.env
 \.coverage
 alter_*benchmark*.json
 alter_3*.json
+alter_*.json
+owner_check*.json
