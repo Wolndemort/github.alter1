@@ -1,0 +1,22 @@
+[
+  {"id":"small_hello","category":"small_talk","prompt":"Йо, ты тут?","route":"chat","language":"ru"},
+  {"id":"slang_support","category":"support","prompt":"Мне капец как тревожно, побудь рядом","route":"chat","language":"ru"},
+  {"id":"decision","category":"decision","prompt":"Что выбрать: остаться на работе или уйти?","route":"chat","language":"ru"},
+  {"id":"day_plan","category":"planning","prompt":"Разложи мой день, у меня всё горит","route":"planning","language":"ru"},
+  {"id":"project_launch","category":"planning","prompt":"Составь план запуска проекта","route":"planning","language":"ru"},
+  {"id":"current_price","category":"web","prompt":"Проверь актуальную цену iPhone в России","route":"web","language":"ru"},
+  {"id":"weather","category":"web","prompt":"Какая сегодня погода в Москве?","route":"web","language":"ru"},
+  {"id":"news_slang","category":"web","prompt":"Что там сегодня по новостям, коротко?","route":"web","language":"ru"},
+  {"id":"youtube","category":"youtube","prompt":"Скинь ролик на YouTube про ремонт BMW","route":"youtube","language":"ru"},
+  {"id":"memory_explicit","category":"memory","prompt":"Запомни, что по рабочим сообщениям отвечай коротко","route":"chat","language":"ru"},
+  {"id":"return_context","category":"memory","prompt":"Вернись к тому, что мы обсуждали про проект","route":"chat","language":"ru"},
+  {"id":"voice_style","category":"voice","prompt":"Сделай голосовое резче и короче","route":"chat","language":"ru"},
+  {"id":"hard_conversation","category":"scenario","prompt":"Подготовь меня к разговору с руководителем","route":"planning","language":"ru"},
+  {"id":"feelings","category":"scenario","prompt":"Помоги понять, почему я так себя чувствую","route":"chat","language":"ru"},
+  {"id":"finish_task","category":"scenario","prompt":"Доведи это дело до результата","route":"planning","language":"ru"},
+  {"id":"local_life","category":"local_context","prompt":"Как нормально отказать человеку, чтобы не выглядеть грубо?","route":"chat","language":"ru"},
+  {"id":"short_answer","category":"style","prompt":"Объясни инфляцию в двух предложениях","route":"chat","language":"ru"},
+  {"id":"compare","category":"reasoning","prompt":"Сравни два варианта и помоги принять решение","route":"chat","language":"ru"},
+  {"id":"private","category":"trust","prompt":"Ответь, но ничего не сохраняй","route":"chat","language":"ru"},
+  {"id":"english_request","category":"language","prompt":"Explain this in English, please","route":"chat","language":"en"}
+]
