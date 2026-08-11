@@ -13,7 +13,7 @@ CATEGORY_LABELS = {
     "style_clothing": "Стиль и одежда", "music": "Музыка", "films_series": "Фильмы и сериалы", "games": "Игры",
     "social": "Друзья и знакомые", "projects": "Проекты", "books": "Книги", "technology": "Техника",
 }
-KEY_LABELS = {"name": "Имя", "age": "Возраст", "city": "Город", "job": "Работа", "vehicle": "Автомобиль", "language": "Язык", "title": "Тема", "description": "Описание", "follow_up_question": "Вопрос для возвращения", "follow_up_at": "Вернуться"}
+KEY_LABELS = {"name": "Имя", "age": "Возраст", "city": "Город", "job": "Работа", "vehicle": "Автомобиль", "language": "Язык", "title": "Тема", "description": "Описание", "follow_up_question": "Вопрос для возвращения", "follow_up_at": "Вернуться", "user_message": "Сообщение пользователя", "assistant_message": "Ответ ALTER", "excerpt_content": "Фрагмент контекста", "content": "Содержание"}
 
 _HIDDEN_KEYS = {"source", "memory_source", "explicit_fact", "explicit fact", "confidence"}
 
@@ -41,7 +41,18 @@ def memory_sections(memory, extra_sections=None):
                  else [{"label": "", "value": _value(facts)}])
         if items:
             sections.append({"category": str(category), "title": CATEGORY_LABELS.get(str(category), _label(category)), "items": items})
-    return sections + [section for section in (extra_sections or []) if section.get("items")]
+    extras = []
+    for section in extra_sections or []:
+        if not section.get("items"):
+            continue
+        extras.append({
+            **section,
+            "items": [
+                {**item, "label": _label(item.get("label")) if item.get("label") else ""}
+                for item in section.get("items", [])
+            ],
+        })
+    return sections + extras
 
 def format_memory(memory, extra_sections=None):
     sections = memory_sections(memory, extra_sections)

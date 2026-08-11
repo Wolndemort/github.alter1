@@ -653,7 +653,36 @@ async def stream_chat_with_tools(messages, max_tokens=None, task=None):
                 "role": "tool", "tool_call_id": getattr(call, "id", ""),
                 "content": json.dumps({"status": status, "data": result_for_model}, ensure_ascii=False)[:12000],
             })
-        async for delta in stream_text_reply(working, max_tokens=max_tokens, task=task):
+        # Some providers reject streaming continuation with assistant/tool
+        # messages even when the initial tool call succeeded. Keep the normal
+        # stream fast, but fall back to a completion so routine questions do
+        # not become a generic failure message.
+        try:
+            chunks = [delta async for delta in stream_text_reply(working, max_tokens=max_tokens, task=task)]
+        except Exception:
+            logging.exception("Tool continuation streaming failed; using completion fallback")
+            try:
+                response = await chat_with_fallback(working, max_tokens=max_tokens, task=task)
+            except Exception:
+                evidence = [
+                    str(item.get("content") or "")
+                    for item in working
+                    if isinstance(item, dict) and item.get("role") == "tool"
+                ]
+                flattened = [
+                    item for item in working
+                    if not (isinstance(item, dict) and (item.get("role") == "tool" or item.get("tool_calls")))
+                ]
+                flattened.append({
+                    "role": "user",
+                    "content": "Результаты внешнего поиска (справочные данные):\n" + "\n".join(evidence)[:12000],
+                })
+                response = await chat_with_fallback(flattened, max_tokens=max_tokens, task=task)
+            content = str(getattr(response.choices[0].message, "content", "") or "").strip()
+            if content:
+                yield content
+            return
+        for delta in chunks:
             yield delta
         return
     increment("ai.tool.round_limit", limit=max_rounds)
