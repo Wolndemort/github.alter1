@@ -282,7 +282,19 @@ def _stream_model_route(messages, task: str | None = None) -> list[str]:
         config.OPENROUTER_FREE_MODEL_3,
         config.OPENROUTER_FREE_MODEL,
     ]
-    return [model for model in preferred if model in route][:max(1, config.AI_STREAM_MAX_MODELS)]
+    fast_free = [model for model in preferred if model in route]
+    paid_fallback = [model for model in (
+        config.OPENROUTER_MODEL,
+        config.OPENROUTER_FALLBACK_MODEL,
+        config.OPENROUTER_FALLBACK_MODEL_2,
+    ) if model in route and model not in fast_free]
+    limit = max(1, config.AI_STREAM_MAX_MODELS)
+    # Keep one free attempt, then use a paid fallback only when explicitly enabled.
+    candidates = fast_free[:1]
+    if config.OPENROUTER_ALLOW_PAID_FALLBACK:
+        candidates += paid_fallback
+    candidates += fast_free[1:]
+    return candidates[:limit]
 
 
 def _provider_status_code(error: Exception) -> int | None:
