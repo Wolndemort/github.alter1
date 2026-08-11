@@ -111,6 +111,7 @@ class Setting(BaseSettings):
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 15
     AI_STREAM_MODEL_TIMEOUT_SECONDS: int = 10
+    AI_STREAM_MAX_MODELS: int = 2
     # Temporarily move models that return transient provider errors to the end
     # of the fallback route instead of retrying them on every new message.
     AI_MODEL_COOLDOWN_SECONDS: int = 60

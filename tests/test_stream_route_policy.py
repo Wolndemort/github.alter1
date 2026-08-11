@@ -4,6 +4,7 @@ from utils import ap_logic
 def test_short_stream_uses_responsive_model_before_heavy_model():
     route = ap_logic._stream_model_route([{"role": "user", "content": "Привет"}])
     assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL_2
+    assert len(route) <= ap_logic.config.AI_STREAM_MAX_MODELS
 
 
 def test_complex_stream_keeps_primary_model_first():

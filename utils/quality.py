@@ -64,6 +64,8 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         "key constraints", "first, i need to", "looking back at the history",
         "check memory for", "per guidelines", "noting their tone", "my role as alter",
         "the user is feeling", "the user just shifted", "important: don't",
+        "the user says:", "we must respond", "per instructions", "according to flavor",
+        "we should not ask", "we can respond", "they are expressing", "the user request",
     )
     reasoning_phrases = (
         "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",

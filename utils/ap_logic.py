@@ -282,7 +282,7 @@ def _stream_model_route(messages, task: str | None = None) -> list[str]:
         config.OPENROUTER_FREE_MODEL_3,
         config.OPENROUTER_FREE_MODEL,
     ]
-    return [model for model in preferred if model in route]
+    return [model for model in preferred if model in route][:max(1, config.AI_STREAM_MAX_MODELS)]
 
 
 def _provider_status_code(error: Exception) -> int | None:
