@@ -190,6 +190,7 @@ export class AlterApi {
   updateLoop(token: string, index: number, status: "active" | "done" | "snoozed") { return this.request<{ ok: boolean }>(`/api/v1/memory/open-loops/${index}`, { method: "PATCH", body: JSON.stringify({ status }) }, token); }
   forgetMemoryCategory(token: string, category: string) { return this.request<{ ok: boolean; deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(category)}`, { method: "DELETE" }, token); }
   clearMemory(token: string) { return this.request<{ ok: boolean }>("/api/v1/memory", { method: "DELETE" }, token); }
+  clearAllPersonalData(token: string) { return this.request<{ ok: boolean; deleted: string[] }>("/api/v1/account/personal-data", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE" }) }, token); }
   clearContext(token: string) { return this.request<{ ok: boolean }>("/api/v1/context", { method: "DELETE" }, token); }
   usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }

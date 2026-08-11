@@ -17,6 +17,7 @@ status 200 "$BASE_URL/ready"
 status 401 "$BASE_URL/api/v1/workflow"
 status 401 "$BASE_URL/api/v1/action-log"
 status 401 "$BASE_URL/api/v1/diagnostics/latency"
+status 401 "$BASE_URL/api/v1/diagnostics/quality"
 
 if [[ -z "$AUTH_TOKEN" ]]; then
   if [[ "$REQUIRE_AUTH" == "true" ]]; then

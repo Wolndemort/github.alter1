@@ -31,6 +31,22 @@ class Db:
 
 
 @pytest.mark.asyncio
+async def test_full_personal_data_delete_requires_explicit_confirmation(monkeypatch):
+    user = User(id=7, first_name="Test", memory={"goals_habits": {"goal": "ship"}}, tech_stack={"_action_log": [{"action": "chat"}], "active_workflow": {"id": "x"}, "voice_replies": True})
+    db = Db(user)
+    monkeypatch.setattr(auth_routes, "async_session", lambda: db)
+    monkeypatch.setattr(auth_routes, "_bearer", lambda request: 7)
+    with pytest.raises(__import__("aiohttp").web.HTTPBadRequest):
+        await auth_routes.clear_all_personal_data_route(Request({"confirm": "no"}))
+    response = await auth_routes.clear_all_personal_data_route(Request({"confirm": "DELETE"}))
+    assert response.status == 200
+    assert user.memory == {}
+    assert "_action_log" not in user.tech_stack
+    assert "active_workflow" not in user.tech_stack
+    assert user.tech_stack["voice_replies"] is True
+
+
+@pytest.mark.asyncio
 async def test_register_route_returns_verification_required(monkeypatch):
     account = SimpleNamespace(email="user@example.com")
     monkeypatch.setattr(auth_routes, "async_session", lambda: Db())

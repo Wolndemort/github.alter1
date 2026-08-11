@@ -83,6 +83,14 @@ async def test_workflow_persistence_is_blocked_in_private_mode(monkeypatch, user
     with pytest.raises(web.HTTPConflict):
         await routes.workflow_start_route(Request({"goal": "Не сохранять"}))
 
+
+@pytest.mark.asyncio
+async def test_quality_diagnostics_requires_owner_and_returns_dashboard(monkeypatch, user):
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    monkeypatch.setattr(routes, "has_owner_access", lambda *args: True)
+    response = await routes.quality_diagnostics_route(Request())
+    assert response.status == 200
+
 @pytest.mark.asyncio
 async def test_create_reminder_requires_future_timezone_aware_date(monkeypatch, user):
     db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)

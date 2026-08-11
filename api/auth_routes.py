@@ -304,6 +304,33 @@ async def clear_memory_route(request: web.Request) -> web.Response:
         return web.json_response({"ok": True})
 
 
+async def clear_all_personal_data_route(request: web.Request) -> web.Response:
+    """Delete durable personal data while keeping the login account intact."""
+    payload = await _json(request)
+    if payload.get("confirm") != "DELETE":
+        raise web.HTTPBadRequest(text="confirmation required")
+    user_id = _bearer(request)
+    async with async_session() as session:
+        from data.models import ImportantEvent, MemoryChunk, Reminder, Session as ChatSession, User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        for model in (ChatSession, ImportantEvent, Reminder, MemoryChunk):
+            await session.execute(delete(model).where(model.user_id == user_id))
+        user.memory = {}
+        user.pending_reminder = {}
+        user.subscription_reminders = {}
+        user.last_checkin_at = None
+        settings = dict(user.tech_stack or {})
+        for key in ("_action_log", "active_workflow", "reply_feedback", "expo_push_token", "generated_voice_id"):
+            settings.pop(key, None)
+        user.tech_stack = settings
+        flag_modified(user, "memory")
+        flag_modified(user, "tech_stack")
+        await session.commit()
+        return web.json_response({"ok": True, "deleted": ["memory", "vector_memory", "sessions", "events", "reminders", "action_log", "workflow"]})
+
+
 async def clear_context_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
@@ -458,6 +485,7 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_patch("/api/v1/memory/open-loops/{index}", update_loop_route)
     app.router.add_delete("/api/v1/memory/{category}", forget_memory_category_route)
     app.router.add_delete("/api/v1/memory", clear_memory_route)
+    app.router.add_delete("/api/v1/account/personal-data", clear_all_personal_data_route)
     app.router.add_delete("/api/v1/context", clear_context_route)
     app.router.add_get("/api/v1/usage", usage_route)
     app.router.add_get("/api/v1/subscription", subscription_route)

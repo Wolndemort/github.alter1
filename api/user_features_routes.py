@@ -12,7 +12,7 @@ from data.models import Reminder, User, WebAccount
 from utils.action_log import read_actions
 from utils.scenarios import list_scenarios
 from utils.billing import has_owner_access
-from utils.metrics import latency_snapshot
+from utils.metrics import latency_snapshot, snapshot as metrics_snapshot
 from utils.workflow_state import advance_workflow, start_workflow, workflow_view
 
 
@@ -97,6 +97,26 @@ async def latency_diagnostics_route(request: web.Request) -> web.Response:
         if not has_owner_access(user_id, account.email if account else None):
             raise web.HTTPForbidden(text="owner access required")
     return web.json_response({"latency": latency_snapshot()})
+
+
+async def quality_diagnostics_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None):
+            raise web.HTTPForbidden(text="owner access required")
+    counters = metrics_snapshot()
+    return web.json_response({
+        "counters": counters,
+        "latency": latency_snapshot(),
+        "tool_success": counters.get("ai.tool.ok", 0),
+        "tool_empty": counters.get("ai.tool.empty", 0),
+        "tool_failures": counters.get("ai.tool.failure", 0) + counters.get("ai.tool.error", 0),
+        "quality_warnings": sum(value for name, value in counters.items() if name == "ai.reply.quality_warning"),
+    })
 
 
 async def workflow_start_route(request: web.Request) -> web.Response:
@@ -211,6 +231,7 @@ def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/action-log", action_log_route)
     app.router.add_get("/api/v1/scenarios", scenarios_route)
     app.router.add_get("/api/v1/diagnostics/latency", latency_diagnostics_route)
+    app.router.add_get("/api/v1/diagnostics/quality", quality_diagnostics_route)
     app.router.add_post("/api/v1/workflow/start", workflow_start_route)
     app.router.add_get("/api/v1/workflow", workflow_route)
     app.router.add_post("/api/v1/workflow/next", workflow_next_route)
