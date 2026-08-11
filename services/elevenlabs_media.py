@@ -56,14 +56,16 @@ async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
 async def speech_to_text(data: bytes, filename: str = "voice.m4a") -> dict:
     data = bytes(data)
     try:
+        content_type = "audio/mp4" if filename.casefold().endswith((".m4a", ".mp4")) else "audio/ogg"
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 "https://api.elevenlabs.io/v1/speech-to-text",
                 headers={"xi-api-key": _key()},
-                files={"file": (filename, data, "application/octet-stream")},
+                files={"file": (filename, data, content_type)},
                 data={"model_id": "scribe_v1", "language_code": "ru"},
             )
         if response.status_code >= 400:
+            logging.warning("ElevenLabs speech-to-text rejected status=%s detail=%s", response.status_code, _provider_detail(response))
             raise ElevenLabsError("ElevenLabs speech-to-text failed")
         payload = response.json()
         if not isinstance(payload, dict):
