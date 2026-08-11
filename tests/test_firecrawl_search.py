@@ -12,7 +12,7 @@ def _key(value):
     return SimpleNamespace(get_secret_value=lambda: value)
 
 
-def test_tavily_and_firecrawl_results_are_merged_and_deduplicated(monkeypatch):
+def test_tavily_is_primary_and_does_not_wait_for_firecrawl(monkeypatch):
     class Response:
         def __init__(self, data): self.status, self.data = 200, data
         async def json(self): return self.data
@@ -35,7 +35,6 @@ def test_tavily_and_firecrawl_results_are_merged_and_deduplicated(monkeypatch):
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     assert run(web_search.search_web("test", max_results=5)) == [
         {"title": "A", "url": "https://a.test", "content": "a"},
-        {"title": "B", "url": "https://b.test", "content": "b"},
     ]
 
 

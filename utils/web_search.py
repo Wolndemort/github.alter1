@@ -92,14 +92,21 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
         logging.warning("Web search skipped: neither TAVILY_API_KEY nor FIRECRAWL_API_KEY is configured")
         return []
     try:
-        # Providers are independent: a slow Firecrawl request must not discard
-        # already available Tavily results or fail the whole chat tool.
+        # Tavily is the primary path.  Firecrawl is a fallback only; waiting
+        # for two providers in parallel allowed a stalled Firecrawl connection
+        # to cancel an otherwise successful search stream.
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
-            tavily, firecrawl = await asyncio.gather(
-                _tavily(session, query, limit),
-                _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)),
-                return_exceptions=True,
-            )
+            tavily = await _tavily(session, query, limit)
+            firecrawl = []
+            if not tavily:
+                try:
+                    firecrawl = await asyncio.wait_for(
+                        _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)),
+                        timeout=4,
+                    )
+                except asyncio.TimeoutError:
+                    increment("search.web.firecrawl.failure", reason="timeout")
+                    logging.warning("Firecrawl search timed out; returning empty fallback")
     except Exception:
         increment("search.web.failure", reason="session_exception")
         logging.exception("Web search session failed")
