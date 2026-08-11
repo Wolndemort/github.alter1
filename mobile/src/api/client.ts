@@ -112,25 +112,46 @@ export class AlterApi {
       body: JSON.stringify({ message, ...(location ? { location } : {}) }), signal,
     });
     if (response.status === 404 || response.status === 405 || response.status === 409) return this.sendMessage(token, message, location, signal);
-    if (!response.ok || !response.body) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
     let full = "";
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      buffer += decoder.decode(chunk.value, { stream: true });
-      const events = buffer.split("\n\n");
-      buffer = events.pop() || "";
+    let completed = false;
+    const consume = (raw: string) => {
+      const events = raw.split(/\r?\n\r?\n/);
       for (const event of events) {
-        const line = event.split("\n").find((value) => value.startsWith("data: "));
+        const line = event.split(/\r?\n/).find((value) => value.startsWith("data: "));
         if (!line) continue;
         const payload = JSON.parse(line.slice(6));
         if (payload.type === "error") throw new ApiError(502, "Поток ответа прервался.");
+        if (payload.type === "done") completed = true;
         if (payload.type === "status" && typeof payload.status === "string") onStatus?.(payload.status);
         if (payload.type === "delta" && typeof payload.text === "string") { full += payload.text; onDelta(full); }
       }
+    };
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    try {
+      if (!response.body) {
+        // React Native/Expo can expose a successful fetch without ReadableStream.
+        // Read the already completed SSE response; never retry the paid request.
+        consume(await response.text());
+      } else {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const events = buffer.split(/\r?\n\r?\n/);
+          buffer = events.pop() || "";
+          consume(events.join("\n\n"));
+        }
+        buffer += decoder.decode();
+        if (buffer.trim()) consume(buffer);
+      }
+    } catch (error) {
+      // The server can finish successfully while mobile closes the socket
+      // during the final SSE chunk. Keep the answer already received.
+      if (completed || full.trim()) return { reply: full, session_id: 0 };
+      throw error;
     }
     return { reply: full, session_id: 0 };
   }

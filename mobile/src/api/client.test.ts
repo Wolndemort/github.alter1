@@ -22,6 +22,32 @@ describe("AlterApi", () => {
     }));
   });
 
+  it("keeps streamed text when the socket closes after receiving deltas", async () => {
+    const reader = {
+      reads: [
+        { value: new TextEncoder().encode('data: {"type":"delta","text":"Ответ"}\n\n'), done: false },
+        { value: undefined, done: true },
+      ],
+      async read() { const next = this.reads.shift(); if (next) return next; throw new Error("socket closed"); },
+    };
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, body: { getReader: () => reader } });
+    await expect(new AlterApi("https://alter.example").sendMessageStream("token", "hello", null, jest.fn())).resolves.toMatchObject({ reply: "Ответ" });
+  });
+
+  it("parses a successful SSE response when Expo has no response body stream", async () => {
+    (fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: undefined,
+      text: async () => `data: {"type":"delta","text":"Ответ"}
+
+data: {"type":"done"}
+
+`,
+    });
+    await expect(new AlterApi("https://alter.example").sendMessageStream("token", "hello", null, jest.fn())).resolves.toMatchObject({ reply: "Ответ" });
+  });
+
   it("sends consented location only with the chat payload", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "weather", session_id: 3 }) });
     await new AlterApi("https://alter.example").sendMessage("token", "weather", { latitude: 55.75, longitude: 37.62, city: "Moscow", region: "Moscow" });
