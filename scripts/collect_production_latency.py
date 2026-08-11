@@ -68,7 +68,7 @@ def main() -> None:
                 "error": error,
             })
     args.output.write_text(json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    failed = sum(item["status"] != 200 or item["error"] for item in records)
+    failed = sum(item["status"] != 200 or bool(item["error"]) for item in records)
     print(f"checked={len(records)} failed={failed} output={args.output}")
     raise SystemExit(1 if failed else 0)
 

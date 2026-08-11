@@ -6,3 +6,4 @@ def test_latency_probe_requires_cost_confirmation_and_does_not_save_replies():
     assert "AUTH_TOKEN" in source
     assert "confirm-cost" in source
     assert "response" not in source.split("records.append", 1)[1]
+    assert "bool(item[\"error\"])" in source
