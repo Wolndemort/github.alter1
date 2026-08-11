@@ -26,3 +26,12 @@ def test_paid_first_mode_prioritizes_reliable_model_and_keeps_free_fallback(monk
     route = ap_logic._stream_model_route([{"role": "user", "content": "Привет"}])
     assert route[0] == ap_logic.config.OPENROUTER_MODEL
     assert ap_logic.config.OPENROUTER_FREE_MODEL_2 in route
+
+
+def test_free_pool_can_be_disabled_for_production(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_FREE_MODELS_ENABLED", False)
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_PAID_FIRST", True)
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
+    route = ap_logic._stream_model_route([{"role": "user", "content": "Привет"}])
+    assert route[0] == ap_logic.config.OPENROUTER_MODEL
+    assert all(":free" not in model for model in route)

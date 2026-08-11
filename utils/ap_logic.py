@@ -237,16 +237,19 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
     is_complex = task in {"reasoning", "planning"} or len(text) >= 700 or any(
         re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
     )
-    if _has_visual_input(messages):
-        free_models = [config.OPENROUTER_FREE_VISION_MODEL, config.OPENROUTER_FREE_VISION_MODEL_2]
+    if config.OPENROUTER_FREE_MODELS_ENABLED:
+        if _has_visual_input(messages):
+            free_models = [config.OPENROUTER_FREE_VISION_MODEL, config.OPENROUTER_FREE_VISION_MODEL_2]
+        else:
+            free_models = [
+                config.OPENROUTER_FREE_MODEL,
+                config.OPENROUTER_FREE_MODEL_2,
+                config.OPENROUTER_FREE_MODEL_3,
+                config.OPENROUTER_FREE_MODEL_4,
+                config.OPENROUTER_FREE_MODEL_5,
+            ]
     else:
-        free_models = [
-            config.OPENROUTER_FREE_MODEL,
-            config.OPENROUTER_FREE_MODEL_2,
-            config.OPENROUTER_FREE_MODEL_3,
-            config.OPENROUTER_FREE_MODEL_4,
-            config.OPENROUTER_FREE_MODEL_5,
-        ]
+        free_models = []
     # Paid models are deliberately appended only after every configured free model.
     primary = free_models
     if config.OPENROUTER_ALLOW_PAID_FALLBACK:
