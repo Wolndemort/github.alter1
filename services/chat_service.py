@@ -63,6 +63,22 @@ def validate_message(text: str) -> str:
     return value
 
 
+def _stream_system_prompt(text: str, memory: dict, *, use_tools: bool = False) -> str:
+    """Use a compact policy set for short ordinary messages."""
+    if use_tools or len(text) >= 240:
+        parts = (
+            ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
+            CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT,
+            MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY,
+        )
+    else:
+        parts = (
+            ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
+            CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY,
+        )
+    return "\n\n".join((*parts, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+
+
 class ChatService:
     """Coordinates persistence and AI; it has no knowledge of Telegram or HTTP."""
 
@@ -270,7 +286,7 @@ class ChatService:
             recalled = await recall(db, user_id, text)
             if recalled:
                 memory["related_previous_context"] = recalled
-        system = "\n\n".join((ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT, MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+        system = _stream_system_prompt(text, memory, use_tools=use_tools)
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)

@@ -2,7 +2,7 @@ import pytest
 from types import SimpleNamespace
 
 from data.models import Session, User
-from services.chat_service import ChatService, validate_message
+from services.chat_service import ChatService, _stream_system_prompt, validate_message
 
 
 def test_chat_message_is_trimmed():
@@ -20,6 +20,14 @@ def test_chat_message_has_prompt_safety_limit(monkeypatch):
     monkeypatch.setattr(chat_service.config, "AI_MAX_PROMPT_CHARS", 3)
     with pytest.raises(ValueError, match="too long"):
         validate_message("1234")
+
+
+def test_short_stream_prompt_is_smaller_but_tool_prompt_keeps_full_policy():
+    short = _stream_system_prompt("Привет", {}, use_tools=False)
+    tool = _stream_system_prompt("Привет", {}, use_tools=True)
+    assert len(short) < len(tool)
+    assert "<user_memory>" in short
+    assert "<user_memory>" in tool
 
 
 class Result:
