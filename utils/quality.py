@@ -69,6 +69,8 @@ def assess_reply(reply: str, *, has_sources: bool = False) -> ReplyQuality:
         "we need to respond", "according to character rules", "according to alter behavior",
         "the user just says", "given instructions", "potential answer:", "thus response:",
         "let's craft", "we need context", "we should respond", "the last user message",
+        "we need to obey", "earlier we were told", "the instruction", "we cannot",
+        "we can ask", "we should ask", "the user wants", "i can ask",
     )
     reasoning_phrases = (
         "сначала проверю", "следует добавить", "нужно добавить", "ответ должен быть", "пользователь сказал", "пользователь написал",

@@ -41,14 +41,14 @@ def _append(session: Session, role: str, content: str) -> None:
     session.raw_messages = messages[-100:]
 
 
-async def _quality_gated_chunks(streamer, *, chunk_size: int = 96):
+async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bool = False):
     """Collect, gate, then chunk provider output so reasoning never streams out."""
     parts = [delta async for delta in streamer]
     reply = sanitize_public_reply("".join(parts))
     trace = tool_trace()
-    if trace and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
+    if tool_mode and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
         failed = any(str(item.get("status") or "") != "ok" for item in trace)
-        note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed else "Источник: подключённый инструмент ALTER."
+        note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed or not trace else "Источник: подключённый инструмент ALTER."
         reply = f"{reply.rstrip()}\n\n{note}"
     for index in range(0, len(reply), chunk_size):
         yield reply[index:index + chunk_size]
@@ -95,7 +95,6 @@ class ChatService:
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
-
         if is_capabilities_request(text):
             reply = capabilities_reply()
             _append(session, "assistant", reply)
@@ -219,6 +218,24 @@ class ChatService:
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
+        parsed_reminder = parse_reminder(text)
+        if parsed_reminder or is_reminder_request(text):
+            if parsed_reminder and not private_mode:
+                remind_at, reminder_text = parsed_reminder
+                db.add(Reminder(user_id=user.id, remind_at=remind_at,
+                                follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
+                reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+            elif private_mode:
+                reply = "В приватном режиме я не сохраняю напоминания. Выключи его, если нужно поставить напоминание."
+            else:
+                reminder_text = extract_reminder_text(text)
+                reply = ("Что именно напомнить и когда?" if not reminder_text else
+                         f"На какое время поставить напоминание про «{reminder_text}»?")
+            _append(session, "assistant", reply)
+            await db.commit()
+            for index in range(0, len(reply), 96):
+                yield reply[index:index + 96]
+            return
         new_facts = extract_user_facts(text)
         if new_facts and not private_mode:
             user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
@@ -257,7 +274,7 @@ class ChatService:
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
-        gated_chunks = _quality_gated_chunks(streamer)
+        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools)
         reply_parts = []
         async for chunk in gated_chunks:
             reply_parts.append(chunk)

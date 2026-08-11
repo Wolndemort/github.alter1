@@ -38,6 +38,10 @@ def test_detects_additional_production_planning_leaks():
     assert all(has_internal_leak(reply) for reply in replies)
 
 
+def test_detects_deeper_instruction_leak():
+    assert has_internal_leak("We need to obey the instruction. Earlier we were told to answer in Russian.")
+
+
 def test_detects_english_answer_to_russian_request():
     assert has_language_mismatch("Sure, I can help you with that.", "Помоги мне составить план")
     assert not has_language_mismatch("Конечно, помогу.", "Помоги мне составить план")
