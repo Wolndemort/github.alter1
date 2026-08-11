@@ -11,6 +11,7 @@ from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
 from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request
+from utils.billing import is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
 from utils.runtime import check_dependencies
@@ -62,7 +63,7 @@ async def main():
             if expensive and header.startswith("Bearer ") and config.APP_AUTH_SECRET:
                 try:
                     user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())
-                    if not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
+                    if not is_owner(user_id) and not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
                         raise web.HTTPTooManyRequests(text="daily request limit reached")
                 except web.HTTPTooManyRequests:
                     raise

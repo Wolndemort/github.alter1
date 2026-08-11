@@ -3,6 +3,7 @@ import asyncio
 from data.models import User
 from utils.billing import credits_limit
 from utils.quota import charge_user_id_credits
+from utils.billing import is_owner
 from config import config
 from utils.redis_store import charge_credits, credits_used
 
@@ -59,3 +60,8 @@ def test_generation_costs_are_higher_for_text_to_media():
     assert config.FAL_TEXT_IMAGE_CREDITS == 100
     assert config.FAL_TEXT_VIDEO_CREDITS == 250
     assert config.FAL_TEXT_VIDEO_CREDITS > config.FAL_TEXT_IMAGE_CREDITS > config.MEDIA_GENERATION_CREDITS
+
+
+def test_web_owner_id_is_recognized(monkeypatch):
+    monkeypatch.setattr(config, "OWNER_WEB_USER_IDS", "8982145359")
+    assert is_owner(8982145359)

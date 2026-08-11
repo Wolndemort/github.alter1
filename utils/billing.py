@@ -13,7 +13,7 @@ from data.models import Payment, User
 
 def owner_ids() -> set[int]:
     result = set()
-    for value in (config.OWNER_TELEGRAM_IDS or "").split(","):
+    for value in ((config.OWNER_TELEGRAM_IDS or "") + "," + (config.OWNER_WEB_USER_IDS or "")).split(","):
         try:
             result.add(int(value.strip()))
         except ValueError:

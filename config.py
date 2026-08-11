@@ -25,6 +25,7 @@ class Setting(BaseSettings):
     # OpenRouter can suppress provider reasoning from the public stream.
     OPENROUTER_EXCLUDE_REASONING: bool = True
     OWNER_TELEGRAM_IDS: str = "1271717628"
+    OWNER_WEB_USER_IDS: str = ""
     OWNER_EMAILS: str = ""
     SUPPORT_USERNAME: str = "Adam_Omarov"
     SUPPORT_TELEGRAM_ID: int = 1271717628
