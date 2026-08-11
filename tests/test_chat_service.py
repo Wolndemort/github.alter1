@@ -120,3 +120,24 @@ async def test_chat_service_saves_explicit_memory_fact_for_mobile(monkeypatch):
     monkeypatch.setattr("services.chat_service.generate_reply", reply)
     await ChatService().reply(db, 10, "Запомни, что я люблю бегать по утрам")
     assert "я люблю бегать по утрам" in user.memory["preferences"]["explicit_facts"]
+
+
+@pytest.mark.asyncio
+async def test_private_mode_does_not_persist_session_memory_or_action_log(monkeypatch):
+    user = User(id=11, first_name="Private", memory={}, tech_stack={"private_mode": True})
+    db = Db(user, active=None, events=[])
+    async def reply(messages, memory):
+        assert messages[-1]["content"] == "секретный вопрос"
+        return "ответ без сохранения"
+    async def remember(*args, **kwargs):
+        raise AssertionError("private mode must not save vector memory")
+    monkeypatch.setattr("services.chat_service.generate_reply", reply)
+    monkeypatch.setattr("services.chat_service.remember", remember)
+
+    result = await ChatService().reply(db, 11, "секретный вопрос")
+
+    assert result.reply == "ответ без сохранения"
+    assert result.session_id == 0
+    assert db.added == []
+    assert user.memory == {}
+    assert "_action_log" not in user.tech_stack

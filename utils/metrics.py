@@ -5,6 +5,8 @@ import time
 
 _lock = threading.Lock()
 _counters: dict[str, int] = {}
+_samples: dict[str, list[float]] = {}
+_MAX_SAMPLES = 2000
 
 
 def increment(name: str, amount: int = 1, **fields) -> int:
@@ -25,6 +27,33 @@ def snapshot() -> dict[str, int]:
 def reset() -> None:
     with _lock:
         _counters.clear()
+        _samples.clear()
+
+
+def observe(name: str, duration_ms: float, **fields) -> None:
+    """Keep a bounded in-process latency sample for p50/p95 diagnostics."""
+    value = max(0.0, float(duration_ms))
+    with _lock:
+        values = _samples.setdefault(name, [])
+        values.append(value)
+        del values[:-_MAX_SAMPLES]
+    logging.info("metric_latency=%s duration_ms=%.1f %s", name, value, " ".join(f"{k}={v}" for k, v in fields.items()))
+
+
+def latency_snapshot() -> dict[str, dict[str, float | int]]:
+    with _lock:
+        result = {}
+        for name, values in _samples.items():
+            if not values:
+                continue
+            ordered = sorted(values)
+            result[name] = {
+                "count": len(ordered),
+                "p50_ms": round(ordered[(len(ordered) - 1) * 50 // 100], 1),
+                "p95_ms": round(ordered[(len(ordered) - 1) * 95 // 100], 1),
+                "last_ms": round(ordered[-1], 1),
+            }
+        return result
 
 
 def timer(name: str):

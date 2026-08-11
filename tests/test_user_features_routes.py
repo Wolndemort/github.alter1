@@ -31,8 +31,9 @@ def user():
 @pytest.mark.asyncio
 async def test_settings_and_checkins_update(monkeypatch, user):
     db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
-    response = await routes.update_settings_route(Request({"voice_replies": True, "quiet_start": 22}))
+    response = await routes.update_settings_route(Request({"voice_replies": True, "private_mode": True, "quiet_start": 22}))
     assert response.status == 200 and user.tech_stack["quiet_start"] == 22
+    assert user.tech_stack["private_mode"] is True
     response = await routes.checkins_route(Request({"enabled": False}))
     assert response.status == 200 and user.checkins_enabled is False
 
@@ -52,6 +53,35 @@ async def test_push_token_is_validated_and_persisted(monkeypatch, user):
     assert user.tech_stack["expo_push_token"] == "ExponentPushToken[abc]"
     with pytest.raises(web.HTTPBadRequest):
         await routes.push_token_route(Request({"token": "not-a-push-token"}))
+
+
+@pytest.mark.asyncio
+async def test_action_log_and_scenarios_routes_are_safe(monkeypatch, user):
+    user.tech_stack = {"_action_log": [{"action": "chat", "status": "ok"}], "private_mode": False}
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    action_response = await routes.action_log_route(Request())
+    assert action_response.status == 200
+    scenario_response = await routes.scenarios_route(Request())
+    assert scenario_response.status == 200
+
+
+@pytest.mark.asyncio
+async def test_workflow_routes_start_and_advance_goal(monkeypatch, user):
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    response = await routes.workflow_start_route(Request({"workflow_id": "finish_task", "goal": "Запустить лендинг"}))
+    assert response.status == 200
+    assert user.tech_stack["active_workflow"]["goal"] == "Запустить лендинг"
+    response = await routes.workflow_next_route(Request({}))
+    assert response.status == 200
+    assert user.tech_stack["active_workflow"]["current_step"] == 1
+
+
+@pytest.mark.asyncio
+async def test_workflow_persistence_is_blocked_in_private_mode(monkeypatch, user):
+    user.tech_stack = {"private_mode": True}
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    with pytest.raises(web.HTTPConflict):
+        await routes.workflow_start_route(Request({"goal": "Не сохранять"}))
 
 @pytest.mark.asyncio
 async def test_create_reminder_requires_future_timezone_aware_date(monkeypatch, user):

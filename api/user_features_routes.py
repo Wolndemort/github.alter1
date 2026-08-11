@@ -8,7 +8,12 @@ from sqlalchemy import select
 
 from api.auth_routes import _bearer, _json
 from data.database import async_session
-from data.models import Reminder, User
+from data.models import Reminder, User, WebAccount
+from utils.action_log import read_actions
+from utils.scenarios import list_scenarios
+from utils.billing import has_owner_access
+from utils.metrics import latency_snapshot
+from utils.workflow_state import advance_workflow, start_workflow, workflow_view
 
 
 def _parse_datetime(value: object) -> datetime:
@@ -32,7 +37,7 @@ async def settings_route(request: web.Request) -> web.Response:
 async def update_settings_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
-    allowed = {"voice_replies", "voice_auto_replies", "proactive_enabled", "tts_voice", "reply_feedback", "checkin_interval_hours", "health_followup_hours", "quiet_start", "quiet_end"}
+    allowed = {"voice_replies", "voice_auto_replies", "proactive_enabled", "private_mode", "tts_voice", "reply_feedback", "checkin_interval_hours", "health_followup_hours", "quiet_start", "quiet_end"}
     unknown = set(payload) - allowed
     if unknown: raise web.HTTPBadRequest(text="unknown setting")
     settings = dict(payload)
@@ -48,6 +53,8 @@ async def update_settings_route(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="invalid voice_auto_replies")
     if "proactive_enabled" in settings and not isinstance(settings["proactive_enabled"], bool):
         raise web.HTTPBadRequest(text="invalid proactive_enabled")
+    if "private_mode" in settings and not isinstance(settings["private_mode"], bool):
+        raise web.HTTPBadRequest(text="invalid private_mode")
     if "tts_voice" in settings and settings["tts_voice"] not in {"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"}:
         raise web.HTTPBadRequest(text="invalid tts_voice")
     if "reply_feedback" in settings and (not isinstance(settings["reply_feedback"], list) or len(settings["reply_feedback"]) > 100):
@@ -64,6 +71,79 @@ async def update_settings_route(request: web.Request) -> web.Response:
         merged = dict(user.tech_stack or {}); merged.update(settings); user.tech_stack = merged
         await session.commit()
         return web.json_response({"settings": merged, "checkins_enabled": user.checkins_enabled})
+
+
+async def action_log_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        return web.json_response({"items": read_actions(user), "private_mode": bool((user.tech_stack or {}).get("private_mode"))})
+
+
+async def scenarios_route(request: web.Request) -> web.Response:
+    _bearer(request)
+    return web.json_response({"items": list_scenarios()})
+
+
+async def latency_diagnostics_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None):
+            raise web.HTTPForbidden(text="owner access required")
+    return web.json_response({"latency": latency_snapshot()})
+
+
+async def workflow_start_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    workflow_id = str(payload.get("workflow_id") or "finish_task").strip()
+    goal = str(payload.get("goal") or "").strip()
+    if not goal:
+        raise web.HTTPBadRequest(text="goal is required")
+    steps = payload.get("steps")
+    if steps is not None and (not isinstance(steps, list) or len(steps) > 12):
+        raise web.HTTPBadRequest(text="steps must be a list")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if (user.tech_stack or {}).get("private_mode") is True:
+            raise web.HTTPConflict(text="workflow persistence is disabled in private mode")
+        user.tech_stack = start_workflow(user.tech_stack, workflow_id, goal, steps)
+        await session.commit()
+        return web.json_response({"workflow": workflow_view(user.tech_stack)})
+
+
+async def workflow_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        return web.json_response({"workflow": workflow_view(user.tech_stack)})
+
+
+async def workflow_next_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    complete = payload.get("complete", False)
+    if not isinstance(complete, bool):
+        raise web.HTTPBadRequest(text="complete must be boolean")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if (user.tech_stack or {}).get("private_mode") is True:
+            raise web.HTTPConflict(text="workflow persistence is disabled in private mode")
+        user.tech_stack = advance_workflow(user.tech_stack, complete=complete)
+        await session.commit()
+        return web.json_response({"workflow": workflow_view(user.tech_stack)})
 
 
 async def checkins_route(request: web.Request) -> web.Response:
@@ -128,6 +208,12 @@ async def delete_reminder_route(request: web.Request) -> web.Response:
 def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/settings", settings_route)
     app.router.add_patch("/api/v1/settings", update_settings_route)
+    app.router.add_get("/api/v1/action-log", action_log_route)
+    app.router.add_get("/api/v1/scenarios", scenarios_route)
+    app.router.add_get("/api/v1/diagnostics/latency", latency_diagnostics_route)
+    app.router.add_post("/api/v1/workflow/start", workflow_start_route)
+    app.router.add_get("/api/v1/workflow", workflow_route)
+    app.router.add_post("/api/v1/workflow/next", workflow_next_route)
     app.router.add_post("/api/v1/checkins", checkins_route)
     app.router.add_post("/api/v1/push-token", push_token_route)
     app.router.add_get("/api/v1/reminders", reminders_route)

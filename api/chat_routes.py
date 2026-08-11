@@ -1,6 +1,7 @@
 """HTTP adapter for the shared chat use case."""
 
 import base64
+import asyncio
 import json
 import logging
 import time
@@ -26,7 +27,8 @@ from services.voice_commands import is_voice_change_request, is_voice_generation
 from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.capabilities import is_capabilities_request
 from utils.reminders import is_reminder_request
-from config import config
+from utils.request_routing import classify_request
+from utils.metrics import increment
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -103,9 +105,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
     user_id = _bearer(request)
     payload = await _json(request)
     text = str(payload.get("message") or "").strip()
-    lowered = text.casefold()
-    tool_words = ("найди", "поищи", "проверь в интернете", "актуальн", "погода", "прогноз", "youtube", "ютуб", "новост", "ссылк", "календар")
-    if not text or is_capabilities_request(text) or is_reminder_request(text) or detect_audio_action(text) == "effect" or any(word in lowered for word in tool_words):
+    route = classify_request(text)
+    if not text or detect_audio_action(text) == "effect":
         raise web.HTTPConflict(text="stream unavailable for this request")
     redis = create_redis()
     try:
@@ -124,9 +125,20 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         await response.prepare(request)
         try:
-            async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location")):
-                await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+            await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+            if route.streamable:
+                await response.write(("data: " + json.dumps({"type": "status", "status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location")):
+                    await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+            else:
+                await response.write(("data: " + json.dumps({"type": "status", "status": "analyzing"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location"), use_tools=True):
+                    await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             await response.write(b"data: {\"type\":\"done\"}\n\n")
+        except asyncio.CancelledError:
+            increment("ai.reply.cancelled")
+            logging.info("Streaming chat cancelled by client user_id=%s", user_id)
+            raise
         except Exception:
             logging.exception("Streaming chat failed")
             await response.write(("data: " + json.dumps({"type": "error", "message": "stream failed"}) + "\n\n").encode("utf-8"))

@@ -114,6 +114,7 @@ class Setting(BaseSettings):
     AI_DEEP_REVIEW_ENABLED: bool = False
     AI_DEEP_REVIEW_MAX_TOKENS: int = 900
     TOOL_MAX_ROUNDS: int = 2
+    AI_TOOL_TIMEOUT_SECONDS: int = 12
     AI_MAX_PROMPT_CHARS: int = 8000
     PAYMENT_WEBHOOK_HOST: str = "0.0.0.0"
     PAYMENT_WEBHOOK_PORT: int = 8080

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import logging
@@ -20,7 +21,7 @@ from utils.prompts import (
     REVIEW_SYSTEM_PROMPT,
     TOOL_POLICY_PROMPT,
 )
-from utils.metrics import increment
+from utils.metrics import increment, observe
 from utils.quality import assess_reply, has_internal_leak, has_language_mismatch
 from utils.intent import conversation_mode
 
@@ -387,10 +388,14 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                     emitted = True
                     if not first_token_recorded:
                         first_token_recorded = True
-                        increment("ai.reply.first_token", duration_ms=int((time.perf_counter() - started_at) * 1000), model=model)
+                        duration_ms = int((time.perf_counter() - started_at) * 1000)
+                        observe("ai.reply.first_token", duration_ms, model=model)
+                        increment("ai.reply.first_token", duration_ms=duration_ms, model=model)
                     yield text
             if emitted:
-                increment("ai.reply.stream_completed", duration_ms=int((time.perf_counter() - started_at) * 1000), model=model)
+                duration_ms = int((time.perf_counter() - started_at) * 1000)
+                observe("ai.reply.completed", duration_ms, model=model)
+                increment("ai.reply.stream_completed", duration_ms=duration_ms, model=model)
                 return
             raise RuntimeError("Streaming model returned an empty response")
         except Exception as error:
@@ -489,22 +494,30 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
             "tool_calls": [_tool_call_payload(call) for call in tool_calls],
         }
         working.append(assistant)
-        for call in tool_calls:
+        async def run_tool(call):
             function = getattr(call, "function", None)
             if function is None:
-                continue
+                return call, "error", "Инструмент не распознан."
             try:
                 arguments = json.loads(function.arguments or "{}")
             except (TypeError, ValueError):
                 arguments = {}
             try:
-                result = await execute_tool(function.name, arguments)
+                result = await asyncio.wait_for(
+                    execute_tool(function.name, arguments),
+                    timeout=max(1, int(getattr(config, "AI_TOOL_TIMEOUT_SECONDS", 12))),
+                )
                 status, result_for_model = validate_tool_result(function.name, result)
                 increment(f"ai.tool.{status}", tool=function.name)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 increment("ai.tool.failure", tool=function.name)
                 logging.exception("Tool failed: %s", function.name)
                 status, result_for_model = "error", "Инструмент временно недоступен. Измени запрос или продолжи без него."
+            return call, status, result_for_model
+        tool_results = await asyncio.gather(*(run_tool(call) for call in tool_calls))
+        for call, status, result_for_model in tool_results:
             working.append({
                 "role": "tool",
                 "tool_call_id": getattr(call, "id", ""),
@@ -512,6 +525,61 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
             })
     increment("ai.tool.round_limit", limit=max_rounds)
     return await chat_with_fallback(working, max_tokens=max_tokens, task=task)
+
+
+async def stream_chat_with_tools(messages, max_tokens=None, task=None):
+    """Resolve tool calls first, then stream the user-facing final answer."""
+    working = list(messages)
+    max_rounds = max(1, min(config.TOOL_MAX_ROUNDS, 12))
+    for _ in range(max_rounds):
+        response = await chat_with_fallback(
+            working, max_tokens=max_tokens, task=task,
+            tools=TOOL_DEFINITIONS, tool_choice="auto",
+        )
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None) or []
+        if not tool_calls:
+            content = (message.content or "").strip()
+            if content:
+                yield content
+            return
+        working.append({
+            "role": "assistant", "content": message.content or "",
+            "tool_calls": [_tool_call_payload(call) for call in tool_calls],
+        })
+
+        async def run_tool(call):
+            function = getattr(call, "function", None)
+            if function is None:
+                return call, "error", "Инструмент не распознан."
+            try:
+                arguments = json.loads(function.arguments or "{}")
+            except (TypeError, ValueError):
+                arguments = {}
+            try:
+                result = await asyncio.wait_for(
+                    execute_tool(function.name, arguments),
+                    timeout=max(1, int(getattr(config, "AI_TOOL_TIMEOUT_SECONDS", 12))),
+                )
+                status, result_for_model = validate_tool_result(function.name, result)
+                increment(f"ai.tool.{status}", tool=function.name)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                increment("ai.tool.failure", tool=function.name)
+                logging.exception("Tool failed: %s", function.name)
+                status, result_for_model = "error", "Инструмент временно недоступен."
+            return call, status, result_for_model
+
+        for call, status, result_for_model in await asyncio.gather(*(run_tool(call) for call in tool_calls)):
+            working.append({
+                "role": "tool", "tool_call_id": getattr(call, "id", ""),
+                "content": json.dumps({"status": status, "data": result_for_model}, ensure_ascii=False)[:12000],
+            })
+        async for delta in stream_text_reply(working, max_tokens=max_tokens, task=task):
+            yield delta
+        return
+    increment("ai.tool.round_limit", limit=max_rounds)
 
 async def summarize_session(messages):
     try:

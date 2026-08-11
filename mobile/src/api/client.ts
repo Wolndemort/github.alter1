@@ -106,7 +106,7 @@ export class AlterApi {
       body: JSON.stringify({ message, ...(location ? { location } : {}) }),
     }, token);
   }
-  async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void, signal?: AbortSignal): Promise<ChatResponse> {
+  async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void, signal?: AbortSignal, onStatus?: (status: string) => void): Promise<ChatResponse> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/stream`, {
       method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ message, ...(location ? { location } : {}) }), signal,
@@ -128,6 +128,7 @@ export class AlterApi {
         if (!line) continue;
         const payload = JSON.parse(line.slice(6));
         if (payload.type === "error") throw new ApiError(502, "Поток ответа прервался.");
+        if (payload.type === "status" && typeof payload.status === "string") onStatus?.(payload.status);
         if (payload.type === "delta" && typeof payload.text === "string") { full += payload.text; onDelta(full); }
       }
     }
@@ -198,6 +199,11 @@ export class AlterApi {
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
+  actionLog(token: string) { return this.request<{ items: Array<Record<string, string>>; private_mode: boolean }>("/api/v1/action-log", {}, token); }
+  scenarios(token: string) { return this.request<{ items: Array<{ id: string; title: string; prompt: string; mode: string }> }>("/api/v1/scenarios", {}, token); }
+  startWorkflow(token: string, workflowId: string, goal: string) { return this.request<{ workflow: Record<string, unknown> }>("/api/v1/workflow/start", { method: "POST", body: JSON.stringify({ workflow_id: workflowId, goal }) }, token); }
+  workflow(token: string) { return this.request<{ workflow: Record<string, unknown> | null }>("/api/v1/workflow", {}, token); }
+  nextWorkflowStep(token: string, complete = false) { return this.request<{ workflow: Record<string, unknown> | null }>("/api/v1/workflow/next", { method: "POST", body: JSON.stringify({ complete }) }, token); }
   async voiceReply(token: string, text: string) {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/voice/reply`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));

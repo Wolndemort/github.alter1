@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import generate_reply, stream_text_reply
+from utils.ap_logic import generate_reply, stream_text_reply, stream_chat_with_tools
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
@@ -24,6 +24,8 @@ from utils.reminders import is_reminder_request, parse_reminder, extract_reminde
 from utils.intent import conversation_mode, explicit_memory_fact, should_recall_context
 from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
+from utils.action_log import append_action
+from utils.workflow_state import workflow_view
 from datetime import timedelta
 
 
@@ -56,34 +58,35 @@ class ChatService:
         user = await db.get(User, user_id)
         if user is None:
             raise ValueError("user not found")
-        result = await db.execute(select(Session).where(
-            Session.user_id == user_id,
-            Session.is_processed.is_(False),
-        ).order_by(Session.started_at.desc()).limit(1))
-        session = result.scalar_one_or_none()
-        if session is None:
-            # The inactivity worker marks old sessions as processed. Carry the
-            # latest dialogue into the next session so a follow-up such as
-            # “change item 2” still has the plan it refers to.
-            previous_result = await db.execute(select(Session).where(
+        private_mode = bool((user.tech_stack or {}).get("private_mode"))
+        if private_mode:
+            session = Session(user_id=user_id, raw_messages=[])
+        else:
+            result = await db.execute(select(Session).where(
                 Session.user_id == user_id,
+                Session.is_processed.is_(False),
             ).order_by(Session.started_at.desc()).limit(1))
-            previous = previous_result.scalar_one_or_none()
-            carried = [
-                {key: item[key] for key in ("role", "content") if key in item}
-                for item in (previous.raw_messages or [])[-40:]
-                if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
-            ] if previous is not None else []
-            session = Session(user_id=user_id, raw_messages=carried)
-            db.add(session)
-            await db.flush()
+            session = result.scalar_one_or_none()
+            if session is None:
+                previous_result = await db.execute(select(Session).where(
+                    Session.user_id == user_id,
+                ).order_by(Session.started_at.desc()).limit(1))
+                previous = previous_result.scalar_one_or_none()
+                carried = [
+                    {key: item[key] for key in ("role", "content") if key in item}
+                    for item in (previous.raw_messages or [])[-40:]
+                    if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
+                ] if previous is not None else []
+                session = Session(user_id=user_id, raw_messages=carried)
+                db.add(session)
+                await db.flush()
         _append(session, "user", text)
 
         if is_capabilities_request(text):
             reply = capabilities_reply()
             _append(session, "assistant", reply)
             await db.commit()
-            return ChatResult(reply=reply, session_id=session.id)
+            return ChatResult(reply=reply, session_id=session.id or 0)
 
         new_facts = extract_user_facts(text)
         explicit_fact = explicit_memory_fact(text)
@@ -95,7 +98,7 @@ class ChatService:
                 explicit_facts.append(explicit_fact)
             preferences["explicit_facts"] = explicit_facts[-20:]
             new_facts["preferences"] = preferences
-        if new_facts:
+        if new_facts and not private_mode:
             user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
 
@@ -114,6 +117,9 @@ class ChatService:
         feedback = feedback_context(user.tech_stack)
         if feedback:
             memory["response_feedback"] = feedback
+        workflow = workflow_view(user.tech_stack)
+        if workflow:
+            memory["active_workflow"] = workflow
         if isinstance(location, dict):
             memory["current_location"] = {
                 key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
@@ -135,10 +141,13 @@ class ChatService:
         parsed_reminder = parse_reminder(text)
         if parsed_reminder:
             remind_at, reminder_text = parsed_reminder
-            db.add(Reminder(user_id=user.id, remind_at=remind_at,
-                            follow_up_at=remind_at + timedelta(hours=2),
-                            text=reminder_text[:500]))
-            reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+            if private_mode:
+                reply = "В приватном режиме я не сохраняю напоминания. Выключи его, если нужно поставить напоминание."
+            else:
+                db.add(Reminder(user_id=user.id, remind_at=remind_at,
+                                follow_up_at=remind_at + timedelta(hours=2),
+                                text=reminder_text[:500]))
+                reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
         elif is_reminder_request(text):
             reminder_text = extract_reminder_text(text)
             reply = ("Что именно напомнить и во сколько?" if not reminder_text else
@@ -166,28 +175,34 @@ class ChatService:
         else:
             reply = await generate_reply(list(session.raw_messages), memory)
         reply = sanitize_public_reply(reply)
-        _append(session, "assistant", reply)
-        await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
+        if not private_mode:
+            _append(session, "assistant", reply)
+            await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
+            append_action(user, "chat", "ok", route=conversation_mode(text))
         await db.commit()
-        return ChatResult(reply=reply, session_id=session.id)
+        return ChatResult(reply=reply, session_id=session.id or 0)
 
-    async def stream_reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None):
+    async def stream_reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None, use_tools: bool = False):
         """Stream ordinary text replies while preserving the same session contract."""
         text = validate_message(text)
         user = await db.get(User, user_id)
         if user is None:
             raise ValueError("user not found")
-        result = await db.execute(select(Session).where(
-            Session.user_id == user_id, Session.is_processed.is_(False)
-        ).order_by(Session.started_at.desc()).limit(1))
-        session = result.scalar_one_or_none()
-        if session is None:
+        private_mode = bool((user.tech_stack or {}).get("private_mode"))
+        if private_mode:
             session = Session(user_id=user_id, raw_messages=[])
-            db.add(session)
-            await db.flush()
+        else:
+            result = await db.execute(select(Session).where(
+                Session.user_id == user_id, Session.is_processed.is_(False)
+            ).order_by(Session.started_at.desc()).limit(1))
+            session = result.scalar_one_or_none()
+            if session is None:
+                session = Session(user_id=user_id, raw_messages=[])
+                db.add(session)
+                await db.flush()
         _append(session, "user", text)
         new_facts = extract_user_facts(text)
-        if new_facts:
+        if new_facts and not private_mode:
             user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
         events_result = await db.execute(
@@ -205,6 +220,9 @@ class ChatService:
         feedback = feedback_context(user.tech_stack)
         if feedback:
             memory["response_feedback"] = feedback
+        workflow = workflow_view(user.tech_stack)
+        if workflow:
+            memory["active_workflow"] = workflow
         if isinstance(location, dict):
             memory["current_location"] = {key: location[key] for key in ("city", "region", "country") if location.get(key) not in (None, "")}
         events = [{"title": event.title, "event_type": event.event_type, "description": event.description} for event in events_result.scalars()]
@@ -221,10 +239,13 @@ class ChatService:
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         parts = []
-        async for delta in stream_text_reply(working):
+        streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
+        async for delta in streamer:
             parts.append(delta)
             yield delta
         reply = sanitize_public_reply("".join(parts))
-        _append(session, "assistant", reply)
-        await remember(db, user_id, text, source="user_message", categories=list(new_facts))
+        if not private_mode:
+            _append(session, "assistant", reply)
+            await remember(db, user_id, text, source="user_message", categories=list(new_facts))
+            append_action(user, "chat", "ok", route=conversation_mode(text))
         await db.commit()
