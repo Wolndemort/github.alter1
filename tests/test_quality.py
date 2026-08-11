@@ -29,6 +29,15 @@ def test_detects_instructional_english_reasoning_leak_from_production_benchmark(
     assert has_internal_leak(reply)
 
 
+def test_detects_additional_production_planning_leaks():
+    replies = (
+        "We need to respond according to character rules: calm, concise, helpful.",
+        "According to ALTER behavior, understand the user and ask for context.",
+        "The user just says: explain this in English. Given instructions, let's craft an answer.",
+    )
+    assert all(has_internal_leak(reply) for reply in replies)
+
+
 def test_detects_english_answer_to_russian_request():
     assert has_language_mismatch("Sure, I can help you with that.", "Помоги мне составить план")
     assert not has_language_mismatch("Конечно, помогу.", "Помоги мне составить план")
