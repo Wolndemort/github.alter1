@@ -21,7 +21,7 @@ def test_stream_records_first_token_and_completion(monkeypatch):
     async def run():
         return [part async for part in ap_logic.stream_text_reply([{"role": "user", "content": "Привет"}], max_tokens=20)]
     assert asyncio.run(run()) == ["ok"]
-    assert captured["reasoning"] == {"exclude": True}
+    assert captured["extra_body"] == {"reasoning": {"exclude": True}}
     snapshot = metrics.snapshot()
     assert snapshot["ai.reply.first_token"] == 1
     assert snapshot["ai.reply.stream_completed"] == 1
