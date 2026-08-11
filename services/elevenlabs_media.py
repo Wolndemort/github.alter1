@@ -148,7 +148,9 @@ async def design_voice(description: str) -> dict:
             response = await client.post(
                 "https://api.elevenlabs.io/v1/text-to-voice/design",
                 headers={"xi-api-key": _key(), "Content-Type": "application/json"},
-                json={"voice_description": description[:1000]},
+                # ElevenLabs now requires either sample text or automatic
+                # sample-text generation for Voice Design.
+                json={"voice_description": description[:1000], "auto_generate_text": True},
             )
             logging.info("ElevenLabs voice design response status=%s", response.status_code)
             if response.status_code >= 400:

@@ -81,6 +81,8 @@ async def test_design_voice_persists_preview_as_a_real_voice(monkeypatch):
 
     assert result["voice_id"] == "voice-123"
     assert Client.calls[-1][1].endswith("/v1/text-to-voice")
+    design_call = next(call for call in Client.calls if call[1].endswith("/design"))
+    assert design_call[2]["json"]["auto_generate_text"] is True
 
 
 @pytest.mark.asyncio
