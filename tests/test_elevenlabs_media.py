@@ -115,3 +115,18 @@ async def test_lookup_wraps_non_json_provider_response(monkeypatch):
         await elevenlabs_media.list_voices()
     with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
         await elevenlabs_media.list_models()
+
+
+@pytest.mark.asyncio
+async def test_transcription_and_speech_to_speech_wrap_provider_transport_errors(monkeypatch):
+    class BrokenClient(Client):
+        async def post(self, url, **kwargs):
+            raise elevenlabs_media.httpx.ConnectTimeout("provider timeout")
+
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", BrokenClient)
+
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
+        await elevenlabs_media.speech_to_text(b"voice")
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
+        await elevenlabs_media.speech_to_speech(b"voice", "voice-id")
