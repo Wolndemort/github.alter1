@@ -1,12 +1,11 @@
-from utils.request_routing import classify_request
+from utils import ap_logic
 
 
-def test_web_requests_keep_sse_transport_but_use_tool_aware_path():
-    route = classify_request("Найди актуальную цену iPhone")
-    assert route.initial_status == "searching"
-    assert not route.streamable
+def test_short_stream_uses_responsive_model_before_heavy_model():
+    route = ap_logic._stream_model_route([{"role": "user", "content": "Привет"}])
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL_2
 
 
-def test_short_requests_keep_token_streaming_path():
-    route = classify_request("Привет")
-    assert route.streamable
+def test_complex_stream_keeps_primary_model_first():
+    route = ap_logic._stream_model_route([{"role": "user", "content": "составь подробный план миграции базы данных"}])
+    assert route[0] == ap_logic.config.OPENROUTER_FREE_MODEL

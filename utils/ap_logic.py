@@ -266,6 +266,25 @@ def _response_token_budget(messages, requested: int | None, task: str | None) ->
     return config.MAX_OUTPUT_TOKENS
 
 
+def _stream_model_route(messages, task: str | None = None) -> list[str]:
+    """Prefer responsive models for short streaming chat; keep deep routing intact."""
+    route = select_model_route(messages, task)
+    text = _request_text(messages)
+    is_complex = task in {"reasoning", "planning"} or len(text) >= 240 or any(
+        re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
+    )
+    if is_complex:
+        return route
+    preferred = [
+        config.OPENROUTER_FREE_MODEL_2,
+        config.OPENROUTER_FREE_MODEL_4,
+        config.OPENROUTER_FREE_MODEL_5,
+        config.OPENROUTER_FREE_MODEL_3,
+        config.OPENROUTER_FREE_MODEL,
+    ]
+    return [model for model in preferred if model in route]
+
+
 def _provider_status_code(error: Exception) -> int | None:
     value = getattr(error, "status_code", None) or getattr(error, "status", None)
     return value if isinstance(value, int) else None
@@ -303,7 +322,7 @@ def _is_review_artifact(text: str) -> bool:
 
 def _verification_route(messages, task=None) -> list[str]:
     """Prefer a different model for the critic pass when one is available."""
-    route = select_model_route(messages, task)
+    route = _stream_model_route(messages, task)
     return route[1:] + route[:1] if len(route) > 1 else route
 
 
@@ -401,26 +420,27 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
     first_token_recorded = False
     for model in route:
         try:
-            stream = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=_response_token_budget(messages, max_tokens, task),
-                stream=True,
-                **({"extra_body": {"reasoning": {"exclude": True}}} if config.OPENROUTER_EXCLUDE_REASONING else {}),
-            )
-            emitted = False
-            async for chunk in stream:
-                choices = getattr(chunk, "choices", None) or []
-                delta = getattr(choices[0], "delta", None) if choices else None
-                text = getattr(delta, "content", None) if delta else None
-                if text:
-                    emitted = True
-                    if not first_token_recorded:
-                        first_token_recorded = True
-                        duration_ms = int((time.perf_counter() - started_at) * 1000)
-                        observe("ai.reply.first_token", duration_ms, model=model)
-                        increment("ai.reply.first_token", duration_ms=duration_ms, model=model)
-                    yield text
+            async with asyncio.timeout(config.AI_STREAM_MODEL_TIMEOUT_SECONDS):
+                stream = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=_response_token_budget(messages, max_tokens, task),
+                    stream=True,
+                    **({"extra_body": {"reasoning": {"exclude": True}}} if config.OPENROUTER_EXCLUDE_REASONING else {}),
+                )
+                emitted = False
+                async for chunk in stream:
+                    choices = getattr(chunk, "choices", None) or []
+                    delta = getattr(choices[0], "delta", None) if choices else None
+                    text = getattr(delta, "content", None) if delta else None
+                    if text:
+                        emitted = True
+                        if not first_token_recorded:
+                            first_token_recorded = True
+                            duration_ms = int((time.perf_counter() - started_at) * 1000)
+                            observe("ai.reply.first_token", duration_ms, model=model)
+                            increment("ai.reply.first_token", duration_ms=duration_ms, model=model)
+                        yield text
             if emitted:
                 duration_ms = int((time.perf_counter() - started_at) * 1000)
                 observe("ai.reply.completed", duration_ms, model=model)
