@@ -406,6 +406,7 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                 messages=messages,
                 max_tokens=_response_token_budget(messages, max_tokens, task),
                 stream=True,
+                **({"reasoning": {"exclude": True}} if config.OPENROUTER_EXCLUDE_REASONING else {}),
             )
             emitted = False
             async for chunk in stream:

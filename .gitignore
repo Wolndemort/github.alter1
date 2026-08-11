@@ -10,3 +10,5 @@ mobile/node_modules/
 mobile/.expo/
 mobile/.env
 \.coverage
+alter_*benchmark*.json
+alter_3*.json
