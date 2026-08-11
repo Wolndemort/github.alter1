@@ -94,7 +94,7 @@ async def answer_reply(message: types.Message, reply: str, user: User, force_voi
     if force_voice or voice_enabled(user):
         try:
             selected_voice = (user.tech_stack or {}).get("tts_voice")
-            audio = await synthesize_speech(reply, voice=selected_voice)
+            audio = await synthesize_speech(reply, voice=selected_voice, fast=True)
         except Exception:
             logging.exception("Optional voice reply failed")
             audio = None

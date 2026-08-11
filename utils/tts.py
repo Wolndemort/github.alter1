@@ -71,7 +71,7 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = 24000) -> bytes:
     return output.getvalue()
 
 
-def _prepare_tts_text(text: str) -> str:
+def _prepare_tts_text(text: str, max_chars: int | None = None) -> str:
     """Prepare visible text for speech without sending links or markup aloud."""
     value = re.sub(r"```[^`]*```", "", sanitize_public_reply(text), flags=re.DOTALL)
     value = re.sub(r"https?://\S+", "ссылка", value)
@@ -79,10 +79,15 @@ def _prepare_tts_text(text: str) -> str:
     return re.sub(r"\bALTER\b", "А́льтер", value, flags=re.IGNORECASE)[:config.TTS_MAX_CHARS]
 
 
-async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg") -> bytes:
+async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg", fast: bool = False) -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
-    logging.info("TTS voice request selected=%s", voice or config.TTS_VOICE)
-    if voice == "elevenlabs" and not (
+    premium_available = bool(config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID)
+    selected_voice = "elevenlabs" if fast and premium_available else voice
+    spoken_text = _prepare_tts_text(text)
+    if fast:
+        spoken_text = spoken_text[:config.TTS_AUTO_MAX_CHARS]
+    logging.info("TTS voice request selected=%s fast=%s chars=%s", selected_voice or config.TTS_VOICE, fast, len(spoken_text))
+    if selected_voice == "elevenlabs" and not (
         config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID
     ):
         logging.error(
@@ -96,7 +101,7 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
     # ElevenLabs for every voice whenever its global credentials are present;
     # otherwise switching between OpenRouter voices and Premium sounds the
     # same and the mobile setting appears broken.
-    if voice == "elevenlabs" and config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID:
+    if selected_voice == "elevenlabs" and premium_available:
         try:
             voice_id = config.ELEVENLABS_VOICE_ID
             async with httpx.AsyncClient(timeout=45) as eleven_client:
@@ -105,8 +110,8 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
                     headers={"xi-api-key": config.ELEVENLABS_API_KEY.get_secret_value(), "Accept": "audio/pcm"},
                     params={"output_format": "pcm_24000"},
                     json={
-                        "text": _prepare_tts_text(text),
-                        "model_id": config.ELEVENLABS_MODEL or "eleven_multilingual_v2",
+                        "text": spoken_text,
+                        "model_id": (config.ELEVENLABS_FAST_MODEL if fast else config.ELEVENLABS_MODEL) or "eleven_turbo_v2_5",
                         "voice_settings": {"stability": 0.58, "similarity_boost": 0.82, "style": 0.08, "use_speaker_boost": True},
                     },
                 )
@@ -127,10 +132,9 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
             logging.exception("ElevenLabs speech synthesis failed for explicitly selected Premium voice")
             return b""
     try:
-        provider_voice = config.TTS_VOICE if voice == "elevenlabs" else (voice or config.TTS_VOICE)
+        provider_voice = config.TTS_VOICE if selected_voice == "elevenlabs" else (selected_voice or config.TTS_VOICE)
         # Make the brand pronunciation unambiguous for Russian speech models:
         # ALTER is the assistant's name, pronounced "А́льтер".
-        spoken_text = _prepare_tts_text(text)
         response = await client.chat.completions.create(
             model=config.TTS_MODEL,
             modalities=["text", "audio"],
@@ -140,7 +144,7 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
                 {"role": "user", "content": spoken_text[:config.TTS_MAX_CHARS]},
             ],
             # Keep voice replies understandable without allowing huge audio output.
-            max_tokens=config.TTS_MAX_TOKENS,
+            max_tokens=min(config.TTS_MAX_TOKENS, 512) if fast else config.TTS_MAX_TOKENS,
             stream=True,
         )
         pcm = await _get_stream_audio_data(response)

@@ -124,6 +124,41 @@ def test_elevenlabs_is_used_only_for_explicit_premium_voice(monkeypatch):
     assert calls[0][0].endswith("/premium-voice")
 
 
+def test_fast_auto_voice_uses_elevenlabs_turbo_and_shortens_text(monkeypatch):
+    calls = []
+
+    class Response:
+        content = b"\x00\x00" * 32
+
+        def raise_for_status(self):
+            pass
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+    monkeypatch.setattr(tts.config, "ELEVENLABS_ENABLED", True)
+    monkeypatch.setattr(tts.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(tts.config, "ELEVENLABS_VOICE_ID", "premium-voice")
+    monkeypatch.setattr(tts.httpx, "AsyncClient", Client)
+
+    result = run(tts.synthesize_speech("слово " * 1000, voice="alloy", output_format="wav", fast=True))
+
+    assert result.startswith(b"RIFF")
+    assert calls[0][1]["json"]["model_id"] == "eleven_flash_v2_5"
+    assert len(calls[0][1]["json"]["text"]) == tts.config.TTS_AUTO_MAX_CHARS
+
+
 def test_synthesize_returns_empty_without_audio(monkeypatch):
     async def create(**kwargs):
         async def stream():

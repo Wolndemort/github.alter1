@@ -411,7 +411,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
         voice = (user.tech_stack or {}).get("tts_voice")
     # WAV is supported by AVFoundation on iOS; OGG/Opus is Telegram's format
     # but is not reliably playable by the native mobile audio stack.
-    audio = await synthesize_speech(text, voice=voice, output_format="wav")
+    audio = await synthesize_speech(text, voice=voice, output_format="wav", fast=True)
     if not audio:
         raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
     return web.Response(body=audio, content_type="audio/wav")
