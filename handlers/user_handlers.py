@@ -12,7 +12,7 @@ from data.models import ImportantEvent, Reminder, User, Session, Payment, Memory
 from data.database import async_session
 from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
-from services.media_generation import generate_image, generate_video
+from services.media_generation import edit_image, generate_image, generate_video
 from utils.media import video_audio, video_duration, video_preview
 from io import BytesIO
 from utils.youtube_search import search_youtube
@@ -750,6 +750,27 @@ async def edit_generated_image(callback: types.CallbackQuery, db_session: AsyncS
     except Exception:
         logging.exception("Generated image edit failed")
         await callback.answer("Редактирование сейчас недоступно — проверь баланс Fal AI.", show_alert=True)
+
+
+@router.callback_query(F.data == "media:edit_canonical")
+async def edit_canonical_image(callback: types.CallbackQuery):
+    """Use the same explicit edit prompt as the mobile media endpoint."""
+    message = callback.message
+    if not message or not message.photo:
+        await callback.answer("Исходное изображение недоступно.", show_alert=True)
+        return
+    try:
+        buffer = await message.bot.download(message.photo[-1], destination=BytesIO())
+        artifact = await edit_image(("image/jpeg", buffer.getvalue()))
+        await message.answer_photo(
+            BufferedInputFile(artifact.data, filename=artifact.filename),
+            caption="Готово — создал заметно изменённый вариант изображения.",
+            reply_markup=generated_image_keyboard(),
+        )
+        await callback.answer()
+    except Exception:
+        logging.exception("Canonical image edit failed")
+        await callback.answer("Редактирование сейчас недоступно.", show_alert=True)
 
 
 @router.callback_query(F.data == "media:animate")

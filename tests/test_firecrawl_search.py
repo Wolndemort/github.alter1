@@ -88,3 +88,19 @@ def test_firecrawl_limit_is_per_request_result_count_not_provider_quota(monkeypa
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     run(web_search.search_web("test"))
     assert calls[0][1]["json"]["limit"] == 10
+
+
+def test_tavily_results_survive_cancelled_firecrawl(monkeypatch):
+    async def tavily(*args, **kwargs):
+        return [{"title": "Tavily", "url": "https://tavily.test", "content": "ok"}]
+
+    async def firecrawl(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", _key("tavily"))
+    monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("firecrawl"))
+    monkeypatch.setattr(web_search, "_tavily", tavily)
+    monkeypatch.setattr(web_search, "_firecrawl", firecrawl)
+    assert run(web_search.search_web("test")) == [
+        {"title": "Tavily", "url": "https://tavily.test", "content": "ok"},
+    ]

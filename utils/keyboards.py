@@ -92,7 +92,7 @@ def voice_keyboard() -> ReplyKeyboardMarkup:
 
 def generated_image_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Редактировать", callback_data="media:edit_generated")],
+        [InlineKeyboardButton(text="✏️ Редактировать", callback_data="media:edit_canonical")],
     ])
 
 

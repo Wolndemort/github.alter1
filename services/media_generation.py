@@ -237,6 +237,13 @@ async def generate_image(prompt: str, source: tuple[str, bytes] | None = None, o
         raise MediaGenerationError("Не удалось получить изображение от сервиса.") from exc
 
 
+async def edit_image(source: tuple[str, bytes], prompt: str | None = None, options: dict[str, Any] | None = None) -> MediaArtifact:
+    """Edit an existing image through the canonical image pipeline."""
+    from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
+
+    return await generate_image(prompt or DEFAULT_IMAGE_EDIT_PROMPT, source, options)
+
+
 async def generate_video(prompt: str, source: tuple[str, bytes] | None = None, options: dict[str, Any] | None = None) -> MediaArtifact:
     """Reserve the same contract for async video providers.
 

@@ -30,6 +30,7 @@ from utils.reminders import is_reminder_request
 from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
+from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -307,6 +308,8 @@ async def media_generate_route(request: web.Request) -> web.Response:
         )
         if kind not in {"image", "video"}:
             raise web.HTTPBadRequest(text="kind must be image or video")
+        if kind == "image" and source is not None and not prompt:
+            prompt = DEFAULT_IMAGE_EDIT_PROMPT
         redis = create_redis()
         try:
             if not await charge_user_id_credits(redis, user_id, cost, async_session):

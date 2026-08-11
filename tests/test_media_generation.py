@@ -3,12 +3,28 @@ from types import SimpleNamespace
 import pytest
 
 from services import media_generation
+from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
 
 
 def test_generation_requires_explicit_provider(monkeypatch):
     monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_URL", None)
     with pytest.raises(media_generation.MediaGenerationError, match="не настроена"):
         media_generation._url("/images/generations")
+
+
+@pytest.mark.asyncio
+async def test_edit_image_uses_shared_non_copy_prompt(monkeypatch):
+    captured = {}
+
+    async def fake_generate(prompt, source, options=None):
+        captured.update(prompt=prompt, source=source, options=options)
+        return SimpleNamespace(data=b"edited")
+
+    monkeypatch.setattr(media_generation, "generate_image", fake_generate)
+    result = await media_generation.edit_image(("image/jpeg", b"source"))
+    assert result.data == b"edited"
+    assert captured["source"] == ("image/jpeg", b"source")
+    assert captured["prompt"] == DEFAULT_IMAGE_EDIT_PROMPT
 
 
 @pytest.mark.asyncio
