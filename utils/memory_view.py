@@ -12,6 +12,7 @@ CATEGORY_LABELS = {
     "important_events": "Важные события", "open_loops": "Незавершённые темы",
     "style_clothing": "Стиль и одежда", "music": "Музыка", "films_series": "Фильмы и сериалы", "games": "Игры",
     "social": "Друзья и знакомые", "projects": "Проекты", "books": "Книги", "technology": "Техника",
+    "episodic_context": "Контекст прошлых разговоров", "current_context": "Текущий разговор",
 }
 KEY_LABELS = {"name": "Имя", "age": "Возраст", "city": "Город", "job": "Работа", "vehicle": "Автомобиль", "language": "Язык", "title": "Тема", "description": "Описание", "follow_up_question": "Вопрос для возвращения", "follow_up_at": "Вернуться", "user_message": "Сообщение пользователя", "assistant_message": "Ответ ALTER", "excerpt_content": "Фрагмент контекста", "content": "Содержание"}
 
@@ -78,8 +79,8 @@ def memory_audit(memory: dict | None) -> list[dict]:
             if not isinstance(entry, Mapping):
                 continue
             result.append({
-                "category": str(category),
-                "key": str(key),
+                "category": CATEGORY_LABELS.get(str(category), _label(category)),
+                "key": _label(key),
                 "confirmed": bool(entry.get("confirmed", False)),
                 "first_seen": entry.get("first_seen"),
                 "last_seen": entry.get("last_seen"),
