@@ -221,7 +221,10 @@ export function VoiceButton({ onRecorded, onRecordingChange }: { onRecorded: (ur
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) return;
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    const recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+    // Voice messages do not need music-grade stereo quality. The lower bitrate
+    // keeps long recordings comfortably below the upload limit while the
+    // backend normalizes them to mono WAV before transcription.
+    const recorder = new AudioModule.AudioRecorder(RecordingPresets.LOW_QUALITY);
     await recorder.prepareToRecordAsync();
     recorder.record();
     setRecording(recorder);
