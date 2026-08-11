@@ -504,9 +504,9 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                     await message.answer("Голос создан и сохранён. Теперь отправь голосовое с командой «измени мой голос на созданный».")
                 else:
                     await message.answer("ElevenLabs не вернул идентификатор созданного голоса.")
-            except ElevenLabsError:
+            except ElevenLabsError as exc:
                 logging.exception("Voice generation from voice command failed")
-                await message.answer("Не удалось создать голос сейчас. Проверь доступ ElevenLabs.")
+                await message.answer(f"Не удалось создать голос сейчас: {exc}")
             return
         requested_generation = generation_kind(text)
         if requested_generation == "image":
@@ -1346,9 +1346,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                 await message.answer("Голос создан и сохранён. Прикрепи голосовое и напиши: «измени мой голос на созданный».")
             else:
                 await message.answer("ElevenLabs создал голос, но не вернул его идентификатор.")
-        except ElevenLabsError:
+        except ElevenLabsError as exc:
             logging.exception("Voice generation failed")
-            await message.answer("Не удалось создать голос. Проверь доступ ElevenLabs и попробуй ещё раз.")
+            await message.answer(f"Не удалось создать голос: {exc}")
         return
     requested_generation = generation_kind(message.text)
     if requested_generation == "image":
