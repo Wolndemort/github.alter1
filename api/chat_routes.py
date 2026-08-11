@@ -34,12 +34,6 @@ from utils.metrics import increment
 async def chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
-    redis = create_redis()
-    try:
-        if not await charge_user_id_credits(redis, user_id, 1, async_session):
-            raise web.HTTPTooManyRequests(text="monthly AI limit reached")
-    finally:
-        await close_redis(redis)
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -50,6 +44,13 @@ async def chat_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+        if not has_owner_access(user_id, account.email if account else None):
+            redis = create_redis()
+            try:
+                if not await charge_user_id_credits(redis, user_id, 1, async_session):
+                    raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+            finally:
+                await close_redis(redis)
         message_text = str(payload.get("message") or "").strip()
         if is_voice_generation_request(message_text):
             description = voice_description(message_text)
@@ -108,12 +109,6 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
     route = classify_request(text)
     if not text or detect_audio_action(text) == "effect":
         raise web.HTTPConflict(text="stream unavailable for this request")
-    redis = create_redis()
-    try:
-        if not await charge_user_id_credits(redis, user_id, 1, async_session):
-            raise web.HTTPTooManyRequests(text="monthly AI limit reached")
-    finally:
-        await close_redis(redis)
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -122,6 +117,13 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+        if not has_owner_access(user_id, account.email if account else None):
+            redis = create_redis()
+            try:
+                if not await charge_user_id_credits(redis, user_id, 1, async_session):
+                    raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+            finally:
+                await close_redis(redis)
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         await response.prepare(request)
         try:
