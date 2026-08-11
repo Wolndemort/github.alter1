@@ -13,7 +13,7 @@ mock-интеграционные и production smoke-тесты.
 | Web/YouTube | source attribution, provider error, no fabricated completion | частично |
 | Voice/audio | STT, TTS, effects, isolation, speech-to-speech contracts | да, через mocks |
 | Images/video | validation, options, job state, cancellation, provider errors | да, через mocks |
-| Fal.ai production | real image/video generation | нет, нужен баланс Fal.ai |
+| Fal.ai production | real image/video generation | да, проверены image и video jobs |
 | Telegram/mobile | command routing, attachment types, SSE statuses, cancellation | да, через local tests |
 
 ## Exit criteria
@@ -49,6 +49,6 @@ py -3 scripts/collect_capability_stateful_smoke.py --check-workflow-mutation --o
 
 ## Current baseline
 
-The existing capability/media regression set passes locally. Fal.ai is left in
-contract/mock mode until a balance is added; this is expected and is not a
-reason to fake a successful generation result.
+The capability/media regression set passes locally. Real Fal.ai image/video and
+ElevenLabs STT, speech-to-speech and sound-effect checks were completed in
+production after balances were intentionally added.

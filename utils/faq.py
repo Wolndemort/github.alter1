@@ -199,5 +199,34 @@ ALTER не должен притворяться, что выполнил дей
 """
 
 
+FAQ_APPENDIX = """
+
+15. Быстрый старт ALTER
+
+ALTER понимает обычную речь — не нужно знать названия моделей или сервисов.
+Формула запроса: действие + объект + желаемый результат.
+
+Фирменные сценарии:
+• «Разложи мой день» — приоритеты и план на сегодня.
+• «Доведи дело до результата» — цель, шаги и контроль прогресса.
+• «Разберись, что я чувствую» — спокойная рефлексия без диагнозов.
+• «Подготовь меня к разговору» — позиция, аргументы и варианты фраз.
+• «Прими решение со мной» — сравнение вариантов и критерии выбора.
+• «Собери всё по проекту» — структура, риски и следующие действия.
+• «Верни меня к тому, что важно» — незавершённые дела и контекст памяти.
+
+Что можно попросить: текст, web-поиск, память, голос, фото/видео, генерацию
+изображений и видео, расшифровку и обработку аудио, напоминания и календарь.
+
+Telegram: /help, /new_session, /memory, /forget, /clear_memory, /remind,
+/reminders, /cancel_reminder, /calendar_connect, /calendar, /calendar_add,
+/settings, /status, /usage.
+
+Важно: для изображения и видео дождись готового файла. ALTER не заявляет действие
+выполненным, если внешний провайдер не вернул результат. Для web ALTER показывает
+источники. Приватный режим и удаление памяти не сохраняют лишний контекст.
+"""
+
+
 def faq_html() -> str:
-    return """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALTER — FAQ</title><style>html,body{margin:0;background:#050505;color:#f4f4f4;font-family:Arial,sans-serif}main{max-width:880px;margin:0 auto;padding:28px 22px 80px}pre{white-space:pre-wrap;font:14px/1.65 Arial,sans-serif;letter-spacing:.15px}h1{font-size:18px;letter-spacing:4px;font-weight:700;margin:0 0 24px}a{color:#fff}</style></head><body><main><h1>ALTER · FAQ</h1><pre>""" + escape(FAQ_TEXT) + """</pre></main></body></html>"""
+    return """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALTER — FAQ</title><style>html,body{margin:0;background:#050505;color:#f4f4f4;font-family:Arial,sans-serif}main{max-width:880px;margin:0 auto;padding:28px 22px 80px}pre{white-space:pre-wrap;font:14px/1.65 Arial,sans-serif;letter-spacing:.15px}h1{font-size:18px;letter-spacing:4px;font-weight:700;margin:0 0 24px}a{color:#fff}</style></head><body><main><h1>ALTER · FAQ</h1><pre>""" + escape(FAQ_TEXT + FAQ_APPENDIX) + """</pre></main></body></html>"""
