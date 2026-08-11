@@ -94,3 +94,24 @@ async def test_design_voice_wraps_provider_timeout(monkeypatch):
 
     with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
         await elevenlabs_media.design_voice("calm narrator")
+
+
+@pytest.mark.asyncio
+async def test_lookup_wraps_non_json_provider_response(monkeypatch):
+    class HtmlResponse(Response):
+        status_code = 200
+
+        def json(self):
+            raise ValueError("html")
+
+    class HtmlClient(Client):
+        async def get(self, url, **kwargs):
+            self.calls.append(("get", url, kwargs))
+            return HtmlResponse()
+
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", HtmlClient)
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
+        await elevenlabs_media.list_voices()
+    with pytest.raises(elevenlabs_media.ElevenLabsError, match="temporarily unavailable"):
+        await elevenlabs_media.list_models()

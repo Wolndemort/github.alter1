@@ -72,19 +72,38 @@ async def speech_to_speech(data: bytes, voice_id: str, filename: str = "voice.m4
 
 
 async def list_voices() -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get("https://api.elevenlabs.io/v2/voices", headers={"xi-api-key": _key()})
-    if response.status_code >= 400:
-        raise ElevenLabsError("ElevenLabs voices lookup failed")
-    return response.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get("https://api.elevenlabs.io/v2/voices", headers={"xi-api-key": _key()})
+        if response.status_code >= 400:
+            raise ElevenLabsError("ElevenLabs voices lookup failed")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ElevenLabsError("ElevenLabs returned an invalid voices response")
+        return payload
+    except ElevenLabsError:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ElevenLabsError("ElevenLabs voices lookup is temporarily unavailable") from exc
 
 
 async def list_models() -> list:
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get("https://api.elevenlabs.io/v1/models", headers={"xi-api-key": _key()})
-    if response.status_code >= 400:
-        raise ElevenLabsError("ElevenLabs models lookup failed")
-    return response.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get("https://api.elevenlabs.io/v1/models", headers={"xi-api-key": _key()})
+        if response.status_code >= 400:
+            raise ElevenLabsError("ElevenLabs models lookup failed")
+        payload = response.json()
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            models = payload.get("models")
+            return models if isinstance(models, list) else [payload]
+        raise ElevenLabsError("ElevenLabs returned an invalid models response")
+    except ElevenLabsError:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ElevenLabsError("ElevenLabs models lookup is temporarily unavailable") from exc
 
 
 async def design_voice(description: str) -> dict:
