@@ -91,10 +91,11 @@ def _limit_auto_tts_text(text: str) -> str:
     return candidate.rsplit(" ", 1)[0].rstrip(" ,;:-")
 
 
-async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg", fast: bool = False) -> bytes:
+async def synthesize_speech(text: str, voice: str | None = None, output_format: str = "ogg", fast: bool = False, voice_id: str | None = None) -> bytes:
     """Generate speech with ElevenLabs when enabled, falling back to OpenRouter."""
-    premium_available = bool(config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID)
-    selected_voice = "elevenlabs" if fast and premium_available else voice
+    effective_voice_id = voice_id or config.ELEVENLABS_VOICE_ID
+    premium_available = bool(config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY and effective_voice_id)
+    selected_voice = "elevenlabs" if (fast or voice_id) and premium_available else voice
     spoken_text = _prepare_tts_text(text)
     if fast:
         spoken_text = _limit_auto_tts_text(spoken_text)
@@ -115,10 +116,10 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
     # same and the mobile setting appears broken.
     if selected_voice == "elevenlabs" and premium_available:
         try:
-            voice_id = config.ELEVENLABS_VOICE_ID
+            selected_voice_id = effective_voice_id
             async with httpx.AsyncClient(timeout=45) as eleven_client:
                 response = await eleven_client.post(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{selected_voice_id}",
                     headers={"xi-api-key": config.ELEVENLABS_API_KEY.get_secret_value(), "Accept": "audio/pcm"},
                     params={"output_format": "pcm_24000"},
                     json={

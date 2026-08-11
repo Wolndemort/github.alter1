@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import base64
 
 from aiogram import F, Router, types
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
@@ -75,6 +76,19 @@ async def answer_video_artifact(message: types.Message, artifact, caption: str |
     )
 
 
+async def answer_voice_preview(message: types.Message, generated: dict) -> None:
+    previews = generated.get("previews") if isinstance(generated, dict) else None
+    preview = previews[0] if isinstance(previews, list) and previews else None
+    encoded = preview.get("audio_base_64") if isinstance(preview, dict) else None
+    if not encoded:
+        return
+    try:
+        audio = base64.b64decode(encoded, validate=True)
+        await message.answer_audio(BufferedInputFile(audio, filename="alter-created-voice.mp3"), caption="Preview созданного голоса — можно прослушать и скачать.")
+    except (ValueError, TypeError):
+        logging.warning("Invalid ElevenLabs voice preview payload")
+
+
 async def answer_reply(message: types.Message, reply: str, user: User, force_voice: bool = False, question: str | None = None):
     """Send text and, when enabled, a voice copy. TTS failure never hides the text."""
     reply = sanitize_public_reply(reply)
@@ -94,7 +108,12 @@ async def answer_reply(message: types.Message, reply: str, user: User, force_voi
     if force_voice or voice_enabled(user):
         try:
             selected_voice = (user.tech_stack or {}).get("tts_voice")
-            audio = await synthesize_speech(reply, voice=selected_voice, fast=True)
+            audio = await synthesize_speech(
+                reply,
+                voice=selected_voice,
+                fast=True,
+                voice_id=(user.tech_stack or {}).get("generated_voice_id"),
+            )
         except Exception:
             logging.exception("Optional voice reply failed")
             audio = None
@@ -149,7 +168,12 @@ async def cmd_voice(message: types.Message, db_session: AsyncSession):
     if not text:
         await message.answer("Формат: /voice текст, на который нужен голосовой ответ")
         return
-    audio = await synthesize_speech(text, voice=(user.tech_stack or {}).get("tts_voice"))
+    settings = user.tech_stack or {}
+    audio = await synthesize_speech(
+        text,
+        voice=settings.get("tts_voice"),
+        voice_id=settings.get("generated_voice_id"),
+    )
     if audio:
         await message.answer_voice(BufferedInputFile(audio, filename="alter.ogg"))
     else:
@@ -501,6 +525,7 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
                     settings["generated_voice_id"] = voice_id
                     user.tech_stack = settings
                     await db_session.commit()
+                    await answer_voice_preview(message, generated)
                     await message.answer("Голос создан и сохранён. Теперь отправь голосовое с командой «измени мой голос на созданный».")
                 else:
                     await message.answer("ElevenLabs не вернул идентификатор созданного голоса.")
@@ -1343,6 +1368,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                 settings["generated_voice_id"] = voice_id
                 user.tech_stack = settings
                 await db_session.commit()
+                await answer_voice_preview(message, generated)
                 await message.answer("Голос создан и сохранён. Прикрепи голосовое и напиши: «измени мой голос на созданный».")
             else:
                 await message.answer("ElevenLabs создал голос, но не вернул его идентификатор.")

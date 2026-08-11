@@ -160,9 +160,10 @@ def test_fast_auto_voice_uses_elevenlabs_turbo_and_shortens_text(monkeypatch):
     monkeypatch.setattr(tts.config, "ELEVENLABS_VOICE_ID", "premium-voice")
     monkeypatch.setattr(tts.httpx, "AsyncClient", Client)
 
-    result = run(tts.synthesize_speech("слово " * 1000, voice="alloy", output_format="wav", fast=True))
+    result = run(tts.synthesize_speech("слово " * 1000, voice="alloy", output_format="wav", fast=True, voice_id="created-voice"))
 
     assert result.startswith(b"RIFF")
+    assert calls[0][0].endswith("/created-voice")
     assert calls[0][1]["json"]["model_id"] == "eleven_flash_v2_5"
     assert len(calls[0][1]["json"]["text"]) <= tts.config.TTS_AUTO_MAX_CHARS
 
