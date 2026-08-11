@@ -1,0 +1,22 @@
+[
+  {"id":"capability_inventory","kind":"chat","prompt":"Что ты умеешь?","expected":"capability_inventory","cost":0},
+  {"id":"memory_show","kind":"memory","prompt":"Покажи, что ты помнишь обо мне","expected":"memory_read","cost":0},
+  {"id":"memory_forget","kind":"memory","prompt":"Забудь факт по моей просьбе","expected":"memory_delete","cost":0},
+  {"id":"private_mode","kind":"privacy","prompt":"Не сохраняй этот разговор","expected":"private_mode","cost":0},
+  {"id":"reminder_create","kind":"reminder","prompt":"Напомни завтра в 10:00 позвонить клиенту","expected":"reminder_create","cost":1},
+  {"id":"reminder_cancel","kind":"reminder","prompt":"Отмени последнее напоминание","expected":"reminder_delete","cost":1},
+  {"id":"calendar_status","kind":"calendar","prompt":"Подключён ли мой календарь?","expected":"calendar_status","cost":0},
+  {"id":"calendar_event","kind":"calendar","prompt":"Добавь встречу завтра в 15:00","expected":"calendar_create","cost":0},
+  {"id":"workflow_start","kind":"workflow","prompt":"Начни сценарий доведи дело до результата","expected":"workflow_start","cost":0},
+  {"id":"workflow_cancel","kind":"workflow","prompt":"Останови текущий процесс","expected":"workflow_cancel","cost":0},
+  {"id":"web_search","kind":"web","prompt":"Найди актуальную информацию и дай ссылки","expected":"web_search","cost":1},
+  {"id":"youtube_search","kind":"youtube","prompt":"Найди видео на YouTube и дай ссылку","expected":"youtube_search","cost":1},
+  {"id":"audio_stt","kind":"audio","prompt":"Расшифруй прикреплённое голосовое","expected":"speech_to_text","cost":20},
+  {"id":"audio_tts","kind":"audio","prompt":"Озвучь ответ голосом","expected":"voice_reply","cost":5},
+  {"id":"audio_effect","kind":"audio","prompt":"Добавь звук дождя к записи","expected":"audio_effect","cost":20},
+  {"id":"media_capabilities","kind":"media","prompt":"Какие у тебя возможности по картинкам и видео?","expected":"media_capabilities","cost":0},
+  {"id":"image_generation","kind":"media","prompt":"Создай изображение по описанию","expected":"image_generation","cost":100},
+  {"id":"video_generation","kind":"media","prompt":"Создай короткое видео по описанию","expected":"video_generation","cost":250},
+  {"id":"media_cancel","kind":"media","prompt":"Отмени генерацию видео","expected":"media_cancel","cost":0},
+  {"id":"action_log","kind":"trust","prompt":"Покажи журнал действий","expected":"action_log","cost":0}
+]
