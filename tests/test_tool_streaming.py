@@ -23,11 +23,14 @@ def test_tool_streamer_executes_tools_then_streams_final_answer(monkeypatch):
                     return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="финал"))])
             return Stream()
         return responses.pop(0)
-    async def search(query): return [{"title": query}]
+    async def search(name, arguments): return [{"title": arguments["query"]}]
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     monkeypatch.setattr(ap_logic, "execute_tool", search)
-    assert run(collect(ap_logic.stream_chat_with_tools([{"role": "user", "content": "Найди ALTER"}]))) == ["финал"]
+    chunks, trace = run(collect(ap_logic.stream_chat_with_tools([{"role": "user", "content": "Найди ALTER"}])))
+    assert chunks == ["финал"]
+    assert trace == [{"tool": "web_search", "status": "ok"}]
 
 
 async def collect(iterator):
-    return [item async for item in iterator]
+    chunks = [item async for item in iterator]
+    return chunks, ap_logic.tool_trace()

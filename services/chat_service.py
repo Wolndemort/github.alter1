@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import generate_reply, stream_text_reply, stream_chat_with_tools
+from utils.ap_logic import clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
@@ -55,6 +55,7 @@ class ChatService:
 
     async def reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None) -> ChatResult:
         text = validate_message(text)
+        clear_tool_trace()
         user = await db.get(User, user_id)
         if user is None:
             raise ValueError("user not found")
@@ -178,13 +179,17 @@ class ChatService:
         if not private_mode:
             _append(session, "assistant", reply)
             await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
-            append_action(user, "chat", "ok", route=conversation_mode(text))
+            trace = tool_trace()
+            append_action(user, "chat", "ok", route=conversation_mode(text), count=len(trace))
+            for item in trace:
+                append_action(user, "tool", item["status"], tool=item["tool"])
         await db.commit()
         return ChatResult(reply=reply, session_id=session.id or 0)
 
     async def stream_reply(self, db: AsyncSession, user_id: int, text: str, location: dict | None = None, use_tools: bool = False):
         """Stream ordinary text replies while preserving the same session contract."""
         text = validate_message(text)
+        clear_tool_trace()
         user = await db.get(User, user_id)
         if user is None:
             raise ValueError("user not found")
@@ -247,5 +252,8 @@ class ChatService:
         if not private_mode:
             _append(session, "assistant", reply)
             await remember(db, user_id, text, source="user_message", categories=list(new_facts))
-            append_action(user, "chat", "ok", route=conversation_mode(text))
+            trace = tool_trace()
+            append_action(user, "chat", "ok", route=conversation_mode(text), count=len(trace))
+            for item in trace:
+                append_action(user, "tool", item["status"], tool=item["tool"])
         await db.commit()

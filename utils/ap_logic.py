@@ -1,4 +1,5 @@
 import asyncio
+from contextvars import ContextVar
 import json
 import re
 import logging
@@ -26,6 +27,26 @@ from utils.quality import assess_reply, has_internal_leak, has_language_mismatch
 from utils.intent import conversation_mode
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
+_TOOL_TRACE: ContextVar[list[dict]] = ContextVar("alter_tool_trace", default=[])
+
+
+def tool_trace() -> list[dict]:
+    """Return metadata for tools used by the current request only."""
+    return [dict(item) for item in _TOOL_TRACE.get()]
+
+
+def clear_tool_trace() -> None:
+    _TOOL_TRACE.set([])
+
+
+def _start_tool_trace() -> None:
+    _TOOL_TRACE.set([])
+
+
+def _record_tool(name: str, status: str) -> None:
+    trace = list(_TOOL_TRACE.get())
+    trace.append({"tool": str(name)[:40], "status": str(status)[:24]})
+    _TOOL_TRACE.set(trace)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops", "response_feedback"}
 KEY_ALIASES = {"имя": "name", "возраст": "age", "город": "city", "работа": "job", "профессия": "job"}
 TOOL_DEFINITIONS = [
@@ -474,6 +495,7 @@ def _tool_call_payload(call) -> dict:
 
 async def chat_with_tools(messages, max_tokens=None, task=None):
     """Let the model call allowed tools, then continue with their results."""
+    _start_tool_trace()
     working = list(messages)
     max_rounds = max(1, min(config.TOOL_MAX_ROUNDS, 12))
     for _ in range(max_rounds):
@@ -518,6 +540,8 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
             return call, status, result_for_model
         tool_results = await asyncio.gather(*(run_tool(call) for call in tool_calls))
         for call, status, result_for_model in tool_results:
+            function = getattr(call, "function", None)
+            _record_tool(getattr(function, "name", "unknown"), status)
             working.append({
                 "role": "tool",
                 "tool_call_id": getattr(call, "id", ""),
@@ -529,6 +553,7 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
 
 async def stream_chat_with_tools(messages, max_tokens=None, task=None):
     """Resolve tool calls first, then stream the user-facing final answer."""
+    _start_tool_trace()
     working = list(messages)
     max_rounds = max(1, min(config.TOOL_MAX_ROUNDS, 12))
     for _ in range(max_rounds):
@@ -572,6 +597,8 @@ async def stream_chat_with_tools(messages, max_tokens=None, task=None):
             return call, status, result_for_model
 
         for call, status, result_for_model in await asyncio.gather(*(run_tool(call) for call in tool_calls)):
+            function = getattr(call, "function", None)
+            _record_tool(getattr(function, "name", "unknown"), status)
             working.append({
                 "role": "tool", "tool_call_id": getattr(call, "id", ""),
                 "content": json.dumps({"status": status, "data": result_for_model}, ensure_ascii=False)[:12000],
