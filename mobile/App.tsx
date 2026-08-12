@@ -39,6 +39,15 @@ export function userFacingError(error: unknown): string {
   if (status === 0 && /сетевая|интернет/i.test(message)) return "Сетевая ошибка. Проверь интернет и попробуй ещё раз.";
   return "Не удалось выполнить запрос. Попробуй ещё раз позже.";
 }
+
+const safeOpenUrl = async (url: string) => {
+  try {
+    if (!(await Linking.canOpenURL(url))) throw new Error("Ссылка недоступна на этом устройстве");
+    await Linking.openURL(url);
+  } catch (err) {
+    Alert.alert("Не удалось открыть ссылку", userFacingError(err));
+  }
+};
 export function getExpiredChatIds(items: ChatItem[], now: number, timeoutMs = 60000): string[] {
   const cutoff = now - timeoutMs;
   const keep = new Set<string>();
@@ -106,7 +115,7 @@ function TypingText({ text }: { text: string }) {
     return () => clearInterval(timer);
   }, [text]);
   const parts = visible.split(/(https?:\/\/[^\s]+)/g);
-  return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => Linking.openURL(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
+  return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => safeOpenUrl(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
 }
 
 function ActivityPulse() {
@@ -309,7 +318,7 @@ export function AuthScreen({ onAuthenticated }: AuthProps) {
     <TextInput autoCapitalize="none" keyboardType="email-address" placeholder="Email" placeholderTextColor="#78809a" style={styles.input} value={email} onChangeText={setEmail} />
     <TextInput secureTextEntry placeholder="Пароль" placeholderTextColor="#78809a" style={styles.input} value={password} onChangeText={setPassword} />
     {error ? <Text style={styles.error}>{error}</Text> : null}
-    {registerMode ? <Pressable style={authStyles.legalRow} onPress={() => setLegalAccepted(!legalAccepted)}><Text style={authStyles.check}>{legalAccepted ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Принимаю <Text style={linkStyles.link} onPress={() => Linking.openURL("https://alterai.ru/legal/privacy.html")}>политику конфиденциальности</Text> и <Text style={linkStyles.link} onPress={() => Linking.openURL("https://alterai.ru/legal/offer.html")}>условия ALTER</Text></Text></Pressable> : null}
+    {registerMode ? <Pressable style={authStyles.legalRow} onPress={() => setLegalAccepted(!legalAccepted)}><Text style={authStyles.check}>{legalAccepted ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Принимаю <Text style={linkStyles.link} onPress={() => safeOpenUrl("https://alterai.ru/legal/privacy.html")}>политику конфиденциальности</Text> и <Text style={linkStyles.link} onPress={() => safeOpenUrl("https://alterai.ru/legal/offer.html")}>условия ALTER</Text></Text></Pressable> : null}
     {busy ? <ActivityIndicator color="#ffffff" /> : <Pressable style={authStyles.primary} onPress={submit}><Text style={authStyles.primaryText}>{registerMode ? "Создать аккаунт" : "Войти"}</Text></Pressable>}
     <Pressable style={authStyles.secondary} onPress={() => { setRegisterMode(!registerMode); setLegalAccepted(false); }}><Text style={authStyles.secondaryText}>{registerMode ? "У меня уже есть аккаунт" : "Создать аккаунт"}</Text></Pressable>
   </View><StatusBar style="light" /></SafeAreaView>;
@@ -327,6 +336,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [myDayVisible, setMyDayVisible] = useState(false);
   const [myDayData, setMyDayData] = useState<MyDayResponse | null>(null);
   const [myDayLoading, setMyDayLoading] = useState(false);
+  const [myDayError, setMyDayError] = useState("");
   const [scenariosVisible, setScenariosVisible] = useState(false);
   const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
   const [workflowData, setWorkflowData] = useState<Record<string, unknown> | null>(null);
@@ -341,6 +351,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [memoryError, setMemoryError] = useState("");
   const [memoryNotice, setMemoryNotice] = useState(false);
   const [reminders, setReminders] = useState<{ id: number; text: string; remind_at: string }[]>([]);
+  const [remindersError, setRemindersError] = useState("");
   const [remindersVisible, setRemindersVisible] = useState(false);
   // Reminders are created from the main chat (text or voice), not by a fixed
   // one-hour shortcut. The reminders screen is read/delete only.
@@ -364,6 +375,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [openSection, setOpenSection] = useState<"profile" | "connections" | "tools" | "settings" | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number } | null>(null);
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
+  const [mediaPickerBusy, setMediaPickerBusy] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
@@ -373,6 +385,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [documentInstruction, setDocumentInstruction] = useState("");
   const [audioActionsVisible, setAudioActionsVisible] = useState(false);
   const [mediaJobsVisible, setMediaJobsVisible] = useState(false);
+  const [mediaJobsError, setMediaJobsError] = useState("");
   const [mediaJobs, setMediaJobs] = useState<MediaJob[]>([]);
   const [mediaJobsLoading, setMediaJobsLoading] = useState(false);
   const [mediaJobPrompt, setMediaJobPrompt] = useState("");
@@ -384,6 +397,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const voicePlaybackSerial = React.useRef(0);
   const autoScrollAfterUpdate = React.useRef(false);
   const initialHistoryScroll = React.useRef(false);
+  const stickToBottom = React.useRef(true);
   const activeRequestController = React.useRef<AbortController | null>(null);
   const drawerX = React.useRef(new Animated.Value(-420)).current;
   const logoPulse = React.useRef(new Animated.Value(0.72)).current;
@@ -399,7 +413,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     }, 180000);
   }, [idleShade]);
   const showPermissionOfferIfNeeded = () => { AsyncStorage.getItem(`alter_permission_offer_seen_${token}`).then((value) => { if (value !== "1") setPermissionOfferVisible(true); }).catch(() => setPermissionOfferVisible(true)); };
-  const refreshAccount = () => { api.account(token).then((value) => { setAccount(value); if (value.legal_accepted) showPermissionOfferIfNeeded(); else setLegalVisible(true); }).catch(() => undefined); };
+  const refreshAccount = () => { api.account(token).then((value) => { setAccount(value); if (value.legal_accepted) showPermissionOfferIfNeeded(); else setLegalVisible(true); }).catch((err) => setMenuError(userFacingError(err))); };
   useEffect(() => {
     refreshAccount();
     api.usage(token).then(setUsage).catch(() => undefined);
@@ -671,17 +685,17 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   };
   const openTelegramLink = async () => {
     setMenuError("");
-    try { const result = await api.startTelegramLink(token); await Linking.openURL(result.url); }
+    try { const result = await api.startTelegramLink(token); await safeOpenUrl(result.url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось открыть Telegram"); }
   };
   const openCalendarConnect = async () => {
     setMenuError("");
-    try { const result = await api.calendarConnect(token); await Linking.openURL(result.authorization_url); }
+    try { const result = await api.calendarConnect(token); await safeOpenUrl(result.authorization_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Google Calendar пока не настроен на сервере"); }
   };
   const buySubscription = async (plan: "personal" | "ego") => {
     setMenuError("");
-    try { const result = await api.createPayment(token, plan); await Linking.openURL(result.payment_url); }
+    try { const result = await api.createPayment(token, plan); await safeOpenUrl(result.payment_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Оплата пока недоступна"); }
   };
   const requestLocation = async (background: boolean) => {
@@ -739,8 +753,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     finally { setMemoryLoading(false); }
   };
   const openMyDay = async () => {
-    setMyDayVisible(true); setMyDayLoading(true); setMenuVisible(false);
-    try { setMyDayData(await api.myDay(token)); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось собрать твой день"); }
+    setMyDayVisible(true); setMyDayLoading(true); setMyDayError(""); setMenuVisible(false);
+    try { setMyDayData(await api.myDay(token)); } catch (err) { setMyDayError(userFacingError(err)); }
     finally { setMyDayLoading(false); }
   };
   const advanceWorkflow = async (complete = false) => {
@@ -751,13 +765,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     finally { setWorkflowBusy(false); }
   };
   const openMediaJobs = async () => {
-    setMediaJobsVisible(true); setMenuVisible(false); setMediaJobsLoading(true);
-    try { setMediaJobs((await api.mediaHistory(token)).items); } catch (err) { setMenuError(userFacingError(err)); }
+    setMediaJobsVisible(true); setMenuVisible(false); setMediaJobsLoading(true); setMediaJobsError("");
+    try { setMediaJobs((await api.mediaHistory(token)).items); } catch (err) { setMediaJobsError(userFacingError(err)); }
     finally { setMediaJobsLoading(false); }
   };
   const cancelMediaJob = async (id: string) => {
     try { await api.cancelMediaJob(token, id); setMediaJobs((items) => items.map((item) => item.id === id ? { ...item, status: "cancelled" } : item)); }
-    catch (err) { setMenuError(userFacingError(err)); }
+    catch (err) { setMediaJobsError(userFacingError(err)); }
   };
   const downloadMediaJob = async (job: MediaJob) => {
     if (!job.data_base64 || !FileSystem.documentDirectory) return;
@@ -770,14 +784,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   };
   const createMediaJob = async () => {
     if (!mediaJobPrompt.trim() || mediaJobsLoading) return;
-    setMediaJobsLoading(true); setMenuError("");
+    setMediaJobsLoading(true); setMenuError(""); setMediaJobsError("");
     try { const job = await api.createMediaJob(token, mediaJobKind, mediaJobPrompt.trim()); setMediaJobs((items) => [job, ...items]); setMediaJobPrompt(""); }
-    catch (err) { setMenuError(userFacingError(err)); }
+    catch (err) { setMediaJobsError(userFacingError(err)); }
     finally { setMediaJobsLoading(false); }
   };
   useEffect(() => {
     if (!mediaJobsVisible || !mediaJobs.some((item) => item.status === "queued" || item.status === "running")) return;
-    const timer = setInterval(() => { api.mediaHistory(token).then(({ items }) => setMediaJobs(items)).catch(() => undefined); }, 2500);
+    const timer = setInterval(() => { api.mediaHistory(token).then(({ items }) => { setMediaJobs(items); setMediaJobsError(""); }).catch((err) => setMediaJobsError(userFacingError(err))); }, 2500);
     return () => clearInterval(timer);
   }, [mediaJobsVisible, mediaJobs, token]);
   const forgetMemoryCategory = (category: string, title: string) => Alert.alert("Забыть категорию?", `Удалить из памяти «${title}»?`, [
@@ -807,12 +821,20 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) { setMemoryError(userFacingError(err)); }
   };
   const openReminders = async () => {
-    setRemindersVisible(true); setMenuVisible(false);
-    try { setReminders((await api.reminders(token)).reminders); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось загрузить напоминания"); }
+    setRemindersVisible(true); setMenuVisible(false); setRemindersError("");
+    try { setReminders((await api.reminders(token)).reminders); } catch (err) { setRemindersError(userFacingError(err)); }
+  };
+  const deleteReminder = async (id: number) => {
+    try { await api.deleteReminder(token, id); setReminders((old) => old.filter((entry) => entry.id !== id)); }
+    catch (err) { Alert.alert("Не удалось удалить", userFacingError(err)); }
+  };
+  const completeLoop = async (loopIndex: number) => {
+    try { await api.updateLoop(token, loopIndex, "done"); setMyDayData(await api.myDay(token)); }
+    catch (err) { Alert.alert("Не удалось обновить день", userFacingError(err)); }
   };
   const openFaq = () => { setFaqVisible(true); setMenuVisible(false); };
-  const openScenarios = async () => { setMenuVisible(false); setScenariosVisible(true); try { setScenarios((await api.scenarios(token)).items); } catch { setScenarios([]); } };
-  const openActionLog = async () => { setMenuVisible(false); setActionLogVisible(true); try { setActionLog((await api.actionLog(token)).items as ActionItem[]); } catch { setActionLog([]); } };
+  const openScenarios = async () => { setMenuVisible(false); setScenariosVisible(true); try { setScenarios((await api.scenarios(token)).items); } catch (err) { setScenarios([]); Alert.alert("Сценарии недоступны", userFacingError(err)); } };
+  const openActionLog = async () => { setMenuVisible(false); setActionLogVisible(true); try { setActionLog((await api.actionLog(token)).items as ActionItem[]); } catch (err) { setActionLog([]); Alert.alert("История действий недоступна", userFacingError(err)); } };
   const createQuickReminder = async () => {
     const text = reminderText.trim(); if (!text) return;
     try { const item = await api.createReminder(token, text, new Date(Date.now() + 60 * 60 * 1000).toISOString()); setReminders((old) => [...old, item]); setReminderText(""); }
@@ -838,6 +860,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     finally { setBusy(false); }
   };
   const pickMediaLibrary = async () => {
+    if (mediaPickerBusy) return;
+    setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
@@ -846,9 +870,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         const asset = result.assets[0];
         setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
       }
-    } catch (err) { setMenuError(userFacingError(err)); }
+    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
   };
   const pickFile = async () => {
+    if (mediaPickerBusy) return;
+    setMediaPickerBusy(true); setMenuError("");
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
       if (!result.canceled && result.assets[0]) {
@@ -857,16 +883,18 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         const mediaType = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "document";
         setAttachment({ uri: asset.uri, type: mediaType, filename: asset.name, mimeType: mime });
       }
-    } catch (err) { setMenuError(userFacingError(err)); }
+    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
   };
   const pickMedia = () => setMediaPickerVisible(true);
   const takePhoto = async () => {
+    if (mediaPickerBusy) return;
+    setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
       if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
-    } catch (err) { setMenuError(userFacingError(err)); }
+    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const setFeedback = async (id: string, feedback: "positive" | "negative") => {
@@ -886,12 +914,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const workflowGoal = typeof workflowData?.goal === "string" ? workflowData.goal : "";
   const workflowProgress = `${Number(workflowData?.completed_steps || 0)}/${Number(workflowData?.total_steps || 0)}`;
   const maskedEmail = account?.email ? account.email.replace(/^(.{2}).*(@.*)$/, "$1•••$2") : "Почта не указана";
-  return <SafeAreaView style={[styles.container, { backgroundColor: "#000000" }]} onTouchStart={resetIdle}>{idle ? <><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><IdleAlterScreen opacity={idleShade} /></> : null}<Pressable style={historyStyles.handle} onPress={() => setHistoryVisible(true)} accessibilityLabel="Открыть историю переписки"><Text style={historyStyles.arrow}>›</Text></Pressable><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  return <SafeAreaView style={[styles.container, { backgroundColor: "#000000" }]} onTouchStart={resetIdle}>{idle ? <><Animated.View pointerEvents="none" style={[idleStyles.shade, { opacity: idleShade }]} /><IdleAlterScreen opacity={idleShade} /></> : null}<Pressable style={historyStyles.handle} onPress={() => setHistoryVisible(true)} accessibilityLabel="Открыть историю переписки"><Text style={historyStyles.arrow}>›</Text></Pressable><KeyboardAvoidingView style={styles.chat} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}>
     <View style={styles.header}><Pressable style={premiumStyles.headerAction} onPress={() => { Keyboard.dismiss(); refreshAccount(); setMenuVisible(true); }} accessibilityLabel="Открыть боковую панель"><Text style={premiumStyles.headerActionText}>☰</Text></Pressable><Text style={styles.headerTitle}>ALTER</Text><Pressable style={premiumStyles.refreshAction} onPress={() => setNewChatPromptVisible((value) => !value)} accessibilityLabel="Новый чат"><Text style={premiumStyles.refreshIcon}>↻</Text></Pressable></View>
     {newChatPromptVisible ? <View style={premiumStyles.newChatPrompt}><Text style={premiumStyles.newChatPromptText}>Начать новый чат?</Text><View style={premiumStyles.newChatActions}><Pressable onPress={() => setNewChatPromptVisible(false)} accessibilityLabel="Отменить новый чат"><Text style={premiumStyles.newChatAction}>×</Text></Pressable><Pressable onPress={startNewChat} accessibilityLabel="Подтвердить новый чат"><Text style={premiumStyles.newChatAction}>✓</Text></Pressable></View></View> : null}
     {newChatLoading ? <View style={premiumStyles.newChatLoading} pointerEvents="none"><Animated.Text style={[premiumStyles.newChatLoadingLogo, { opacity: logoPulse }]}>ALTER</Animated.Text><Text style={premiumStyles.newChatLoadingText}>Начинаем новый чат</Text></View> : null}
      {items.length === 0 ? <EmptyChat onPrompt={(value) => { setMessage(value); resetIdle(); }} /> : null}
-    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets onLayout={() => { if (initialHistoryScroll.current && items.length) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false })); }} onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; const animated = !initialHistoryScroll.current; initialHistoryScroll.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <>{item.text ? (item.streaming ? <Text style={styles.message}>{item.text}<Text style={styles.cursor}>▋</Text></Text> : <TypingText text={item.text} />) : <ThinkingDots />}{item.text && !item.streaming ? <View style={answerActionStyles.row}><Pressable onPress={() => { const prompt = promptFromHistory(item.id); if (prompt) send(prompt); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Повторить запрос"><Text style={answerActionStyles.icon}>↻</Text></Pressable><Pressable onPress={() => send("Продолжи последний ответ, добавив следующий практический шаг.")} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Продолжить ответ"><Text style={answerActionStyles.icon}>→</Text></Pressable><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View> : null}</> : <Text style={[styles.message, styles.userMessage, { color: "#050505" }]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}{item.audioUri ? <Pressable onPress={() => downloadMedia(item, "audio")} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать аудио"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать аудио</Text><Text style={mediaDownloadStyles.name}>{item.audioFilename || item.audioMime || "Аудиофайл"}</Text></View></Pressable> : null}</View>} />
+    <FlatList ref={listRef} data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets={false} onLayout={() => { if (initialHistoryScroll.current && items.length) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false })); }} onScroll={(event) => { const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; stickToBottom.current = contentSize.height - (contentOffset.y + layoutMeasurement.height) < 80; }} scrollEventThrottle={16} onContentSizeChange={() => { if (autoScrollAfterUpdate.current) { autoScrollAfterUpdate.current = false; const animated = !initialHistoryScroll.current; initialHistoryScroll.current = false; requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated })); } else if (busy && stickToBottom.current) { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false })); } }} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}>{item.role === "assistant" ? <>{item.text ? (item.streaming ? <Text style={styles.message}>{item.text}<Text style={styles.cursor}>▋</Text></Text> : <TypingText text={item.text} />) : <ThinkingDots />}{item.text && !item.streaming ? <View style={answerActionStyles.row}><Pressable onPress={() => { const prompt = promptFromHistory(item.id); if (prompt) send(prompt); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Повторить запрос"><Text style={answerActionStyles.icon}>↻</Text></Pressable><Pressable onPress={() => send("Продолжи последний ответ, добавив следующий практический шаг.")} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Продолжить ответ"><Text style={answerActionStyles.icon}>→</Text></Pressable><Pressable onPress={async () => { await Clipboard.setStringAsync(item.text); setCopiedId(item.id); setTimeout(() => setCopiedId(null), 1600); }} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Скопировать ответ"><Text style={answerActionStyles.icon}>{copiedId === item.id ? "✓" : "⧉"}</Text>{copiedId === item.id ? <Text style={answerActionStyles.hint}>Скопировано</Text> : null}</Pressable><Pressable onPress={() => playVoiceReply(item.text, item.id)} disabled={playingVoiceId !== null} style={({ pressed }) => [answerActionStyles.voiceButton, pressed && answerActionStyles.pressed, playingVoiceId === item.id && answerActionStyles.active]} accessibilityLabel="Озвучить ответ"><Text style={answerActionStyles.icon}>{playingVoiceId === item.id ? "◼" : "◖))"}</Text></Pressable><Pressable onPress={() => setFeedbackFor(item.id)} style={({ pressed }) => [answerActionStyles.button, pressed && answerActionStyles.pressed]} accessibilityLabel="Оценить ответ"><Text style={[answerActionStyles.icon, item.feedback ? answerActionStyles.selected : null]}>{item.feedback === "positive" ? "👍" : item.feedback === "negative" ? "👎" : "♡"}</Text></Pressable></View> : null}</> : <Text style={[styles.message, styles.userMessage, { color: "#050505" }]}>{item.text}</Text>}{item.mediaUri && item.mediaMime?.startsWith("image/") ? <Image source={{ uri: item.mediaUri }} style={{ width: 240, height: 240, borderRadius: 12, marginTop: 8 }} /> : null}{item.mediaUri && !item.mediaMime?.startsWith("image/") ? <Pressable onPress={() => downloadMedia(item)} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать файл"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать файл</Text><Text style={mediaDownloadStyles.name}>{item.mediaFilename || item.mediaMime || "Медиафайл"}</Text></View></Pressable> : null}{item.audioUri ? <Pressable onPress={() => downloadMedia(item, "audio")} style={({ pressed }) => [mediaDownloadStyles.button, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Скачать аудио"><Text style={mediaDownloadStyles.arrow}>↓</Text><View><Text style={mediaDownloadStyles.title}>Скачать аудио</Text><Text style={mediaDownloadStyles.name}>{item.audioFilename || item.audioMime || "Аудиофайл"}</Text></View></Pressable> : null}</View>} />
     {memoryNotice ? <Pressable style={styles.memoryNotice} onPress={openMemory}><Text style={styles.memoryNoticeText}>✓ Запомнил важное. Управлять памятью →</Text></Pressable> : null}
     {workflowData?.status === "active" || workflowData?.status === "ready_for_review" ? <View style={styles.workflowCard}><Text style={styles.workflowKicker}>АКТИВНАЯ ЗАДАЧА · {workflowProgress}</Text><Text style={styles.workflowGoal}>{workflowGoal}</Text><Text style={styles.workflowStep}>Сейчас: {workflowStep}</Text><View style={styles.workflowActions}><Pressable onPress={() => send(`Помоги мне выполнить текущий шаг: ${workflowStep}`)} disabled={workflowBusy}><Text style={styles.workflowAction}>Обсудить шаг</Text></Pressable><Pressable onPress={() => advanceWorkflow()} disabled={workflowBusy}><Text style={styles.workflowAction}>{workflowBusy ? "Обновляю…" : "Следующий шаг"}</Text></Pressable><Pressable onPress={() => advanceWorkflow(true)} disabled={workflowBusy}><Text style={styles.workflowAction}>Готово</Text></Pressable></View></View> : null}
     {items.length > 0 && !message && !busy ? <View style={styles.quickActionRow}><Pressable onPress={() => send("Сделай последний ответ короче и конкретнее.")} style={styles.quickAction}><Text style={styles.quickActionText}>Короче</Text></Pressable><Pressable onPress={() => send("Какой следующий практический шаг?")} style={styles.quickAction}><Text style={styles.quickActionText}>Следующий шаг</Text></Pressable><Pressable onPress={() => send("Составь из этого короткий план действий.")} style={styles.quickAction}><Text style={styles.quickActionText}>План</Text></Pressable><Pressable onPress={openMemory} style={styles.quickAction}><Text style={styles.quickActionText}>Память</Text></Pressable></View> : null}
@@ -899,6 +927,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {!attachment ? (() => { const latestImage = [...items].reverse().find((item) => item.mediaUri && item.mediaMime?.startsWith("image/")); return latestImage ? <Pressable onPress={() => editMediaNow(latestImage)} disabled={busy} accessibilityLabel="Редактировать последнее изображение"><Text style={mediaStyles.generateAction}>✏️ Редактировать последнее изображение</Text></Pressable> : null; })() : null}
     {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
     {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : attachment.type === "document" ? `Документ: ${attachment.filename || "файл"}` : "Фото прикреплено"}</Text>{attachment.type === "audio" ? <Pressable onPress={() => setAudioActionsVisible(true)} disabled={busy} accessibilityLabel="Действия с аудио"><Text style={mediaStyles.generateAction}>♫ Действия</Text></Pressable> : attachment.type === "document" ? <Pressable onPress={() => setDocumentEditVisible(true)} disabled={busy} accessibilityLabel="Редактировать документ"><Text style={mediaStyles.generateAction}>✎ Изменить</Text></Pressable> : <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable>}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
+    {!menuVisible && menuError ? <Pressable style={styles.inlineError} onPress={() => setMenuError("")} accessibilityLabel="Закрыть сообщение об ошибке"><Text style={styles.inlineErrorText}>{menuError}</Text><Text style={styles.inlineErrorClose}>×</Text></Pressable> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={() => send()} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={[mediaStyles.sendButton, busy && mediaStyles.stopSendButton]} onPress={() => busy ? stopRequest() : send()} accessibilityLabel={busy ? "Остановить ответ" : "Отправить сообщение"}><Text style={mediaStyles.sendIcon}>{busy ? "■" : "↑"}</Text></Pressable></View>
     {busy && !attachment ? <Pressable style={styles.stopResponseButton} onPress={stopRequest} accessibilityLabel="Остановить ответ"><Text style={styles.stopResponseText}>■ Остановить ответ</Text></Pressable> : null}
     {!busy && items.some((item) => item.role === "user") ? <Pressable style={styles.editLastButton} onPress={() => { const last = [...items].reverse().find((item) => item.role === "user"); if (last) { setMessage(last.text); resetIdle(); } }} accessibilityLabel="Редактировать последнее сообщение"><Text style={styles.editLastText}>Изменить последнее сообщение</Text></Pressable> : null}
@@ -907,7 +936,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
    </KeyboardAvoidingView>
   <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
   <Modal visible={legalVisible} transparent animationType="fade" onRequestClose={() => undefined}>
-    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · ДО НАЧАЛА РАБОТЫ</Text><Text style={permissionStyles.title}>Документы и согласие</Text><Text style={permissionStyles.body}>Перед началом работы ознакомься с политикой конфиденциальности, публичной офертой и согласием на обработку данных. Без подтверждения ALTER не запрашивает push и геолокацию и не запускает рабочий чат.</Text><View style={{ gap: 8, marginBottom: 18 }}><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/privacy.html")}><Text style={linkStyles.link}>Политика конфиденциальности →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/consent.html")}><Text style={linkStyles.link}>Согласие на обработку данных →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/offer.html")}><Text style={linkStyles.link}>Публичная оферта →</Text></Pressable><Pressable onPress={() => Linking.openURL("https://alterai.ru/legal/refund.html")}><Text style={linkStyles.link}>Оплата и возврат →</Text></Pressable></View><Pressable style={authStyles.legalRow} onPress={() => setLegalChecked((value) => !value)}><Text style={authStyles.check}>{legalChecked ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Я ознакомился с документами и согласен на обработку данных</Text></Pressable><Pressable style={[permissionStyles.primary, { opacity: legalChecked && !legalBusy ? 1 : 0.45, marginTop: 18 }]} onPress={acceptLegal} disabled={!legalChecked || legalBusy}><Text style={permissionStyles.primaryText}>{legalBusy ? "Сохраняем…" : "Принять и продолжить"}</Text></Pressable></View></View>
+    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · ДО НАЧАЛА РАБОТЫ</Text><Text style={permissionStyles.title}>Документы и согласие</Text><Text style={permissionStyles.body}>Перед началом работы ознакомься с политикой конфиденциальности, публичной офертой и согласием на обработку данных. Без подтверждения ALTER не запрашивает push и геолокацию и не запускает рабочий чат.</Text><View style={{ gap: 8, marginBottom: 18 }}><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/privacy.html")}><Text style={linkStyles.link}>Политика конфиденциальности →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/consent.html")}><Text style={linkStyles.link}>Согласие на обработку данных →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/offer.html")}><Text style={linkStyles.link}>Публичная оферта →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/refund.html")}><Text style={linkStyles.link}>Оплата и возврат →</Text></Pressable></View><Pressable style={authStyles.legalRow} onPress={() => setLegalChecked((value) => !value)}><Text style={authStyles.check}>{legalChecked ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Я ознакомился с документами и согласен на обработку данных</Text></Pressable><Pressable style={[permissionStyles.primary, { opacity: legalChecked && !legalBusy ? 1 : 0.45, marginTop: 18 }]} onPress={acceptLegal} disabled={!legalChecked || legalBusy}><Text style={permissionStyles.primaryText}>{legalBusy ? "Сохраняем…" : "Принять и продолжить"}</Text></Pressable></View></View>
   </Modal>
   <Modal visible={permissionOfferVisible && !legalVisible} transparent animationType="fade" onRequestClose={() => setPermissionOfferVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ЛИЧНЫЙ РЕЖИМ</Text><Text style={permissionStyles.title}>Понимать тебя точнее</Text><Text style={permissionStyles.body}>Разреши уведомления и примерную геолокацию — тогда ALTER сможет мягко напоминать о важном, ориентировать по погоде и лучше чувствовать контекст твоего дня.</Text><Pressable style={permissionStyles.primary} onPress={acceptPermissionOffer} disabled={permissionBusy}><Text style={permissionStyles.primaryText}>{permissionBusy ? "Настраиваем…" : "Разрешить для лучшего опыта"}</Text></Pressable><Pressable onPress={() => setPermissionOfferVisible(false)}><Text style={permissionStyles.later}>Позже</Text></Pressable></View></View>
@@ -918,6 +947,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Pressable style={premiumStyles.drawerContent} onPress={(event) => event.stopPropagation()}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={premiumStyles.drawerScroll}>
         <Animated.Text style={[premiumStyles.drawerLogo, { opacity: logoPulse }]}>ALTER</Animated.Text>
+        {menuError ? <Pressable style={premiumStyles.drawerError} onPress={() => setMenuError("")} accessibilityLabel="Закрыть сообщение об ошибке"><Text style={premiumStyles.drawerErrorText}>{menuError}</Text><Text style={premiumStyles.drawerErrorClose}>×</Text></Pressable> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "profile" ? null : "profile")}><Text style={premiumStyles.sectionLabel}>ПРОФИЛЬ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "profile" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "profile" ? <View style={premiumStyles.sectionBody}>
         <Pressable style={premiumStyles.accountRow} onPress={() => setEmailVisible((value) => !value)}><Text style={premiumStyles.menuEmail}>{emailVisible ? (account?.email || "Почта не указана") : maskedEmail}</Text><Text style={premiumStyles.menuActionArrow}>{emailVisible ? "⌃" : "⌄"}</Text></Pressable>
@@ -936,8 +966,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         {account?.subscription_expires_at ? <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · {new Date(account.subscription_expires_at).toLocaleDateString()}</Text> : <Text style={[styles.menuStatus, premiumStyles.menuStatus]}>ДОСТУП · НЕ АКТИВИРОВАН</Text>}
         {!account?.telegram_linked ? <Pressable style={premiumStyles.menuAction} onPress={openTelegramLink}><Text style={premiumStyles.menuActionText}>Подключить Telegram</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable> : null}
         <Pressable style={premiumStyles.menuAction} onPress={openCalendarConnect}><Text style={premiumStyles.menuActionText}>Подключить Google Calendar</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
-        {menuError ? <Text style={styles.error}>{menuError}</Text> : null}
-        </View> : null}
+         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "tools" ? null : "tools")}><Text style={premiumStyles.sectionLabel}>ИНСТРУМЕНТЫ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "tools" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "tools" ? <View style={premiumStyles.sectionBody}>
         <Pressable style={premiumStyles.menuAction} onPress={openMyDay}><Text style={premiumStyles.menuActionText}>Мой день</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
@@ -975,18 +1004,19 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ELEVENLABS</Text><Text style={permissionStyles.title}>Создать голос</Text><Text style={permissionStyles.body}>Опиши голос обычными словами. Например: спокойный низкий голос для подкаста.</Text><TextInput value={voiceDescription} onChangeText={setVoiceDescription} placeholder="Описание голоса" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><Pressable style={[permissionStyles.primary, { opacity: voiceDescription.trim() && !busy ? 1 : 0.45 }]} onPress={createVoice} disabled={!voiceDescription.trim() || busy}><Text style={permissionStyles.primaryText}>{busy ? "Создаём…" : "Создать голос"}</Text></Pressable><Pressable onPress={() => setVoiceCreatorVisible(false)}><Text style={permissionStyles.later}>Отмена</Text></Pressable></View></View>
   </Modal>
   <Modal visible={remindersVisible} animationType="slide" onRequestClose={() => { setRemindersVisible(false); setMenuVisible(true); }}>
-    <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setRemindersVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+    <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Напоминания</Text><Pressable style={premiumStyles.menuAction} onPress={() => { setRemindersVisible(false); setMenuVisible(true); }}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>{remindersError ? <Pressable style={styles.inlineError} onPress={() => setRemindersError("")} accessibilityLabel="Закрыть ошибку напоминаний"><Text style={styles.inlineErrorText}>{remindersError}</Text><Text style={styles.inlineErrorClose}>×</Text></Pressable> : null}
       <Text style={{ color: "#999", paddingHorizontal: 20, paddingBottom: 8, lineHeight: 21 }}>Скажи ALTER в основном чате, о чём и к какому времени напомнить. Можно голосом.</Text>
-      {reminders.length === 0 ? <Text style={styles.emptyMemory}>Активных напоминаний пока нет.</Text> : <FlatList data={reminders} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{item.text}</Text><Text style={styles.memoryKey}>{new Date(item.remind_at).toLocaleString()}</Text><Pressable style={premiumStyles.menuAction} onPress={async () => { await api.deleteReminder(token, item.id); setReminders((old) => old.filter((entry) => entry.id !== item.id)); }}><Text style={premiumStyles.menuActionText}>Удалить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable></View>} />}
+      {reminders.length === 0 ? <Text style={styles.emptyMemory}>Активных напоминаний пока нет.</Text> : <FlatList data={reminders} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{item.text}</Text><Text style={styles.memoryKey}>{new Date(item.remind_at).toLocaleString()}</Text><Pressable style={premiumStyles.menuAction} onPress={() => deleteReminder(item.id)}><Text style={premiumStyles.menuActionText}>Удалить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable></View>} />}
     </SafeAreaView>
   </Modal>
   <Modal visible={myDayVisible} animationType="slide" onRequestClose={() => setMyDayVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}>
       <View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Мой день</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMyDayVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+      {myDayError ? <Pressable style={styles.inlineError} onPress={() => setMyDayError("")} accessibilityLabel="Закрыть ошибку моего дня"><Text style={styles.inlineErrorText}>{myDayError}</Text><Text style={styles.inlineErrorClose}>×</Text></Pressable> : null}
       <Text style={styles.myDayIntro}>ALTER собрал важное из памяти, целей и напоминаний. Не всё сразу — только то, к чему стоит вернуться.</Text>
       {myDayLoading ? <ActivityIndicator color="#fff" /> : <ScrollView contentContainerStyle={styles.memoryList}>
         <Pressable style={styles.nextStepCard} onPress={() => { setMyDayVisible(false); send(myDayData?.next_step.prompt || "Помоги мне выбрать одно главное дело на сегодня"); }}><Text style={styles.nextStepKicker}>ЛУЧШИЙ СЛЕДУЮЩИЙ ШАГ</Text><Text style={styles.nextStepTitle}>{myDayData?.next_step.title || "Выбрать главное на сегодня"}</Text><Text style={styles.nextStepAction}>Открыть в чате →</Text></Pressable>
-        {myDayData?.focus.length ? myDayData.focus.map((item, index) => <View key={`${item.kind}-${item.title}-${index}`} style={styles.dayItem}><View style={styles.dayItemDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.memoryKey}>{item.detail}{item.at ? ` · ${new Date(item.at).toLocaleString()}` : ""}</Text>{item.kind === "open_loop" && item.loop_index !== undefined ? <Pressable onPress={async () => { await api.updateLoop(token, item.loop_index!, "done"); setMyDayData(await api.myDay(token)); }}><Text style={styles.loopDone}>✓ Закрыть тему</Text></Pressable> : null}</View></View>) : <Text style={styles.emptyMemory}>Пока ничего не нужно удерживать в фокусе. Напиши ALTER, что для тебя важно.</Text>}
+        {myDayData?.focus.length ? myDayData.focus.map((item, index) => <View key={`${item.kind}-${item.title}-${index}`} style={styles.dayItem}><View style={styles.dayItemDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.memoryKey}>{item.detail}{item.at ? ` · ${new Date(item.at).toLocaleString()}` : ""}</Text>{item.kind === "open_loop" && item.loop_index !== undefined ? <Pressable onPress={() => completeLoop(item.loop_index!)}><Text style={styles.loopDone}>✓ Закрыть тему</Text></Pressable> : null}</View></View>) : <Text style={styles.emptyMemory}>Пока ничего не нужно удерживать в фокусе. Напиши ALTER, что для тебя важно.</Text>}
       </ScrollView>}
     </SafeAreaView>
   </Modal>
@@ -997,7 +1027,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>История действий</Text><Pressable style={premiumStyles.menuAction} onPress={() => setActionLogVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><Text style={styles.myDayIntro}>Здесь видно, что ALTER сделала по твоим запросам.</Text>{privateMode ? <Text style={styles.emptyMemory}>Приватный режим включён — действия не сохраняются.</Text> : actionLog.length === 0 ? <Text style={styles.emptyMemory}>Пока действий нет.</Text> : <FlatList data={actionLog} keyExtractor={(item, index) => `${item.at}-${index}`} contentContainerStyle={styles.memoryList} renderItem={({ item }) => <View style={styles.memoryRow}><Text style={styles.memoryValue}>{actionLabel(item)} · {actionStatusLabel(item.status)}</Text><Text style={styles.memoryKey}>{new Date(item.at).toLocaleString()}</Text></View>} />}</SafeAreaView>
   </Modal>
   <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
-    <Pressable style={sheetStyles.backdrop} onPress={() => setMediaPickerVisible(false)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Добавить вложение</Text><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); takePhoto(); }}><Text style={sheetStyles.actionIcon}>◉</Text><Text style={sheetStyles.actionText}>Камера</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickMediaLibrary(); }}><Text style={sheetStyles.actionIcon}>▧</Text><Text style={sheetStyles.actionText}>Выбрать из медиатеки</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickFile(); }}><Text style={sheetStyles.actionIcon}>▤</Text><Text style={sheetStyles.actionText}>Файлы</Text></Pressable><Pressable style={sheetStyles.cancel} onPress={() => setMediaPickerVisible(false)}><Text style={sheetStyles.cancelText}>Отмена</Text></Pressable></Pressable></Pressable>
+    <Pressable style={sheetStyles.backdrop} onPress={() => !mediaPickerBusy && setMediaPickerVisible(false)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>{mediaPickerBusy ? "Открываем вложения…" : "Добавить вложение"}</Text><Pressable style={[sheetStyles.action, mediaPickerBusy && sheetStyles.disabled]} disabled={mediaPickerBusy} onPress={() => { setMediaPickerVisible(false); void takePhoto(); }}><Text style={sheetStyles.actionIcon}>◉</Text><Text style={sheetStyles.actionText}>Камера</Text></Pressable><Pressable style={[sheetStyles.action, mediaPickerBusy && sheetStyles.disabled]} disabled={mediaPickerBusy} onPress={() => { setMediaPickerVisible(false); void pickMediaLibrary(); }}><Text style={sheetStyles.actionIcon}>▧</Text><Text style={sheetStyles.actionText}>Выбрать из медиатеки</Text></Pressable><Pressable style={[sheetStyles.action, mediaPickerBusy && sheetStyles.disabled]} disabled={mediaPickerBusy} onPress={() => { setMediaPickerVisible(false); void pickFile(); }}><Text style={sheetStyles.actionIcon}>▤</Text><Text style={sheetStyles.actionText}>Файлы</Text></Pressable><Pressable style={sheetStyles.cancel} disabled={mediaPickerBusy} onPress={() => setMediaPickerVisible(false)}><Text style={sheetStyles.cancelText}>Отмена</Text></Pressable></Pressable></Pressable>
   </Modal>
   <Modal visible={documentEditVisible} transparent animationType="fade" onRequestClose={() => setDocumentEditVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ДОКУМЕНТ</Text><Text style={permissionStyles.title}>Изменить файл</Text><Text style={permissionStyles.body}>Опиши, что заменить, добавить или удалить. Для PDF нужен текстовый слой; сканы сначала распознай через OCR.</Text><TextInput value={documentInstruction} onChangeText={setDocumentInstruction} placeholder="Например: замени дату на 15 августа" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><Pressable style={[permissionStyles.primary, { opacity: documentInstruction.trim() && !busy ? 1 : 0.45 }]} onPress={editAttachedDocument} disabled={!documentInstruction.trim() || busy}><Text style={permissionStyles.primaryText}>{busy ? "Изменяю…" : "Изменить и сохранить"}</Text></Pressable><Pressable onPress={() => setDocumentEditVisible(false)}><Text style={permissionStyles.later}>Отмена</Text></Pressable></View></View>
@@ -1008,6 +1038,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={mediaJobsVisible} animationType="slide" onRequestClose={() => setMediaJobsVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Медиа-задачи</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMediaJobsVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}><TextInput value={mediaJobPrompt} onChangeText={setMediaJobPrompt} placeholder="Что создать? Например: кинематографичное видео города" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><View style={{ flexDirection: "row", gap: 8 }}><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("image")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "image" ? "✓ " : ""}Изображение</Text></Pressable><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("video")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "video" ? "✓ " : ""}Видео</Text></Pressable></View><Pressable style={[permissionStyles.primary, { opacity: mediaJobPrompt.trim() && !mediaJobsLoading ? 1 : 0.45, marginTop: 8 }]} onPress={createMediaJob} disabled={!mediaJobPrompt.trim() || mediaJobsLoading}><Text style={permissionStyles.primaryText}>Запустить задачу</Text></Pressable></View>
+      {mediaJobsError ? <Pressable style={styles.inlineError} onPress={() => setMediaJobsError("")} accessibilityLabel="Закрыть ошибку медиа-задач"><Text style={styles.inlineErrorText}>{mediaJobsError}</Text><Text style={styles.inlineErrorClose}>×</Text></Pressable> : null}
       {mediaJobsLoading ? <ActivityIndicator color="#fff" /> : mediaJobs.length === 0 ? <Text style={styles.emptyMemory}>Здесь появятся задачи генерации изображений и видео.</Text> : <ScrollView contentContainerStyle={styles.memoryList}>{mediaJobs.map((job) => <View key={job.id} style={styles.memoryRow}><Text style={styles.memoryKey}>{job.kind === "video" ? "Видео" : "Изображение"} · {job.status}</Text><Text style={styles.memoryValue}>{Math.round(job.progress || 0)}%</Text><View style={{ height: 4, backgroundColor: "#333", borderRadius: 4, marginVertical: 8 }}><View style={{ height: 4, width: `${Math.max(0, Math.min(100, job.progress || 0))}%`, backgroundColor: "#b8a6ff", borderRadius: 4 }} /></View>{job.error ? <Text style={styles.error}>{job.error}</Text> : null}{job.status === "completed" && job.data_base64 ? <Pressable style={premiumStyles.menuAction} onPress={() => downloadMediaJob(job)}><Text style={premiumStyles.menuActionText}>Скачать результат</Text><Text style={premiumStyles.menuActionArrow}>↓</Text></Pressable> : null}{job.status === "queued" || job.status === "running" ? <Pressable style={premiumStyles.menuAction} onPress={() => cancelMediaJob(job.id)}><Text style={premiumStyles.menuActionText}>Отменить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable> : null}</View>)}</ScrollView>}
     </SafeAreaView>
   </Modal>
@@ -1047,7 +1078,7 @@ export default function App() {
 }
 
 const styles: any = StyleSheet.create({
-  intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 }, faqScreen: { flex: 1, backgroundColor: "#050505" }, faqContent: { padding: 20, paddingBottom: 60 }, faqText: { color: "#f4f4f4", fontSize: 13, lineHeight: 20, letterSpacing: 0.2 },
+  intro: { flex: 1, backgroundColor: "#050505", alignItems: "center", justifyContent: "center" }, introLogo: { color: "#fff", fontSize: 54, fontWeight: "800", letterSpacing: 8, textAlign: "center" }, introCaption: { color: "#666", fontSize: 9, letterSpacing: 3, textAlign: "center", marginTop: 12 }, introLine: { height: 1, backgroundColor: "#fff", opacity: 0.8, marginTop: 38 }, container: { flex: 1, backgroundColor: "#050505", justifyContent: "center" }, card: { margin: 24, gap: 14 }, title: { color: "#fff", fontSize: 42, fontWeight: "800", textAlign: "center", letterSpacing: 2 }, subtitle: { color: "#999", textAlign: "center", marginBottom: 18 }, input: { backgroundColor: "#151515", color: "#fff", borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#292929" }, error: { color: "#ff9d9d" }, inlineError: { marginHorizontal: 12, marginBottom: 4, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#2b171b", borderWidth: 1, borderColor: "#6b3038", flexDirection: "row", alignItems: "center", gap: 8 }, inlineErrorText: { color: "#ffb4b4", flex: 1, fontSize: 12, lineHeight: 17 }, inlineErrorClose: { color: "#fff", fontSize: 20, lineHeight: 20 }, chat: { flex: 1 }, header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 }, headerTitle: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: 2 }, menuButton: { padding: 8 }, menuIcon: { color: "#fff", fontSize: 20, letterSpacing: 3 }, modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "flex-end", paddingTop: 56, paddingRight: 12 }, menuCard: { width: 290, backgroundColor: "#111", borderRadius: 18, padding: 20, gap: 12, borderWidth: 1, borderColor: "#2b2b2b" }, menuTitle: { color: "#fff", fontSize: 22, fontWeight: "700" }, menuEmail: { color: "#999" }, menuStatus: { color: "#ddd", fontSize: 14 }, menuDivider: { height: 1, backgroundColor: "#292929" }, messages: { padding: 16, gap: 10 }, bubble: { maxWidth: "86%", padding: 12, borderRadius: 16 }, userBubble: { alignSelf: "flex-end", backgroundColor: "#fff" }, userMessage: { color: "#050505" }, aiBubble: { alignSelf: "flex-start", backgroundColor: "#151515", borderWidth: 1, borderColor: "#292929" }, message: { color: "#fff", fontSize: 16, lineHeight: 23 }, cursor: { color: "#fff" }, composer: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12 }, composerInput: { flex: 1 }, memoryScreen: { flex: 1, backgroundColor: "#050505" }, memoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20 }, memoryTitle: { color: "#fff", fontSize: 30, fontWeight: "700" }, memoryList: { padding: 20, gap: 14 }, memoryRow: { borderBottomWidth: 1, borderBottomColor: "#292929", paddingBottom: 14, gap: 6 }, memoryKey: { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }, memoryValue: { color: "#eee", fontSize: 16, lineHeight: 23 }, emptyMemory: { color: "#999", padding: 24, fontSize: 16, lineHeight: 24 }, faqScreen: { flex: 1, backgroundColor: "#050505" }, faqContent: { padding: 20, paddingBottom: 60 }, faqText: { color: "#f4f4f4", fontSize: 13, lineHeight: 20, letterSpacing: 0.2 },
 });
 
 // Keep the composer surface pure black while retaining the native field size.
@@ -1162,7 +1193,7 @@ const sheetStyles = StyleSheet.create({
   sheet: { backgroundColor: "#151515", padding: 20, paddingBottom: 28, gap: 8, marginHorizontal: 10, marginBottom: 12, borderRadius: 22, borderWidth: 1, borderColor: "#343434", shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 18, elevation: 12 },
   handle: { alignSelf: "center", width: 42, height: 4, borderRadius: 2, backgroundColor: "#777", marginBottom: 8 },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
-  action: { minHeight: 54, paddingHorizontal: 14, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#222" },
+  action: { minHeight: 54, paddingHorizontal: 14, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#222" }, disabled: { opacity: 0.45 },
   actionIcon: { color: "#fff", width: 22, fontSize: 20, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#ffffff", fontWeight: "700" },
 });
@@ -1194,6 +1225,7 @@ const premiumStyles = StyleSheet.create({
   menuCard: { width: "84%", height: "100%", backgroundColor: "#000000" },
   drawerContent: { flex: 1, paddingHorizontal: 22, paddingTop: 58, paddingBottom: 18 },
   drawerLogo: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: 7, marginBottom: 2 },
+  drawerError: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, backgroundColor: "#2b171b", borderWidth: 1, borderColor: "#6b3038" }, drawerErrorText: { color: "#ffb4b4", flex: 1, fontSize: 12, lineHeight: 17 }, drawerErrorClose: { color: "#fff", fontSize: 19 },
   drawerScroll: { paddingBottom: 34, gap: 12 },
   sectionHeader: { minHeight: 38, borderRadius: 10, paddingHorizontal: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionChevron: { color: "#ffffff", fontSize: 18 }, sectionBody: { gap: 8 },
   usageRow: { minHeight: 42, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, usageText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
