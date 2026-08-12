@@ -15,6 +15,7 @@ import httpx
 import logging
 
 from config import config
+from utils.url_safety import validate_public_url
 
 
 class MediaGenerationError(ValueError):
@@ -189,6 +190,10 @@ async def _fal_result(model: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _download_artifact(url: str, filename: str) -> MediaArtifact:
+    try:
+        url = validate_public_url(url)
+    except ValueError as exc:
+        raise MediaGenerationError("provider returned an unsafe artifact URL") from exc
     try:
         async with httpx.AsyncClient(timeout=config.MEDIA_GENERATION_TIMEOUT_SECONDS) as client:
             response = await client.get(url)

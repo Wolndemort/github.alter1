@@ -102,6 +102,7 @@ async def test_fal_zero_balance_is_safe_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fal_image_returns_downloaded_artifact(monkeypatch):
+    monkeypatch.setattr("utils.url_safety.socket.getaddrinfo", lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 443))])
     monkeypatch.setattr(media_generation.config, "MEDIA_PROVIDER", "fal")
     monkeypatch.setattr(media_generation.config, "FAL_IMAGE_MODEL", "fal-ai/test-image")
     monkeypatch.setattr(media_generation.config, "MEDIA_GENERATION_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))

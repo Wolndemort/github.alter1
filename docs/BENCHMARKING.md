@@ -67,6 +67,10 @@ Production diagnostics expose `p50_ms`, `p95_ms`, and `p99_ms`. External files
 and web evidence are treated as untrusted data; instruction-like content is
 audited and never becomes an agent instruction automatically.
 
+Provider-returned media URLs pass an SSRF guard before download: credentials,
+localhost, private/link-local/reserved addresses and unresolved hosts are
+rejected.
+
 Run the non-secret configuration audit before deploy:
 
 ```powershell
