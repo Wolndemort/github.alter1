@@ -865,7 +865,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
+      if (!permission.granted) {
+        Alert.alert("Нужен доступ к фото", "Разреши ALTER доступ к медиатеке в настройках iPhone, чтобы выбрать изображение или видео.", [{ text: "Не сейчас", style: "cancel" }, { text: "Открыть настройки", onPress: () => { void Linking.openSettings(); } }]);
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
@@ -898,7 +901,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
+      if (!permission.granted) {
+        Alert.alert("Нужен доступ к камере", "Разреши ALTER доступ к камере в настройках iPhone.", [{ text: "Не сейчас", style: "cancel" }, { text: "Открыть настройки", onPress: () => { void Linking.openSettings(); } }]);
+        return;
+      }
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
       if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
     } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
