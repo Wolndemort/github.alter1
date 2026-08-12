@@ -74,10 +74,12 @@ def _default_tasks(goal: str) -> list[dict]:
 
 def start_agent(settings: dict | None, goal: str, *, horizon_minutes: int = 60,
                 tasks: list[Any] | None = None, constraints: dict | None = None,
+                autonomy_enabled: bool = False, check_interval_minutes: int = 60,
                 now: datetime | None = None) -> dict:
     """Create or replace the active agent with a bounded task graph."""
     start = _now(now)
     horizon = max(5, min(int(horizon_minutes), 60 * 24 * 90))
+    interval = max(5, min(int(check_interval_minutes), 7 * 24 * 60))
     goal = str(goal or "").strip()[:1000]
     raw_tasks = tasks if tasks is not None else _default_tasks(goal)
     normalized = [_task(item, index, start=start, horizon=horizon) for index, item in enumerate(raw_tasks[:MAX_TASKS])]
@@ -91,6 +93,9 @@ def start_agent(settings: dict | None, goal: str, *, horizon_minutes: int = 60,
         "horizon_minutes": horizon,
         "status": "active",
         "constraints": dict(constraints or {}),
+        "autonomy_enabled": bool(autonomy_enabled),
+        "check_interval_minutes": interval,
+        "next_run_at": _iso(start) if autonomy_enabled else "",
         "tasks": normalized,
         "events": [{"type": "started", "at": _iso(start)}],
         "started_at": _iso(start),
@@ -182,7 +187,12 @@ def replan_agent(settings: dict | None, tasks: list[Any], reason: str = "", *, n
     if not state:
         return result
     existing_done = {item.get("id"): item for item in state.get("tasks", []) if item.get("status") in {"done", "skipped"}}
-    rebuilt = start_agent({}, state.get("goal", ""), horizon_minutes=state.get("horizon_minutes", 60), tasks=tasks, constraints=state.get("constraints"), now=now)[AGENT_KEY]
+    rebuilt = start_agent(
+        {}, state.get("goal", ""), horizon_minutes=state.get("horizon_minutes", 60),
+        tasks=tasks, constraints=state.get("constraints"),
+        autonomy_enabled=bool(state.get("autonomy_enabled")),
+        check_interval_minutes=int(state.get("check_interval_minutes", 60)), now=now,
+    )[AGENT_KEY]
     for item in rebuilt["tasks"]:
         previous = existing_done.get(item["id"])
         if previous:

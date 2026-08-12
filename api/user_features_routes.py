@@ -189,13 +189,20 @@ async def agent_start_route(request: web.Request) -> web.Response:
     constraints = payload.get("constraints") or {}
     if not isinstance(constraints, dict):
         raise web.HTTPBadRequest(text="constraints must be an object")
+    autonomy_enabled = payload.get("autonomy_enabled", False)
+    if not isinstance(autonomy_enabled, bool):
+        raise web.HTTPBadRequest(text="autonomy_enabled must be boolean")
+    try:
+        check_interval = int(payload.get("check_interval_minutes", 60))
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(text="check_interval_minutes must be an integer")
     async with async_session() as session:
         user = await session.get(User, user_id)
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         if (user.tech_stack or {}).get("private_mode") is True:
             raise web.HTTPConflict(text="agent persistence is disabled in private mode")
-        user.tech_stack = start_agent(user.tech_stack, goal, horizon_minutes=horizon, tasks=tasks, constraints=constraints)
+        user.tech_stack = start_agent(user.tech_stack, goal, horizon_minutes=horizon, tasks=tasks, constraints=constraints, autonomy_enabled=autonomy_enabled, check_interval_minutes=check_interval)
         await session.commit()
         return web.json_response({"agent": agent_view(user.tech_stack)}, status=201)
 

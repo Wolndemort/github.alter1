@@ -22,6 +22,7 @@ from utils.vector_memory import purge_expired
 from utils.memory_store import purge_expired_memory
 from utils.memory_quality import sanitize_summary
 from utils.push_notifications import send_push
+from services.agent_executor import model_agent_executor, run_agent_steps
 
 
 def telegram_chat_id(user: User) -> int | None:
@@ -364,6 +365,64 @@ async def monitor_checkins(bot: Bot):
         except Exception:
             logging.exception("Gentle check-in monitor failed")
         await asyncio.sleep(300)
+
+
+def _agent_due(state: dict, now: datetime) -> bool:
+    if not state.get("autonomy_enabled") or state.get("status") != "active":
+        return False
+    try:
+        due = datetime.fromisoformat(str(state.get("next_run_at") or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return True
+    if due.tzinfo is None:
+        due = due.replace(tzinfo=timezone.utc)
+    return due <= now
+
+
+async def process_autonomous_agent(user: User, bot: Bot | None = None, *, now: datetime | None = None) -> bool:
+    """Run at most one opted-in agent step and schedule the next tick."""
+    current = dict(user.tech_stack or {})
+    state = dict(current.get("active_agent") or {})
+    moment = now or datetime.now(timezone.utc)
+    if not _agent_due(state, moment):
+        return False
+    current = await run_agent_steps(current, model_agent_executor, max_steps=1)
+    state = dict(current.get("active_agent") or {})
+    if state.get("status") == "active":
+        interval = max(5, min(int(state.get("check_interval_minutes", 60)), 7 * 24 * 60))
+        state["next_run_at"] = (moment + timedelta(minutes=interval)).isoformat()
+        current["active_agent"] = state
+    user.tech_stack = current
+    flag_modified(user, "tech_stack")
+    status = state.get("status")
+    if bot is not None and status in {"blocked", "completed"} and not is_quiet_time(user, moment):
+        if status == "completed":
+            message = f"Агент завершил план: {state.get('goal', '')[:180]}"
+        else:
+            message = f"Агент остановился на блокере: {state.get('goal', '')[:180]}. Открой план, чтобы перепланировать."
+        chat_id = telegram_chat_id(user)
+        if chat_id is not None:
+            await bot.send_message(chat_id, message)
+        await send_push(user, "ALTER · Агент", message)
+    return True
+
+
+async def monitor_agents(bot: Bot):
+    """Tick opted-in agents without touching ordinary users or conversations."""
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(User).options(selectinload(User.web_account)).with_for_update(skip_locked=True))
+                for user in result.scalars().all():
+                    try:
+                        await process_autonomous_agent(user, bot, now=now)
+                    except Exception:
+                        logging.exception("Autonomous agent tick failed user=%s", user.id)
+                await db.commit()
+        except Exception:
+            logging.exception("Agent monitor failed")
+        await asyncio.sleep(60)
 
 
 async def monitor_subscription_renewals(bot: Bot):

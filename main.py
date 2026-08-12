@@ -17,7 +17,7 @@ from utils.billing import has_owner_access, is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
 from utils.runtime import check_dependencies
-from utils.tasks import monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
+from utils.tasks import monitor_agents, monitor_checkins, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
 from api.auth_routes import setup_auth_routes
 from api.chat_routes import setup_chat_routes
@@ -108,6 +108,7 @@ async def main():
     asyncio.create_task(monitor_memory_cleanup())
     asyncio.create_task(monitor_reminders(bot))
     asyncio.create_task(monitor_checkins(bot))
+    asyncio.create_task(monitor_agents(bot))
     asyncio.create_task(monitor_subscription_renewals(bot))
     asyncio.create_task(monitor_subscription_expiry_reminders(bot))
     try:
