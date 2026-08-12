@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import base64
+import re
 
 from aiogram import F, Router, types
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,7 +22,7 @@ from utils.audio_search import download_audio, remove_audio
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
-from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer
+from utils.reminders import extract_reminder_text, is_reminder_request, looks_like_time_answer, parse_reminder, parse_time_answer
 from utils.voice import transcribe_voice
 from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.tts import synthesize_speech
@@ -883,6 +884,27 @@ def recent_context(messages: list, limit: int = 40, max_chars: int = 12000) -> l
     return list(reversed(selected))
 
 
+async def contextualize_reminder_text(text: str, user_id: int, db_session: AsyncSession) -> str:
+    """Resolve vague references such as «напомни про это» from the dialogue."""
+    value = (text or "").strip()
+    if not re.search(r"\b(?:\u044d\u0442\u043e|\u0442\u043e|\u044d\u0442\u043e\u043c|\u044d\u0442\u043e\u0442|\u044d\u0442\u0430|\u044d\u0442\u043e\u0433\u043e)\b", value.casefold()):
+        return value
+
+    result = await db_session.execute(
+        select(Session).where(Session.user_id == user_id)
+        .order_by(Session.started_at.desc()).limit(1)
+    )
+    session = result.scalar_one_or_none()
+    previous = [
+        str(item.get("content", "")).strip()
+        for item in (session.raw_messages or [] if session else [])
+        if isinstance(item, dict) and item.get("role") == "user" and item.get("content")
+    ]
+    if not previous:
+        return value
+    return f"{value} (контекст разговора: {previous[-1][:400]})"
+
+
 async def get_or_create_user(message: types.Message, db_session: AsyncSession) -> User:
     user = await resolve_telegram_user(db_session, message.from_user.id)
     if user is None:
@@ -1416,14 +1438,17 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     pending = user.pending_reminder or {}
     if pending:
         remind_at = parse_time_answer(message.text)
-        if remind_at:
+        if remind_at and looks_like_time_answer(message.text):
             db_session.add(Reminder(user_id=user.id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=pending["text"][:500]))
             user.pending_reminder = {}
             await db_session.commit()
             await message.answer(f"Хорошо, напомню {remind_at.strftime('%d.%m в %H:%M')}: {pending['text']}")
             return
-        await message.answer(f"Я жду время для напоминания про «{pending['text']}». Например: 18:30 или через 2 часа.")
-        return
+        # An unrelated message must continue through the normal chat flow.
+        # Keep the pending state so the user can answer with a time later.
+        if looks_like_time_answer(message.text):
+            await message.answer(f"Не смог разобрать время. Напиши, например: 18:30 или через 2 часа.")
+            return
 
     parsed_reminder = parse_reminder(message.text)
     if parsed_reminder:
@@ -1438,6 +1463,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         if not reminder_text:
             await message.answer("Что именно напомнить и во сколько?")
             return
+        reminder_text = await contextualize_reminder_text(reminder_text, user.id, db_session)
         user.pending_reminder = {"text": reminder_text[:500]}
         await db_session.commit()
         await message.answer(f"Хорошо. Во сколько напомнить про «{reminder_text}»?")

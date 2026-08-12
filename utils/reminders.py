@@ -42,11 +42,46 @@ def parse_time_answer(text: str) -> datetime | None:
         if hour <= 23 and minute <= 59:
             result = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             return result if result > now else result + timedelta(days=1)
+    match = re.search(r"(завтра\s+)?в\s+(\d{1,2})(?!\d|\s*:\d{2})", text.casefold())
+    if match:
+        hour = int(match.group(2))
+        if hour <= 23:
+            result = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if match.group(1):
+                result += timedelta(days=1)
+            return result if result > now else result + timedelta(days=1)
+    # Natural-language answers: «в девять», «завтра в 10».
+    match = re.search(r"(?:завтра\s+)?в\s+(один|два|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать)(?:\s+час(?:а|ов)?)?", text.casefold())
+    if match:
+        hours = {
+            "один": 1, "два": 2, "три": 3, "четыре": 4, "пять": 5,
+            "шесть": 6, "семь": 7, "восемь": 8, "девять": 9,
+            "десять": 10, "одиннадцать": 11, "двенадцать": 12,
+        }
+        result = now.replace(hour=hours[match.group(1)], minute=0, second=0, microsecond=0)
+        if "завтра" in match.group(0):
+            result += timedelta(days=1)
+        return result if result > now else result + timedelta(days=1)
     match = re.search(r"через\s+(\d+)\s+(минут(?:у|ы)?|час(?:а|ов)?)", text.lower())
     if match:
         amount = int(match.group(1))
         return now + (timedelta(minutes=amount) if match.group(2).startswith("минут") else timedelta(hours=amount))
     return None
+
+
+def looks_like_time_answer(text: str) -> bool:
+    """Return whether a message is intended to answer a reminder time.
+
+    This deliberately stays narrower than ``parse_time_answer``: a pending
+    reminder must not hijack an unrelated message in the user's conversation.
+    """
+    value = (text or "").casefold()
+    return bool(
+        re.search(r"\b\d{1,2}:\d{2}\b", value)
+        or re.search(r"\b(?:через|в|завтра|сегодня)\s+\d{1,2}\b", value)
+        or re.search(r"\b(?:через)\s+\d+\s+(?:минут\w*|час\w*)\b", value)
+        or re.search(r"\b(?:в|через)\s+(?:один|два|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать)\b", value)
+    )
 
 
 # UTF-8 Russian compatibility layer. The legacy parser above is retained for

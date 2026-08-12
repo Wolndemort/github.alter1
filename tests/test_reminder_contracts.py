@@ -4,7 +4,7 @@ from pathlib import Path
 from data.models import Reminder, User
 from utils import checkins
 from utils.checkins import QUESTIONS, contextual_checkin, random_checkin
-from utils.reminders import parse_reminder, parse_time_answer
+from utils.reminders import looks_like_time_answer, parse_reminder, parse_time_answer
 
 
 def load_migration(name):
@@ -59,6 +59,15 @@ def test_reminder_parser_supports_day_and_relative_time():
 
 def test_time_answer_rejects_invalid_time():
     assert parse_time_answer("в 25:90") is None
+
+
+def test_time_answer_supports_natural_language_and_does_not_hijack_chat():
+    assert parse_time_answer("в девять") is not None
+    tomorrow = parse_time_answer("завтра в 10")
+    assert tomorrow is not None
+    assert tomorrow.hour == 10
+    assert looks_like_time_answer("через 2 часа")
+    assert not looks_like_time_answer("да, кстати расскажи про проект")
 
 
 def test_migrations_form_current_linear_chain():
