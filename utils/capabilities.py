@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from utils.capability_catalog import capability_catalog_text
+
 
 CAPABILITIES_REPLY = """Я умею:
 
@@ -81,7 +83,7 @@ def is_capabilities_request(text: str) -> bool:
 
 
 def capabilities_reply() -> str:
-    return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE
+    return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE + "\n\nПолный технический каталог:\n" + capability_catalog_text()
 
 
 # Canonical readable inventory for the public UI and model prompt.
@@ -104,3 +106,4 @@ Dubbing сейчас не подключены, Music Generation сейчас н
 """
 CAPABILITY_KNOWLEDGE += "\nАктуальная мультимодальность: вложение классифицируется как документ, изображение, видео или аудио; документ получает профиль и bounded-контекст для агента, изображение — OCR или vision fallback."
 CAPABILITIES_PROMPT = "Точный список доступных возможностей ALTER:\n" + CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE
+CAPABILITIES_PROMPT += "\n\nПолный технический каталог:\n" + capability_catalog_text()

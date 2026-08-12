@@ -127,3 +127,6 @@ layout-aware правок, сравнивает версии документо�
 \n+Map tools: `map_geocode`, `map_search_organizations`, `map_route`, and
 `map_distance`. Organization and route calls use dedicated keys and return a
 controlled unavailable result when a provider limit is exhausted.
+\n+Полный canonical inventory хранится в `utils/capability_catalog.py` и
+используется capability-ответом ALTER, поэтому UI, документация и модель могут
+сверяться с одним техническим источником.
