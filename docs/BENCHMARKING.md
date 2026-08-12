@@ -77,6 +77,12 @@ Run the non-secret configuration audit before deploy:
 py -3 scripts/config-audit.py
 ```
 
+Run the deterministic quality benchmark without provider calls:
+
+```powershell
+py -3 scripts/quality-benchmark.py
+```
+
 Backup dry-run/verification uses custom PostgreSQL dumps and `pg_restore --list`.
 The Windows equivalent is `scripts/backup-db.ps1`; it does not upload or delete
 remote data by itself.
