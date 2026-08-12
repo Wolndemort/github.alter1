@@ -86,7 +86,7 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
     ]).start();
     const timer = setTimeout(() => {
       Animated.timing(opacity, { toValue: 0, duration: 420, useNativeDriver: true }).start(() => onFinished());
-    }, 3200);
+    }, 1800);
     return () => { clearTimeout(timer); if (sound) { sound.pause(); sound.remove(); } };
   }, [line, opacity, onFinished, scale]);
 
@@ -367,7 +367,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [idle, setIdle] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" } | null>(null);
+  const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" | "document"; filename?: string; mimeType?: string } | null>(null);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "searching" | "planning" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
@@ -589,7 +589,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
           console.warn("ALTER media upload", { type: currentAttachment.type, bytes: info.exists && !info.isDirectory ? info.size ?? null : null });
         } catch (error) { console.warn("ALTER media metadata unavailable", { type: currentAttachment.type, error: String(error) }); }
       }
-      const result = currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
+      const result = currentAttachment?.type === "document" ? await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentAttachment.uri, currentAttachment.filename || "alter-document", currentAttachment.mimeType) : currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
       if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId);
     }
     catch (err) { console.warn("ALTER request failed", { type: currentAttachment?.type ?? "text", status: (err as { status?: number })?.status ?? null, name: (err as { name?: string })?.name ?? null, message: err instanceof Error ? err.message : String(err) }); if ((err as { name?: string })?.name === "AbortError") setItems((old) => old.filter((item) => item.id !== pendingId)); else { if (text) setMessage((current) => current || text); setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: userFacingError(err) } : item)); } }
@@ -752,11 +752,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     }
   };
   const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*"], copyToCacheDirectory: true });
+    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       const mime = asset.mimeType || "";
-      setAttachment({ uri: asset.uri, type: mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "image" });
+      const mediaType = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "document";
+      setAttachment({ uri: asset.uri, type: mediaType, filename: asset.name, mimeType: mime });
     }
   };
   const pickMedia = () => setMediaPickerVisible(true);
@@ -796,7 +797,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "searching" ? "Ищу актуальные данные…" : activity === "planning" ? "Планирую шаги…" : activity === "analyzing" ? "Анализирую…" : "Генерирую ответ…"}</Text></View> : null}
     {!attachment ? (() => { const latestImage = [...items].reverse().find((item) => item.mediaUri && item.mediaMime?.startsWith("image/")); return latestImage ? <Pressable onPress={() => editMediaNow(latestImage)} disabled={busy} accessibilityLabel="Редактировать последнее изображение"><Text style={mediaStyles.generateAction}>✏️ Редактировать последнее изображение</Text></Pressable> : null; })() : null}
     {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
-    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : "Фото прикреплено"}</Text>{attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
+    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : attachment.type === "document" ? `Документ: ${attachment.filename || "файл"}` : "Фото прикреплено"}</Text>{attachment.type !== "audio" && attachment.type !== "document" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={() => send()} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={mediaStyles.sendButton} onPress={() => send()} disabled={busy} accessibilityLabel="Отправить сообщение"><Text style={mediaStyles.sendIcon}>{busy ? "…" : "↑"}</Text></Pressable></View>
     {busy && !attachment ? <Pressable style={styles.stopResponseButton} onPress={stopRequest} accessibilityLabel="Остановить ответ"><Text style={styles.stopResponseText}>■ Остановить ответ</Text></Pressable> : null}
     {!busy && items.some((item) => item.role === "user") ? <Pressable style={styles.editLastButton} onPress={() => { const last = [...items].reverse().find((item) => item.role === "user"); if (last) { setMessage(last.text); resetIdle(); } }} accessibilityLabel="Редактировать последнее сообщение"><Text style={styles.editLastText}>Изменить последнее сообщение</Text></Pressable> : null}

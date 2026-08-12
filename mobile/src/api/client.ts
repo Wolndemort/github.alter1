@@ -178,6 +178,15 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<ChatResponse>;
   }
+  async sendDocument(token: string, prompt: string, uri: string, filename: string, mimeType?: string) {
+    const form = new FormData();
+    form.append("prompt", prompt);
+    form.append("agent", "true");
+    form.append("file", { uri, type: mimeType || "application/octet-stream", name: filename } as unknown as Blob);
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/document`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.json() as Promise<ChatResponse & { document?: { filename: string; media_type: string; chars: number; pages?: number | null } }>;
+  }
 
   async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video", options: Record<string, unknown> = {}) {
     const form = new FormData();
