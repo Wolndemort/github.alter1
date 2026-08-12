@@ -50,7 +50,7 @@ from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
-from services.document_ingestion import extract_document, document_profile
+from services.document_ingestion import edit_document, extract_document, document_profile
 import logging
 
 router = Router()
@@ -649,8 +649,19 @@ async def handle_document(message: types.Message, db_session: AsyncSession):
         await message.bot.send_chat_action(message.chat.id, "typing")
         buffer = await message.bot.download(document, destination=BytesIO())
         filename = document.file_name or "document"
-        parsed = extract_document(filename, buffer.getvalue(), document.mime_type or "")
         prompt = message.caption or "Прочитай документ, выдели главное и предложи следующие шаги."
+        raw_data = buffer.getvalue()
+        # Explicit Telegram export flow: `/edit <instruction>` returns the
+        # edited file instead of only describing the requested changes.
+        if prompt.strip().casefold().startswith("/edit "):
+            instruction = prompt.strip()[6:].strip()
+            if not instruction:
+                await message.answer("После /edit напиши, что изменить в документе.")
+                return
+            artifact = edit_document(filename, raw_data, instruction, document.mime_type or "")
+            await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — отправляю изменённый документ.")
+            return
+        parsed = extract_document(filename, raw_data, document.mime_type or "")
         context = f"\n\nDOCUMENT: {parsed.filename}\n<document_text>\n{parsed.text}\n</document_text>\nDOCUMENT_PROFILE: {document_profile(parsed)}"
         reply = await generate_reply([{"role": "user", "content": prompt + context}], memory=dict(user.memory or {}))
         await message.answer(sanitize_public_reply(reply))
