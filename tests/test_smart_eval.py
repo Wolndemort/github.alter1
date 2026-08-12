@@ -1,7 +1,16 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from utils import ap_logic
+
+
+@pytest.fixture(autouse=True)
+def isolated_model_config(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_FREE_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_FREE_MODELS_ENABLED", True)
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_PAID_FIRST", False)
 from utils.helpers import merge_memory
 from utils.intent import is_web_request, should_search_web
 from utils.quality import assess_reply

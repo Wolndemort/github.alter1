@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 
 from data.models import User
 from utils.billing import credits_limit
@@ -6,6 +7,15 @@ from utils.quota import charge_user_id_credits
 from utils.billing import is_owner
 from config import config
 from utils.redis_store import charge_credits, credits_used, refund_credits
+
+
+@pytest.fixture(autouse=True)
+def isolated_quota_config(monkeypatch):
+    monkeypatch.setattr(config, "PERSONAL_MONTHLY_CREDITS", 1000)
+    monkeypatch.setattr(config, "EGO_MONTHLY_CREDITS", 3500)
+    from utils import billing
+    monkeypatch.setitem(billing.PLANS["personal"], "credits", 1000)
+    monkeypatch.setitem(billing.PLANS["ego"], "credits", 3500)
 
 
 class FakeRedis:

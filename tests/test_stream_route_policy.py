@@ -1,4 +1,17 @@
+import pytest
+
 from utils import ap_logic
+
+
+@pytest.fixture(autouse=True)
+def isolated_model_config(monkeypatch):
+    values = {
+        "OPENROUTER_FREE_MODEL": "nvidia/nemotron-3-super-120b-a12b:free",
+        "OPENROUTER_FREE_MODEL_2": "openai/gpt-oss-20b:free",
+        "OPENROUTER_FREE_MODELS_ENABLED": True,
+        "OPENROUTER_PAID_FIRST": False,
+    }
+    for key, value in values.items(): monkeypatch.setattr(ap_logic.config, key, value)
 
 
 def test_short_stream_uses_responsive_model_before_heavy_model():
