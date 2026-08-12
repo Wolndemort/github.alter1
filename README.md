@@ -1,5 +1,11 @@
 # ALTER
 
+## Current verified status
+
+The full audit is documented in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md). Current checks: backend `476 passed`, mobile `23/23`, TypeScript clean, quality benchmark `7/7`. Latest 15-run production sample: text p50 `1814 ms` / p95 `2444 ms`; voice p50 `443 ms` / p95 `1649 ms`.
+
+Payment and quota rules, refunds, idempotency and unit economics are documented in [docs/QUOTAS_AND_UNIT_ECONOMICS.md](docs/QUOTAS_AND_UNIT_ECONOMICS.md).
+
 Полная инструкция по API, маршрутам и текстовым/голосовым командам: [docs/USER_API_GUIDE.md](docs/USER_API_GUIDE.md).
 
 Универсальный durable-agent, его executor, автономный scheduler, tool registry

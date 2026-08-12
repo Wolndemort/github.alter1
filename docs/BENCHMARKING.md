@@ -90,6 +90,21 @@ Backup dry-run/verification uses custom PostgreSQL dumps and `pg_restore --list`
 The Windows equivalent is `scripts/backup-db.ps1`; it does not upload or delete
 remote data by itself.
 
+## Current verified baseline (2026-08-12)
+
+The latest 15-run production sample used 45 text requests and 30 voice requests:
+
+```powershell
+$env:AUTH_TOKEN = (Get-Content .audit-token -Raw).Trim()
+py scripts/collect_speed_benchmark.py --base-url https://api.alterai.ru --output speed_text_15.json --runs 15 --text-only --confirm-cost
+py scripts/collect_speed_benchmark.py --base-url https://api.alterai.ru --output speed_voice_15.json --runs 15 --voice-only --confirm-cost
+Remove-Item Env:AUTH_TOKEN
+```
+
+Observed result: text `45/45`, p50 `1814 ms`, p95 `2444 ms`; voice `30/30`, p50 `443 ms`, p95 `1649 ms`. These are observed samples, not an SLA.
+
+The current local regression baseline is backend `476 passed`, mobile `23/23`, TypeScript clean, and deterministic quality benchmark `7/7`. See `FINAL_AUDIT.md` and `QUOTAS_AND_UNIT_ECONOMICS.md` for the complete audit and payment rules.
+
 ### What p50 and p95 mean
 
 The `p` means percentile. `p50` is the median: half of requests completed
