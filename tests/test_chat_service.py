@@ -89,6 +89,16 @@ async def test_chat_service_rejects_missing_user():
 
 
 @pytest.mark.asyncio
+async def test_chat_service_completes_pending_reminder_without_hijacking_unrelated_text():
+    user = User(id=21, first_name="Adam", memory={}, tech_stack={}, pending_reminder={"text": "проверить отчёт"})
+    db = Db(user, active=None)
+    result = await ChatService().reply(db, 21, "завтра в 10:00")
+    assert result.reply.startswith("Записал. Напомню")
+    assert user.pending_reminder == {}
+    assert any(getattr(item, "text", "") == "проверить отчёт" for item in db.added)
+
+
+@pytest.mark.asyncio
 async def test_chat_service_routes_weather_through_shared_backend(monkeypatch):
     user = User(id=8, first_name="Weather", memory={}, tech_stack={})
     db = Db(user, active=None, events=[])

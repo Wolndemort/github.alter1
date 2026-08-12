@@ -20,7 +20,7 @@ from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
-from utils.reminders import is_reminder_request, parse_reminder, extract_reminder_text
+from utils.reminders import is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, extract_reminder_text
 from utils.intent import conversation_mode, explicit_memory_fact, should_recall_context
 from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
@@ -134,6 +134,18 @@ class ChatService:
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
+        pending_reminder = dict(user.pending_reminder or {})
+        if pending_reminder and looks_like_time_answer(text):
+            remind_at = parse_time_answer(text)
+            if remind_at and not private_mode:
+                reminder_text = str(pending_reminder.get("text") or "").strip()
+                if reminder_text:
+                    db.add(Reminder(user_id=user.id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
+                    user.pending_reminder = {}
+                    reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+                    _append(session, "assistant", reply)
+                    await db.commit()
+                    return ChatResult(reply=reply, session_id=session.id or 0)
         if is_capabilities_request(text):
             reply = capabilities_reply()
             _append(session, "assistant", reply)
@@ -205,8 +217,11 @@ class ChatService:
                 reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
         elif is_reminder_request(text):
             reminder_text = extract_reminder_text(text)
-            reply = ("Что именно напомнить и во сколько?" if not reminder_text else
-                     f"Укажи время для напоминания про «{reminder_text}». Например: завтра в 10:00 или через 2 часа.")
+            if reminder_text:
+                user.pending_reminder = {"text": reminder_text[:500]}
+                reply = f"Укажи время для напоминания про «{reminder_text}». Например: завтра в 10:00 или через 2 часа."
+            else:
+                reply = "Что именно напомнить и во сколько?"
         else:
             reply = None
 
@@ -260,6 +275,20 @@ class ChatService:
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
+        pending_reminder = dict(user.pending_reminder or {})
+        if pending_reminder and looks_like_time_answer(text):
+            remind_at = parse_time_answer(text)
+            if remind_at and not private_mode:
+                reminder_text = str(pending_reminder.get("text") or "").strip()
+                if reminder_text:
+                    db.add(Reminder(user_id=user.id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
+                    user.pending_reminder = {}
+                    reply = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+                    _append(session, "assistant", reply)
+                    await db.commit()
+                    for index in range(0, len(reply), 96):
+                        yield reply[index:index + 96]
+                    return
         parsed_reminder = parse_reminder(text)
         if parsed_reminder or is_reminder_request(text):
             if parsed_reminder and not private_mode:
@@ -271,8 +300,11 @@ class ChatService:
                 reply = "В приватном режиме я не сохраняю напоминания. Выключи его, если нужно поставить напоминание."
             else:
                 reminder_text = extract_reminder_text(text)
-                reply = ("Что именно напомнить и когда?" if not reminder_text else
-                         f"На какое время поставить напоминание про «{reminder_text}»?")
+                if reminder_text:
+                    user.pending_reminder = {"text": reminder_text[:500]}
+                    reply = f"На какое время поставить напоминание про «{reminder_text}»?"
+                else:
+                    reply = "Что именно напомнить и когда?"
             _append(session, "assistant", reply)
             await db.commit()
             for index in range(0, len(reply), 96):

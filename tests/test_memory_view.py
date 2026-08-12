@@ -1,4 +1,15 @@
-from utils.memory_view import format_memory, memory_sections
+from utils.memory_view import format_memory, memory_audit, memory_sections
+
+
+def test_memory_projection_hides_nested_internal_fields():
+    sections = memory_sections({"identity": {"name": "Ada", "_meta": {"name": {"confidence": 0.9}}, "source": "internal"}})
+    assert len(sections) == 1
+    assert sections[0]["items"] == [{"label": "Имя", "value": "Ada"}]
+
+
+def test_memory_audit_keeps_raw_keys_for_confirm_api():
+    audit = memory_audit({"_meta": {"skills_career": {"job": {"confirmed": False, "history": []}}}})
+    assert audit == [{"category": "skills_career", "key": "job", "confirmed": False, "first_seen": None, "last_seen": None, "replacements": 0}]
 
 
 def test_memory_projection_hides_storage_keys_and_uses_human_labels():

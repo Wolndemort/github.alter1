@@ -24,7 +24,7 @@ def _label(key):
 
 def _value(value):
     if isinstance(value, Mapping):
-        return "; ".join(f"{_label(k)}: {_value(v)}" for k, v in value.items() if v not in (None, ""))
+        return "; ".join(f"{_label(k)}: {_value(v)}" for k, v in value.items() if str(k).casefold() not in _HIDDEN_KEYS and not str(k).startswith("_") and v not in (None, ""))
     if isinstance(value, list):
         return ", ".join(_value(item) for item in value if item not in (None, ""))
     return str(value)
@@ -37,7 +37,7 @@ def memory_sections(memory, extra_sections=None):
             continue
         if not facts:
             continue
-        items = ([{"label": _label(k), "value": _value(v)} for k, v in facts.items() if str(k).casefold() not in _HIDDEN_KEYS and v not in (None, "")] if isinstance(facts, Mapping)
+        items = ([{"label": _label(k), "value": _value(v)} for k, v in facts.items() if str(k).casefold() not in _HIDDEN_KEYS and not str(k).startswith("_") and v not in (None, "")] if isinstance(facts, Mapping)
                  else [{"label": "", "value": _value(v)} for v in facts if v not in (None, "")] if isinstance(facts, list)
                  else [{"label": "", "value": _value(facts)}])
         if items:
@@ -51,6 +51,7 @@ def memory_sections(memory, extra_sections=None):
             "items": [
                 {**item, "label": _label(item.get("label")) if item.get("label") else ""}
                 for item in section.get("items", [])
+                if isinstance(item, Mapping) and str(item.get("label", "")).casefold() not in _HIDDEN_KEYS and not str(item.get("label", "")).startswith("_")
             ],
         })
     return sections + extras
@@ -79,8 +80,11 @@ def memory_audit(memory: dict | None) -> list[dict]:
             if not isinstance(entry, Mapping):
                 continue
             result.append({
-                "category": CATEGORY_LABELS.get(str(category), _label(category)),
-                "key": _label(key),
+                # Keep raw identifiers for confirm API calls. The UI owns
+                # presentation labels and must never send translated text
+                # back as storage keys.
+                "category": str(category),
+                "key": str(key),
                 "confirmed": bool(entry.get("confirmed", False)),
                 "first_seen": entry.get("first_seen"),
                 "last_seen": entry.get("last_seen"),
