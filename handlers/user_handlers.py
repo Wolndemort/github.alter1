@@ -637,6 +637,37 @@ def media_generation_requested(prompt: str) -> bool:
     return first_word in command_words
 
 
+@router.message(lambda message: message.audio is not None)
+async def handle_audio_file(message: types.Message, db_session: AsyncSession):
+    """Process Telegram audio files with the same actions as voice messages."""
+    audio = message.audio
+    if audio.file_size and audio.file_size > 25 * 1024 * 1024:
+        await message.answer("Аудиофайл слишком большой. Пришли файл до 25 МБ.")
+        return
+    try:
+        user = await get_or_create_user(message, db_session)
+        buffer = await message.bot.download(audio, destination=BytesIO())
+        data = buffer.getvalue()
+        caption = (message.caption or "").strip()
+        action = detect_audio_action(caption) if caption else None
+        if action:
+            result = await process_audio_action(caption, data, audio.file_name or "alter-audio.m4a")
+            if result and result[1]:
+                await message.answer_audio(BufferedInputFile(result[1], filename="alter-audio.mp3"), caption="Готово — обработал аудио.")
+            else:
+                await message.answer("Не удалось выполнить действие с этим аудио. Уточни, что именно изменить.")
+            return
+        text = await transcribe_voice(data)
+        if not text:
+            await message.answer("Не удалось расшифровать аудио. Попробуй запись покороче или добавь подпись.")
+            return
+        reply = await generate_reply([{"role": "user", "content": text}], memory=dict(user.memory or {}))
+        await message.answer(sanitize_public_reply(reply))
+    except Exception:
+        logging.exception("Telegram audio file processing failed")
+        await message.answer("Не удалось обработать аудио. Попробуй ещё раз.")
+
+
 @router.message(lambda message: message.document is not None)
 async def handle_document(message: types.Message, db_session: AsyncSession):
     """Read supported Telegram documents through the same bounded pipeline."""
