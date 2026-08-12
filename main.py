@@ -27,6 +27,7 @@ from api.elevenlabs_routes import setup_elevenlabs_routes
 from api.calendar_routes import setup_calendar_routes
 from api.faq_routes import setup_faq_routes
 from utils.sentry_setup import init_sentry
+from utils.http_pool import close as close_http_pool
 
 
 async def main():
@@ -125,6 +126,7 @@ async def main():
         logging.exception("Critical bot runtime error")
     finally:
         await web_runner.cleanup()
+        await close_http_pool()
         await close_redis(redis)
         await bot.session.close()
 
