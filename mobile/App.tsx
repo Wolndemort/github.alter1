@@ -874,7 +874,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         const asset = result.assets[0];
         setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
       }
-    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
+    } catch (err) { console.error("ALTER media library picker failed", err); setMenuError(`Не удалось открыть медиатеку: ${err instanceof Error ? err.message : String(err)}`); } finally { setMediaPickerBusy(false); }
   };
   const pickFile = async () => {
     if (mediaPickerBusy) return;
@@ -887,7 +887,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         const mediaType = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "document";
         setAttachment({ uri: asset.uri, type: mediaType, filename: asset.name, mimeType: mime });
       }
-    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
+    } catch (err) { console.error("ALTER document picker failed", err); setMenuError(`Не удалось открыть файлы: ${err instanceof Error ? err.message : String(err)}`); } finally { setMediaPickerBusy(false); }
   };
   const runNativePickerAfterDismiss = (picker: () => Promise<void>) => {
     setMediaPickerVisible(false);
@@ -910,7 +910,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       }
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
       if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
-    } catch (err) { setMenuError(userFacingError(err)); } finally { setMediaPickerBusy(false); }
+    } catch (err) { console.error("ALTER camera picker failed", err); setMenuError(`Не удалось открыть камеру: ${err instanceof Error ? err.message : String(err)}`); } finally { setMediaPickerBusy(false); }
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const setFeedback = async (id: string, feedback: "positive" | "negative") => {
