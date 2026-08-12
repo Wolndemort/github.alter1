@@ -11,7 +11,7 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, InteractionManager, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, api } from "./src/api/client";
 
@@ -892,7 +892,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const runNativePickerAfterDismiss = (picker: () => Promise<void>) => {
     setMediaPickerVisible(false);
     const watchdog = setTimeout(() => setMediaPickerBusy(false), 20_000);
-    setTimeout(() => { void picker(); }, 350);
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(() => { void picker(); }, 120);
+    });
     setTimeout(() => clearTimeout(watchdog), 20_500);
   };
   const pickMedia = () => { setMediaPickerBusy(false); setMediaPickerVisible(true); };
