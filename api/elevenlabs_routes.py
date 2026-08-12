@@ -12,7 +12,7 @@ from data.models import User, WebAccount
 from services.elevenlabs_media import ElevenLabsError, design_voice, isolate_audio, list_models, list_voices, sound_effect, speech_to_speech, speech_to_text
 from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.billing import has_active_subscription, has_owner_access
-from utils.quota import charge_user_id_credits
+from utils.quota import charge_user_id_credits, refund_user_id_credits
 from utils.redis_store import close_redis, create_redis
 
 
@@ -21,6 +21,14 @@ async def _allowed(user_id: int) -> bool:
         user = await session.get(User, user_id)
         account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
         return bool(user and (has_owner_access(user_id, account.email if account else None) or has_active_subscription(user)))
+
+
+async def _refund(user_id: int, cost: int) -> None:
+    redis = create_redis()
+    try:
+        await refund_user_id_credits(redis, user_id, cost, async_session)
+    finally:
+        await close_redis(redis)
 
 
 async def sound_effect_route(request: web.Request) -> web.Response:
@@ -40,6 +48,7 @@ async def sound_effect_route(request: web.Request) -> web.Response:
     try:
         return web.Response(body=await sound_effect(prompt), content_type="audio/mpeg")
     except (ElevenLabsError, TypeError, ValueError) as exc:
+        await _refund(user_id, 20)
         raise web.HTTPBadGateway(text=str(exc))
 
 
@@ -63,6 +72,7 @@ async def isolate_audio_route(request: web.Request) -> web.Response:
     try:
         return web.Response(body=await isolate_audio(data, field.filename or "audio"), content_type="audio/mpeg")
     except (ElevenLabsError, TypeError, ValueError) as exc:
+        await _refund(user_id, 20)
         raise web.HTTPBadGateway(text=str(exc))
 
 
@@ -106,6 +116,7 @@ async def process_audio_route(request: web.Request) -> web.Response:
     try:
         result = await process_audio_action(prompt, data, filename)
     except (ElevenLabsError, RuntimeError) as exc:
+        await _refund(user_id, 20)
         raise web.HTTPBadGateway(text=str(exc))
     if result is None:
         raise web.HTTPBadRequest(text="unsupported audio action")

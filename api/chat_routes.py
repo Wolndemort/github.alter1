@@ -533,7 +533,15 @@ async def voice_reply_route(request: web.Request) -> web.Response:
         generated_voice_id = settings.get("generated_voice_id")
     # WAV is supported by AVFoundation on iOS; OGG/Opus is Telegram's format
     # but is not reliably playable by the native mobile audio stack.
-    audio = await synthesize_speech(text, voice=voice, output_format="wav", fast=True, voice_id=generated_voice_id)
+    try:
+        audio = await synthesize_speech(text, voice=voice, output_format="wav", fast=True, voice_id=generated_voice_id)
+    except Exception:
+        refund_redis = create_redis()
+        try:
+            await refund_user_id_credits(refund_redis, user_id, 5, async_session)
+        finally:
+            await close_redis(refund_redis)
+        raise web.HTTPBadGateway(text="voice service temporarily unavailable")
     if not audio:
         raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
     return web.Response(body=audio, content_type="audio/wav")

@@ -44,7 +44,7 @@ from services import google_calendar
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices
 from services.voice_commands import is_voice_generation_request, voice_description
 from utils.redis_store import consume_link_token, create_redis, close_redis, credits_used
-from utils.quota import charge_user_id_credits
+from utils.quota import charge_user_id_credits, refund_user_id_credits
 from utils.keyboards import STATUS_BUTTON, USAGE_BUTTON
 from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
@@ -1420,6 +1420,11 @@ async def cmd_media_job(message: types.Message, command: CommandObject, db_sessi
         job_id = await submit_job(user.id, kind, prompt, None, parse_media_options(prompt, kind))
         await message.answer(f"Задача {kind} поставлена в очередь: {job_id}\nПроверить: /media_jobs")
     except Exception:
+        redis = create_redis()
+        try:
+            await refund_user_id_credits(redis, user.id, cost, async_session)
+        finally:
+            await close_redis(redis)
         logging.exception("Telegram media job submit failed")
         await message.answer("Не удалось поставить медиа-задачу в очередь. Попробуй ещё раз.")
 

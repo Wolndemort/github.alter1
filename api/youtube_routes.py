@@ -14,7 +14,7 @@ from data.models import WebAccount
 from sqlalchemy import select
 from utils.youtube_search import search_youtube
 from utils.redis_store import create_redis, close_redis
-from utils.quota import charge_user_id_credits
+from utils.quota import charge_user_id_credits, refund_user_id_credits
 from config import config
 
 
@@ -23,6 +23,14 @@ async def _charge_youtube(user_id: int, cost: int) -> None:
     try:
         if not await charge_user_id_credits(redis, user_id, cost):
             raise web.HTTPTooManyRequests(text="monthly YouTube limit reached")
+    finally:
+        await close_redis(redis)
+
+
+async def _refund_youtube(user_id: int, cost: int) -> None:
+    redis = create_redis()
+    try:
+        await refund_user_id_credits(redis, user_id, cost)
     finally:
         await close_redis(redis)
 
@@ -53,7 +61,11 @@ async def youtube_search_route(request: web.Request) -> web.Response:
     query = str(payload.get("query", "")).strip()
     if not query or len(query) > 200: raise web.HTTPBadRequest(text="query is required")
     await _charge_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
-    return web.json_response({"results": await search_youtube(query, max_results=5)})
+    try:
+        return web.json_response({"results": await search_youtube(query, max_results=5)})
+    except Exception:
+        await _refund_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
+        raise web.HTTPBadGateway(text="YouTube search temporarily unavailable")
 
 
 async def youtube_audio_route(request: web.Request) -> web.Response:
@@ -62,8 +74,14 @@ async def youtube_audio_route(request: web.Request) -> web.Response:
     try: url = _youtube_url(payload.get("url"))
     except ValueError as exc: raise web.HTTPBadRequest(text=str(exc))
     await _charge_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
-    result = await download_audio(url)
-    if result is None: raise web.HTTPBadGateway(text="audio download failed")
+    try:
+        result = await download_audio(url)
+    except Exception:
+        await _refund_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+        raise web.HTTPBadGateway(text="audio download failed")
+    if result is None:
+        await _refund_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+        raise web.HTTPBadGateway(text="audio download failed")
     path, title = result
     try:
         data = path.read_bytes()
