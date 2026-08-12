@@ -23,7 +23,7 @@ from utils.prompts import (
     TOOL_POLICY_PROMPT,
 )
 from utils.metrics import increment, observe
-from utils.quality import assess_reply, has_internal_leak, has_language_mismatch
+from utils.quality import AI_FAILURE_FALLBACK, assess_reply, has_internal_leak, has_language_mismatch, sanitize_public_reply
 from utils.intent import conversation_mode
 
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=(config.OPENROUTER_API_KEY or config.GEMINI_API_KEY).get_secret_value(), timeout=config.AI_TIMEOUT_SECONDS, max_retries=0)
@@ -730,6 +730,7 @@ async def generate_reply(messages, memory=None, search_results=None):
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
         if config.AI_DEEP_REVIEW_ENABLED and (_needs_deep_review(messages, search_results) or has_language_mismatch(reply, latest_request)):
             reply = await _deep_review_reply(messages, reply, search_results)
+        reply = sanitize_public_reply(reply)
         if len(reply) > 3000 or has_internal_leak(reply) or has_language_mismatch(reply, latest_request):
             logging.warning("Rejecting final reply as possible reasoning leak: chars=%d", len(reply))
             reply = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — отвечу коротко и по делу."
@@ -743,4 +744,5 @@ async def generate_reply(messages, memory=None, search_results=None):
         increment("ai.reply.failure")
         request_id = uuid.uuid4().hex[:10]
         logging.exception("AI reply failed request_id=%s", request_id)
-        return f"Не удалось получить ответ от AI. Код запроса: {request_id}"
+        logging.info("Returning public AI failure fallback request_id=%s", request_id)
+        return AI_FAILURE_FALLBACK

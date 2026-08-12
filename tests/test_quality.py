@@ -1,4 +1,17 @@
-from utils.quality import assess_reply, has_internal_leak, has_language_mismatch
+from utils.quality import assess_reply, has_internal_leak, has_language_mismatch, sanitize_public_reply
+
+
+def test_detects_ukrainian_answer_to_russian_request():
+    reply = "".join(chr(code) for code in (0x0413, 0x0430, 0x0440, 0x0430, 0x0437, 0x0434, 0x002c, 0x044f, 0x0020, 0x0434, 0x043e, 0x043f, 0x043e, 0x043c, 0x043e, 0x0436, 0x0443, 0x0020, 0x0456, 0x0437, 0x0020, 0x0446, 0x0438, 0x043c, 0x0020, 0x043f, 0x0438, 0x0442, 0x0430, 0x043d, 0x043d, 0x044f, 0x043c))
+    request = "".join(chr(code) for code in (0x041f, 0x043e, 0x043c, 0x043e, 0x0433, 0x0438, 0x0020, 0x043c, 0x043d, 0x0435, 0x0020, 0x043d, 0x0430, 0x0439, 0x0442, 0x0438, 0x0020, 0x043c, 0x0430, 0x0433, 0x0430, 0x0437, 0x0438, 0x043d))
+    assert has_language_mismatch(reply, request)
+
+
+def test_sanitizes_service_tags_and_provider_error_details():
+    assert sanitize_public_reply("Готово <answer>сделал</answer>.") == "Готово сделал."
+    safe = sanitize_public_reply("Не удалось получить ответ от AI. Код запроса: abc123")
+    assert "abc123" not in safe
+    assert "Код запроса" not in safe
 
 
 def test_detects_english_planner_leak_from_chat_screenshot():
