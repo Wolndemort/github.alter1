@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, document_profile, edit_document, extract_document, start_document_agent
+from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, document_profile, edit_document, extract_document, ocr_image_text, start_document_agent
 
 
 def test_text_document_is_normalized_and_chunked():
@@ -60,3 +60,8 @@ def test_document_profile_extracts_tables_dates_and_amounts():
     assert "2026-08-12" in profile["dates"]
     assert profile["tables"] == ["A | B | C"]
     assert any("15 000" in amount for amount in profile["amounts"])
+
+
+def test_ocr_rejects_non_image_without_touching_native_ocr():
+    with pytest.raises(ValueError, match="unsupported OCR"):
+        ocr_image_text("contract.pdf", b"data")

@@ -15,6 +15,7 @@ MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 MAX_DOCUMENT_CHARS = 120_000
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".json", ".csv", ".pdf", ".docx"}
 EDITABLE_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".docx"}
+OCR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp"}
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,30 @@ def document_profile(document: Document) -> dict:
         "ocr_used": document.ocr_used,
         "needs_ocr": document.pages is not None and not document.text,
     }
+
+
+def ocr_image_text(filename: str, data: bytes, *, language: str = "rus+eng") -> Document:
+    """Run bounded local OCR when Pillow/Tesseract are installed.
+
+    OCR is deliberately optional: hosted vision remains the fallback when a
+    deployment does not have the native Tesseract binary.
+    """
+    if not data:
+        raise ValueError("image is empty")
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise ValueError("image is too large")
+    if _extension(filename) not in OCR_EXTENSIONS:
+        raise ValueError("unsupported OCR image type")
+    try:
+        from PIL import Image
+        import pytesseract
+        image = Image.open(io.BytesIO(bytes(data)))
+        text = pytesseract.image_to_string(image, lang=language)
+    except ImportError as exc:
+        raise ValueError("local OCR is unavailable; use vision analysis") from exc
+    except Exception as exc:
+        raise ValueError("could not OCR image") from exc
+    return Document(Path(filename).name[:180], "text/plain", _clean(text), ocr_used=True)
 
 
 def edit_document(filename: str, data: bytes, instruction: str, media_type: str = "") -> EditedDocument:

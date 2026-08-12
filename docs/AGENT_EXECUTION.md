@@ -86,3 +86,7 @@ The paid text/voice/search benchmarks remain separate and require the explicit
 Instructions use auditable replacements, one per line: `old text => new text`.
 The endpoint returns the edited TXT, Markdown, CSV, JSON, or DOCX as a download.
 PDF editing is intentionally rejected until layout-aware/OCR export is enabled.
+
+For image scans, the optional local OCR adapter uses Pillow and Tesseract. If
+the native Tesseract binary is absent, the request remains safe and should use
+the hosted vision path instead.
