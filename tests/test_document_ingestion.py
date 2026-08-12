@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, edit_document, extract_document, start_document_agent
+from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, document_profile, edit_document, extract_document, start_document_agent
 
 
 def test_text_document_is_normalized_and_chunked():
@@ -52,3 +52,11 @@ def test_pdf_edit_is_rejected_instead_of_corrupting_layout():
 def test_document_edit_requires_explicit_instruction():
     with pytest.raises(ValueError, match="explicit replacements"):
         edit_document("notes.txt", b"unchanged", "сделай красиво")
+
+
+def test_document_profile_extracts_tables_dates_and_amounts():
+    document = extract_document("contract.txt", "Дата: 2026-08-12\nИтого: 15 000 ₽\nA | B | C".encode(), "text/plain")
+    profile = document_profile(document)
+    assert "2026-08-12" in profile["dates"]
+    assert profile["tables"] == ["A | B | C"]
+    assert any("15 000" in amount for amount in profile["amounts"])

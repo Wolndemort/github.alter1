@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import re
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,7 @@ class Document:
     media_type: str
     text: str
     pages: int | None = None
+    ocr_used: bool = False
 
     @property
     def chars(self) -> int:
@@ -95,6 +97,26 @@ def document_chunks(document: Document, chunk_chars: int = 6000) -> list[str]:
     return [document.text[index:index + size] for index in range(0, len(document.text), size)] or [""]
 
 
+def document_profile(document: Document) -> dict:
+    """Return bounded, deterministic signals for agents and audit UIs."""
+    lines = [line.strip() for line in document.text.splitlines() if line.strip()]
+    tables = [line for line in lines if line.count("|") >= 2 or "\t" in line]
+    dates = sorted(set(re.findall(r"\b(?:\d{1,2}[./]){2}\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b", document.text)))
+    amounts = sorted(set(re.findall(r"(?:\d[\d ]{0,12} ?(?:₽|руб\.?|\$|€|USD|EUR))", document.text, re.IGNORECASE)))
+    return {
+        "filename": document.filename,
+        "media_type": document.media_type,
+        "pages": document.pages,
+        "chars": document.chars,
+        "lines": len(lines),
+        "tables": tables[:100],
+        "dates": dates[:100],
+        "amounts": amounts[:100],
+        "ocr_used": document.ocr_used,
+        "needs_ocr": document.pages is not None and not document.text,
+    }
+
+
 def edit_document(filename: str, data: bytes, instruction: str, media_type: str = "") -> EditedDocument:
     """Apply only deterministic replacements supplied as ``old => new`` lines.
 
@@ -150,5 +172,5 @@ def start_document_agent(settings: dict | None, document: Document, goal: str, *
     ]
     return start_agent(
         settings, goal or f"Работа с документом {document.filename}", horizon_minutes=horizon_minutes,
-        tasks=tasks, constraints={"document_context": bounded_text, "document_filename": document.filename},
+        tasks=tasks, constraints={"document_context": bounded_text, "document_filename": document.filename, "document_profile": document_profile(document)},
     )
