@@ -12,7 +12,7 @@ from data.models import WebAccount
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
-from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request
+from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request, cache_get, cache_set
 from utils.billing import has_owner_access, is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
@@ -67,9 +67,15 @@ async def main():
                     user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())
                     owner_access = is_owner(user_id)
                     if not owner_access:
-                        async with async_session() as session:
-                            account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
-                            owner_access = has_owner_access(user_id, account.email if account else None)
+                        owner_cache_key = f"http-owner-access:{user_id}"
+                        cached_owner = await cache_get(redis, owner_cache_key)
+                        if cached_owner is not None:
+                            owner_access = cached_owner == "1"
+                        else:
+                            async with async_session() as session:
+                                account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+                                owner_access = has_owner_access(user_id, account.email if account else None)
+                            await cache_set(redis, owner_cache_key, "1" if owner_access else "0", ttl=30)
                     if not owner_access and not await charge_request(redis, user_id, config.DAILY_REQUEST_LIMIT):
                         raise web.HTTPTooManyRequests(text="daily request limit reached")
                 except web.HTTPTooManyRequests:
