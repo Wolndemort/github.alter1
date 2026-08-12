@@ -16,6 +16,7 @@ from utils.youtube_search import search_youtube
 from utils.redis_store import create_redis, close_redis
 from utils.quota import charge_user_id_credits, refund_user_id_credits
 from config import config
+from utils.idempotency import acquire as acquire_idempotency, release as release_idempotency
 
 
 async def _charge_youtube(user_id: int, cost: int) -> None:
@@ -57,30 +58,65 @@ async def _require_access(request: web.Request):
 
 async def youtube_search_route(request: web.Request) -> web.Response:
     user_id = await _require_access(request)
+    headers = getattr(request, "headers", {})
+    request_key = headers.get("Idempotency-Key")
+    redis = create_redis()
+    idem_key = await acquire_idempotency(redis, user_id, "youtube_search", request_key)
+    await close_redis(redis)
+    if request_key and idem_key == "":
+        raise web.HTTPConflict(text="duplicate request")
     payload = await _json(request)
     query = str(payload.get("query", "")).strip()
     if not query or len(query) > 200: raise web.HTTPBadRequest(text="query is required")
-    await _charge_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
+    try:
+        await _charge_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
+    except Exception:
+        redis = create_redis()
+        try: await release_idempotency(redis, idem_key)
+        finally: await close_redis(redis)
+        raise
     try:
         return web.json_response({"results": await search_youtube(query, max_results=5)})
     except Exception:
         await _refund_youtube(user_id, config.YOUTUBE_SEARCH_CREDITS)
+        redis = create_redis()
+        try: await release_idempotency(redis, idem_key)
+        finally: await close_redis(redis)
         raise web.HTTPBadGateway(text="YouTube search temporarily unavailable")
 
 
 async def youtube_audio_route(request: web.Request) -> web.Response:
     user_id = await _require_access(request)
+    headers = getattr(request, "headers", {})
+    request_key = headers.get("Idempotency-Key")
+    redis = create_redis()
+    idem_key = await acquire_idempotency(redis, user_id, "youtube_audio", request_key)
+    await close_redis(redis)
+    if request_key and idem_key == "":
+        raise web.HTTPConflict(text="duplicate request")
     payload = await _json(request)
     try: url = _youtube_url(payload.get("url"))
     except ValueError as exc: raise web.HTTPBadRequest(text=str(exc))
-    await _charge_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+    try:
+        await _charge_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+    except Exception:
+        redis = create_redis()
+        try: await release_idempotency(redis, idem_key)
+        finally: await close_redis(redis)
+        raise
     try:
         result = await download_audio(url)
     except Exception:
         await _refund_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+        redis = create_redis()
+        try: await release_idempotency(redis, idem_key)
+        finally: await close_redis(redis)
         raise web.HTTPBadGateway(text="audio download failed")
     if result is None:
         await _refund_youtube(user_id, config.YOUTUBE_AUDIO_CREDITS)
+        redis = create_redis()
+        try: await release_idempotency(redis, idem_key)
+        finally: await close_redis(redis)
         raise web.HTTPBadGateway(text="audio download failed")
     path, title = result
     try:
