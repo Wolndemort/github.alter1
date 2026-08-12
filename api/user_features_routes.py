@@ -15,6 +15,7 @@ from utils.billing import has_owner_access
 from utils.metrics import latency_snapshot, snapshot as metrics_snapshot
 from utils.workflow_state import advance_workflow, start_workflow, workflow_view
 from utils.agent_engine import agent_view, block_task, claim_next_task, complete_task, replan_agent, start_agent
+from services.agent_executor import model_agent_executor, run_agent_steps
 
 
 def _parse_datetime(value: object) -> datetime:
@@ -255,6 +256,25 @@ async def agent_replan_route(request: web.Request) -> web.Response:
         return web.json_response({"agent": agent_view(user.tech_stack)})
 
 
+async def agent_run_route(request: web.Request) -> web.Response:
+    """Execute ready agent tasks through the existing model/tool loop."""
+    user_id = _bearer(request)
+    payload = await _json(request)
+    try:
+        max_steps = max(1, min(int(payload.get("max_steps", 1)), 8))
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(text="max_steps must be an integer")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if (user.tech_stack or {}).get("private_mode") is True:
+            raise web.HTTPConflict(text="agent persistence is disabled in private mode")
+        user.tech_stack = await run_agent_steps(user.tech_stack, model_agent_executor, max_steps=max_steps)
+        await session.commit()
+        return web.json_response({"agent": agent_view(user.tech_stack)})
+
+
 async def checkins_route(request: web.Request) -> web.Response:
     user_id = _bearer(request); payload = await _json(request)
     if not isinstance(payload.get("enabled"), bool): raise web.HTTPBadRequest(text="enabled must be boolean")
@@ -329,6 +349,7 @@ def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/agent/next", agent_next_route)
     app.router.add_post("/api/v1/agent/task", agent_task_route)
     app.router.add_post("/api/v1/agent/replan", agent_replan_route)
+    app.router.add_post("/api/v1/agent/run", agent_run_route)
     app.router.add_post("/api/v1/checkins", checkins_route)
     app.router.add_post("/api/v1/push-token", push_token_route)
     app.router.add_get("/api/v1/reminders", reminders_route)

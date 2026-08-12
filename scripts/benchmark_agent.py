@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import statistics
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
+from services.agent_executor import run_agent_steps
 from utils.agent_engine import claim_next_task, complete_task, replan_agent, start_agent
 
 
@@ -25,13 +27,16 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("agent_benchmark.json"))
     parser.add_argument("--runs", type=int, default=1000)
     args = parser.parse_args()
-    timings = {"plan": [], "claim": [], "complete": [], "replan": []}
+    timings = {"plan": [], "claim": [], "complete": [], "replan": [], "executor": []}
     for _ in range(max(1, args.runs)):
         tasks = [{"id": f"task_{i}", "title": f"Шаг {i}", "depends_on": [f"task_{i - 1}"] if i else []} for i in range(12)]
         started = time.perf_counter(); settings = start_agent({}, "Локальный benchmark", horizon_minutes=60 * 24 * 7, tasks=tasks); timings["plan"].append((time.perf_counter() - started) * 1000)
         started = time.perf_counter(); settings = claim_next_task(settings); timings["claim"].append((time.perf_counter() - started) * 1000)
         started = time.perf_counter(); settings = complete_task(settings, "task_0", "done"); timings["complete"].append((time.perf_counter() - started) * 1000)
         started = time.perf_counter(); replan_agent(settings, tasks + [{"id": "extra", "title": "Новый шаг", "depends_on": ["task_11"]}], "benchmark"); timings["replan"].append((time.perf_counter() - started) * 1000)
+        async def fake_executor(task, state):
+            return "ok"
+        started = time.perf_counter(); asyncio.run(run_agent_steps(start_agent({}, "executor", tasks=tasks), fake_executor, max_steps=12)); timings["executor"].append((time.perf_counter() - started) * 1000)
     report = {"runs": max(1, args.runs), "operations": {name: {"p50_ms": percentile(values, .50), "p95_ms": percentile(values, .95), "mean_ms": round(statistics.mean(values), 4)} for name, values in timings.items()}}
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False))
