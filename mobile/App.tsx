@@ -901,7 +901,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     InteractionManager.runAfterInteractions(() => { clearTimeout(fallback); setTimeout(launch, 120); });
     setTimeout(() => clearTimeout(watchdog), 20_500);
   };
-  const pickMedia = () => { pickerInFlight.current = false; setMediaPickerBusy(false); setMediaPickerVisible(true); };
+  const pickMedia = () => { setMediaPickerBusy(pickerInFlight.current); setMediaPickerVisible(true); };
   const takePhoto = async () => {
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
