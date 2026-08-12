@@ -31,6 +31,14 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "map_geocode",
+            "description": "Найди адрес или место через карты без изменения внешних данных.",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "agent_create_reminder",
             "description": "Создай напоминание только когда пользователь явно разрешил внешние действия.",
             "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "remind_at": {"type": "string"}}, "required": ["text", "remind_at"]},
@@ -72,7 +80,7 @@ AGENT_TOOL_DEFINITIONS = [
 
 
 async def execute_agent_tool(name: str, arguments: dict, *, db, user, allow_external_actions: bool = False):
-    if name in {"web_search", "get_weather"}:
+    if name in {"web_search", "get_weather", "map_geocode"}:
         return await execute_tool(name, arguments)
     if name == "agent_recall_memory":
         return await recall(db, user.id, str(arguments.get("query") or ""))

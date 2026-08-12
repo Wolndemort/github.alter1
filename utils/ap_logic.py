@@ -94,6 +94,14 @@ TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "map_geocode",
+            "description": "Найди адрес или место через карты для запросов о местах и организациях.",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        },
+    },
 ]
 
 COMPLEX_REQUEST_PATTERNS = (
@@ -518,6 +526,12 @@ async def execute_tool(name: str, arguments: dict) -> list | str:
     if name == "youtube_search":
         from utils.youtube_search import search_youtube
         return await search_youtube(str(arguments.get("query") or ""))
+    if name == "map_geocode":
+        from services.yandex_maps import geocode
+        try:
+            return await geocode(str(arguments.get("query") or ""))
+        except Exception as exc:
+            return {"status": "unavailable", "reason": str(exc)}
     return "Неизвестный инструмент."
 
 
