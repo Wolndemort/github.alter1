@@ -489,10 +489,12 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                     **({"extra_body": {"reasoning": {"exclude": True}}} if config.OPENROUTER_EXCLUDE_REASONING else {}),
                 )
                 emitted = False
+                finish_reason = None
                 async for chunk in stream:
                     choices = getattr(chunk, "choices", None) or []
                     delta = getattr(choices[0], "delta", None) if choices else None
                     text = getattr(delta, "content", None) if delta else None
+                    finish_reason = getattr(choices[0], "finish_reason", None) if choices else finish_reason
                     if text:
                         emitted = True
                         if not first_token_recorded:
@@ -501,6 +503,9 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                             observe("ai.reply.first_token", duration_ms, model=model)
                             increment("ai.reply.first_token", duration_ms=duration_ms, model=model)
                         yield text
+            if finish_reason == "length":
+                logging.warning("Streaming model reached output limit: model=%s; trying fallback", model)
+                raise RuntimeError("Streaming model reached output limit")
             if emitted:
                 duration_ms = int((time.perf_counter() - started_at) * 1000)
                 observe("ai.reply.completed", duration_ms, model=model)
