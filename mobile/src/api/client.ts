@@ -42,6 +42,18 @@ function readableErrorBody(_body: string, status: number): string {
 export class AlterApi {
   constructor(private readonly baseUrl: string) {}
 
+  private async requestBlob(path: string, init: RequestInit = {}, token?: string): Promise<Blob> {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.blob();
+  }
+
   private async request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
@@ -187,7 +199,25 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<ChatResponse & { document?: { filename: string; media_type: string; chars: number; pages?: number | null } }>;
   }
-
+  async editDocument(token: string, uri: string, filename: string, instruction: string, mimeType?: string) {
+    const form = new FormData(); form.append("instruction", instruction); form.append("file", { uri, type: mimeType || "application/octet-stream", name: filename } as unknown as Blob);
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/document/edit`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return { blob: await response.blob(), filename: response.headers?.get("Content-Disposition") || filename };
+  }
+  async compareDocuments(token: string, beforeUri: string, beforeName: string, afterUri: string, afterName: string) {
+    const form = new FormData(); form.append("before", { uri: beforeUri, type: "application/octet-stream", name: beforeName } as unknown as Blob); form.append("after", { uri: afterUri, type: "application/octet-stream", name: afterName } as unknown as Blob);
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/document/compare`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.json() as Promise<{ changed: boolean; added: string[]; removed: string[]; change_count: number }>;
+  }
+  async audioAction(token: string, path: "process" | "isolate" | "speech-to-text" | "speech-to-speech", uri: string, prompt = "", filename = "alter-audio.m4a", voiceId?: string) {
+    const form = new FormData(); if (prompt) form.append("prompt", prompt); form.append("file", { uri, type: "audio/m4a", name: filename } as unknown as Blob);
+    const suffix = path === "speech-to-speech" && voiceId ? `?voice_id=${encodeURIComponent(voiceId)}` : "";
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/audio/${path}${suffix}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.blob();
+  }
   async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video", options: Record<string, unknown> = {}) {
     const form = new FormData();
     form.append("message", message);
@@ -294,10 +324,8 @@ export class AlterApi {
   deleteCalendarEvent(token: string, eventId: string, calendarId = "primary") {
     return this.request<{ ok: boolean }>(`/api/v1/calendar/events/${encodeURIComponent(eventId)}?calendar_id=${encodeURIComponent(calendarId)}`, { method: "DELETE" }, token);
   }
-  async youtubeAudio(token: string, url: string) {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/youtube/audio`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
-    if (!response.ok) throw new ApiError(response.status, readableErrorBody("", response.status));
-    return response.blob();
+  youtubeAudio(token: string, url: string) {
+    return this.requestBlob("/api/v1/youtube/audio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }, token);
   }
   youtubeSearch(token: string, query: string) {
     return this.request<{ results: YouTubeResult[] }>("/api/v1/youtube/search", {

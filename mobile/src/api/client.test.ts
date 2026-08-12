@@ -136,4 +136,20 @@ data: {"type":"done"}
       method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token" }), body: JSON.stringify({ query: "rain" }),
     }));
   });
+
+  it("uploads documents for editing and comparison without JSON content type", async () => {
+    (fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(["edited"]), headers: { get: () => null } })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ changed: true, added: ["new"], removed: [], change_count: 1 }) });
+    await expect(new AlterApi("https://alter.example").editDocument("token", "file:///a.txt", "a.txt", "replace old", "text/plain")).resolves.toMatchObject({ blob: expect.any(Blob) });
+    await expect(new AlterApi("https://alter.example").compareDocuments("token", "file:///a.txt", "a.txt", "file:///b.txt", "b.txt")).resolves.toMatchObject({ changed: true });
+    expect(fetch).toHaveBeenNthCalledWith(1, "https://alter.example/api/v1/chat/document/edit", expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData) }));
+    expect(fetch).toHaveBeenNthCalledWith(2, "https://alter.example/api/v1/chat/document/compare", expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData) }));
+  });
+
+  it("downloads YouTube audio with authorization", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, blob: async () => new Blob(["audio"]) });
+    await expect(new AlterApi("https://alter.example").youtubeAudio("token", "https://youtu.be/x")).resolves.toBeInstanceOf(Blob);
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/youtube/audio", expect.objectContaining({ method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer token" } }));
+  });
 });
