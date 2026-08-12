@@ -838,29 +838,35 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     finally { setBusy(false); }
   };
   const pickMediaLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
-    }
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) { setMenuError("Разреши доступ к медиатеке"); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
+      }
+    } catch (err) { setMenuError(userFacingError(err)); }
   };
   const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const mime = asset.mimeType || "";
-      const mediaType = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "document";
-      setAttachment({ uri: asset.uri, type: mediaType, filename: asset.name, mimeType: mime });
-    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const mime = asset.mimeType || "";
+        const mediaType = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "document";
+        setAttachment({ uri: asset.uri, type: mediaType, filename: asset.name, mimeType: mime });
+      }
+    } catch (err) { setMenuError(userFacingError(err)); }
   };
   const pickMedia = () => setMediaPickerVisible(true);
   const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
-    if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) { setMenuError("Разреши доступ к камере"); return; }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+      if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
+    } catch (err) { setMenuError(userFacingError(err)); }
   };
   const keepVoice = (uri: string) => setAttachment({ uri, type: "audio" });
   const setFeedback = async (id: string, feedback: "positive" | "negative") => {
@@ -1152,12 +1158,12 @@ const historyStyles = StyleSheet.create({ handle: { display: "none" }, arrow: { 
 (historyStyles as Record<string, unknown>).panelClose = { ...StyleSheet.flatten(historyStyles.panelClose), position: "absolute", left: undefined, right: 0, top: 0, width: 72, height: 68, paddingHorizontal: 20, textAlign: "center" };
 (historyStyles as Record<string, unknown>).panel = { ...StyleSheet.flatten(historyStyles.panel), width: "91%", height: "78%" };
 const sheetStyles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "transparent" },
-  sheet: { backgroundColor: "transparent", padding: 20, paddingBottom: 34, gap: 10, marginBottom: 78 },
-  handle: { display: "none" },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.66)" },
+  sheet: { backgroundColor: "#151515", padding: 20, paddingBottom: 28, gap: 8, marginHorizontal: 10, marginBottom: 12, borderRadius: 22, borderWidth: 1, borderColor: "#343434", shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 18, elevation: 12 },
+  handle: { alignSelf: "center", width: 42, height: 4, borderRadius: 2, backgroundColor: "#777", marginBottom: 8 },
   title: { color: "#fff", fontSize: 19, fontWeight: "800", marginBottom: 6 },
-  action: { minHeight: 54, paddingHorizontal: 0, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "transparent" },
-  actionIcon: { display: "none" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  action: { minHeight: 54, paddingHorizontal: 14, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#222" },
+  actionIcon: { color: "#fff", width: 22, fontSize: 20, textAlign: "center" }, actionText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   cancel: { alignItems: "center", paddingVertical: 12 }, cancelText: { color: "#ffffff", fontWeight: "700" },
 });
 
