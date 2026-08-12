@@ -15,7 +15,7 @@ from utils.external_content import audit_external_content
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 MAX_DOCUMENT_CHARS = 120_000
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".json", ".csv", ".pdf", ".docx"}
-EDITABLE_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".docx"}
+EDITABLE_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".docx", ".pdf"}
 OCR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp"}
 
 
@@ -152,7 +152,6 @@ def edit_document(filename: str, data: bytes, instruction: str, media_type: str 
     extension = _extension(filename)
     if extension not in EDITABLE_EXTENSIONS:
         raise ValueError("this document format requires layout-aware editing")
-    document = extract_document(filename, data, media_type)
     replacements = []
     for line in (instruction or "").splitlines():
         if "=>" in line:
@@ -161,6 +160,9 @@ def edit_document(filename: str, data: bytes, instruction: str, media_type: str 
                 replacements.append((old.strip(), new.strip()))
     if not replacements:
         raise ValueError("provide explicit replacements in the form: old => new")
+    if extension == ".pdf":
+        return edit_pdf_document(filename, data, replacements, media_type)
+    document = extract_document(filename, data, media_type)
     text = document.text
     for old, new in replacements:
         text = text.replace(old, new)
@@ -185,6 +187,32 @@ def edit_document(filename: str, data: bytes, instruction: str, media_type: str 
     else:
         output = text.encode("utf-8")
     return EditedDocument(document.filename, document.media_type, output)
+
+
+def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, str]], media_type: str = "") -> EditedDocument:
+    """Apply coordinate-aware redactions to text-based PDFs."""
+    try:
+        import fitz
+    except ImportError as exc:
+        raise ValueError("PDF layout editing is not installed") from exc
+    try:
+        source = fitz.open(stream=bytes(data), filetype="pdf")
+        changed = 0
+        for page in source:
+            for old, new in replacements:
+                for rect in page.search_for(old):
+                    page.add_redact_annot(rect, text=new, fontname="helv", fontsize=max(6, min(18, rect.height * 0.8)), align=0)
+                    changed += 1
+            page.apply_redactions()
+        if not changed:
+            raise ValueError("PDF text was not found; scanned PDFs require OCR before editing")
+        output = source.tobytes(garbage=4, deflate=True)
+        source.close()
+        return EditedDocument(Path(filename or "document.pdf").name[:180], media_type or "application/pdf", output)
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("could not edit PDF layout") from exc
 
 
 def start_document_agent(settings: dict | None, document: Document, goal: str, *, horizon_minutes: int = 60) -> dict:

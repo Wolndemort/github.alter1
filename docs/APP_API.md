@@ -189,3 +189,6 @@ but layout-aware editing remains intentionally disabled.
 \n+Telegram документный pipeline принимает PDF, DOCX, TXT, Markdown, CSV и JSON
 как вложение с caption, извлекает bounded-текст и профиль документа и отвечает
 по содержимому. Лимит — 25 MB.
+\n+PDF layout editing uses optional PyMuPDF: text is located by coordinates,
+redacted and replaced in the same rectangle. Scanned pages without a text layer
+must go through OCR first; the API refuses unsafe blind replacements.

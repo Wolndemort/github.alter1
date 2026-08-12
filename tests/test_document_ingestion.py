@@ -46,7 +46,7 @@ def test_json_document_edit_preserves_valid_json():
 
 
 def test_pdf_edit_is_rejected_instead_of_corrupting_layout():
-    with pytest.raises(ValueError, match="layout-aware"):
+    with pytest.raises(ValueError, match="PDF"):
         edit_document("scan.pdf", b"not a pdf", "a => b")
 
 
