@@ -368,6 +368,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<{ uri: string; type: "image" | "video" | "audio" | "document"; filename?: string; mimeType?: string } | null>(null);
+  const [documentEditVisible, setDocumentEditVisible] = useState(false);
+  const [documentInstruction, setDocumentInstruction] = useState("");
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "searching" | "planning" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
@@ -551,6 +553,23 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) {
       setMenuError(err instanceof Error ? err.message : "Не удалось сохранить файл");
     }
+  };
+  const editAttachedDocument = async () => {
+    if (!attachment || attachment.type !== "document" || !documentInstruction.trim() || busy) return;
+    const current = attachment;
+    setBusy(true); setMenuError("");
+    try {
+      const result = await api.editDocument(token, current.uri, current.filename || "alter-document", documentInstruction.trim(), current.mimeType);
+      if (!FileSystem.documentDirectory) throw new Error("Не удалось открыть хранилище устройства");
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(result.blob); });
+      const comma = dataUrl.indexOf(",");
+      const filename = result.filename.replace(/^attachment;\s*filename\*?=[^;]+/i, "").replace(/[\"']/g, "") || `alter-edited-${current.filename || "document"}`;
+      const uri = `${FileSystem.documentDirectory}${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      await FileSystem.writeAsStringAsync(uri, comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, { encoding: FileSystem.EncodingType.Base64 });
+      await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
+      setDocumentEditVisible(false); setDocumentInstruction("");
+    } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось отредактировать документ"); }
+    finally { setBusy(false); }
   };
   const editMedia = async (item: ChatItem) => {
     if (!item.mediaUri || !item.mediaMime?.startsWith("image/") || !FileSystem.cacheDirectory) return;
@@ -797,7 +816,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {activity ? <View style={activityStyles.activityPill}><ActivityPulse /><Text style={activityStyles.activityText}>{activity === "recording" ? "Записываю голосовое…" : activity === "searching" ? "Ищу актуальные данные…" : activity === "planning" ? "Планирую шаги…" : activity === "analyzing" ? "Анализирую…" : "Генерирую ответ…"}</Text></View> : null}
     {!attachment ? (() => { const latestImage = [...items].reverse().find((item) => item.mediaUri && item.mediaMime?.startsWith("image/")); return latestImage ? <Pressable onPress={() => editMediaNow(latestImage)} disabled={busy} accessibilityLabel="Редактировать последнее изображение"><Text style={mediaStyles.generateAction}>✏️ Редактировать последнее изображение</Text></Pressable> : null; })() : null}
     {playingVoiceId ? <Pressable onPress={stopVoicePlayback} style={({ pressed }) => [mediaStyles.stopAudioButton, pressed && mediaDownloadStyles.pressed]} accessibilityLabel="Остановить озвучку"><Text style={mediaStyles.generateAction}>■ Остановить озвучку</Text></Pressable> : null}
-    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : attachment.type === "document" ? `Документ: ${attachment.filename || "файл"}` : "Фото прикреплено"}</Text>{attachment.type !== "audio" && attachment.type !== "document" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
+    {attachment ? <View style={mediaStyles.attachmentChip}><Text style={mediaStyles.attachmentText}>{attachment.type === "audio" ? "Голосовое сообщение" : attachment.type === "video" ? "Видео прикреплено" : attachment.type === "document" ? `Документ: ${attachment.filename || "файл"}` : "Фото прикреплено"}</Text>{attachment.type === "document" ? <Pressable onPress={() => setDocumentEditVisible(true)} disabled={busy} accessibilityLabel="Редактировать документ"><Text style={mediaStyles.generateAction}>✎ Изменить</Text></Pressable> : attachment.type !== "audio" ? <Pressable onPress={generateAttachment} disabled={busy} accessibilityLabel="Изменить вложение"><Text style={mediaStyles.generateAction}>✦ Изменить</Text></Pressable> : null}<Pressable onPress={() => setAttachment(null)} accessibilityLabel="Удалить вложение"><Text style={mediaStyles.removeAttachment}>×</Text></Pressable></View> : null}
     <View style={styles.composer}><Pressable style={mediaStyles.attachButton} onPress={() => { resetIdle(); pickMedia(); }} accessibilityLabel="Прикрепить фото или видео"><Text style={mediaStyles.attachIcon}>＋</Text></Pressable><TextInput style={[styles.input, styles.composerInput]} placeholder="Напиши ALTER..." placeholderTextColor="#78809a" value={message} onChangeText={(value) => { resetIdle(); setMessage(value); }} onSubmitEditing={() => send()} /><VoiceButton onRecorded={keepVoice} onRecordingChange={(active) => { resetIdle(); setActivity(active ? "recording" : ""); }} /><Pressable style={[mediaStyles.sendButton, busy && mediaStyles.stopSendButton]} onPress={() => busy ? stopRequest() : send()} accessibilityLabel={busy ? "Остановить ответ" : "Отправить сообщение"}><Text style={mediaStyles.sendIcon}>{busy ? "■" : "↑"}</Text></Pressable></View>
     {busy && !attachment ? <Pressable style={styles.stopResponseButton} onPress={stopRequest} accessibilityLabel="Остановить ответ"><Text style={styles.stopResponseText}>■ Остановить ответ</Text></Pressable> : null}
     {!busy && items.some((item) => item.role === "user") ? <Pressable style={styles.editLastButton} onPress={() => { const last = [...items].reverse().find((item) => item.role === "user"); if (last) { setMessage(last.text); resetIdle(); } }} accessibilityLabel="Редактировать последнее сообщение"><Text style={styles.editLastText}>Изменить последнее сообщение</Text></Pressable> : null}
@@ -896,6 +915,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={mediaPickerVisible} transparent animationType="fade" onRequestClose={() => setMediaPickerVisible(false)}>
     <Pressable style={sheetStyles.backdrop} onPress={() => setMediaPickerVisible(false)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Добавить вложение</Text><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); takePhoto(); }}><Text style={sheetStyles.actionIcon}>◉</Text><Text style={sheetStyles.actionText}>Камера</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickMediaLibrary(); }}><Text style={sheetStyles.actionIcon}>▧</Text><Text style={sheetStyles.actionText}>Выбрать из медиатеки</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => { setMediaPickerVisible(false); pickFile(); }}><Text style={sheetStyles.actionIcon}>▤</Text><Text style={sheetStyles.actionText}>Файлы</Text></Pressable><Pressable style={sheetStyles.cancel} onPress={() => setMediaPickerVisible(false)}><Text style={sheetStyles.cancelText}>Отмена</Text></Pressable></Pressable></Pressable>
+  </Modal>
+  <Modal visible={documentEditVisible} transparent animationType="fade" onRequestClose={() => setDocumentEditVisible(false)}>
+    <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ДОКУМЕНТ</Text><Text style={permissionStyles.title}>Изменить файл</Text><Text style={permissionStyles.body}>Опиши, что заменить, добавить или удалить. Для PDF нужен текстовый слой; сканы сначала распознай через OCR.</Text><TextInput value={documentInstruction} onChangeText={setDocumentInstruction} placeholder="Например: замени дату на 15 августа" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><Pressable style={[permissionStyles.primary, { opacity: documentInstruction.trim() && !busy ? 1 : 0.45 }]} onPress={editAttachedDocument} disabled={!documentInstruction.trim() || busy}><Text style={permissionStyles.primaryText}>{busy ? "Изменяю…" : "Изменить и сохранить"}</Text></Pressable><Pressable onPress={() => setDocumentEditVisible(false)}><Text style={permissionStyles.later}>Отмена</Text></Pressable></View></View>
   </Modal>
   <Modal visible={feedbackFor !== null} transparent animationType="fade" onRequestClose={() => setFeedbackFor(null)}>
     <Pressable style={sheetStyles.backdrop} onPress={() => setFeedbackFor(null)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Насколько полезен ответ?</Text><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "positive")}><Text style={sheetStyles.actionIcon}>👍</Text><Text style={sheetStyles.actionText}>Полезно</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "negative")}><Text style={sheetStyles.actionIcon}>👎</Text><Text style={sheetStyles.actionText}>Мимо</Text></Pressable></Pressable></Pressable>
