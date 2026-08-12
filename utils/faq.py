@@ -175,7 +175,7 @@ Check-in:
 
 Telegram и приложение используют общий аккаунт, память, сессии, настройки и лимиты. Можно связать аккаунты через пункт «Подключить Telegram» в mobile или /start после получения ссылки.
 
-Главные Telegram-команды: /help, /memory, /forget, /clear_memory, /new_session, /remind, /reminders, /cancel_reminder, /calendar_connect, /calendar, /calendar_add, /settings, /status, /usage, /buy.
+Главные Telegram-команды: /help, /memory, /forget, /clear_memory, /new_session, /remind, /reminders, /cancel_reminder, /calendar_connect, /calendar, /calendar_add, /media, /media_jobs, /media_status, /media_cancel, /settings, /status, /usage, /buy.
 
 14. HTTP API для разработчика
 
@@ -223,7 +223,7 @@ ALTER умеет мягко возвращаться к важным делам 
 check-in и push-уведомления; их можно отключить командами /checkins_off или
 настройкой proactive_enabled=false. Частоту задаёт /checkin_every 24.
 
-Telegram: /help, /new_session, /memory, /forget, /clear_memory, /remind,
+Telegram: /help, /new_session, /memory, /forget, /clear_memory, /remind, /media, /media_jobs, /media_status, /media_cancel,
 /reminders, /cancel_reminder, /calendar_connect, /calendar, /calendar_add,
 /settings, /status, /usage.
 
