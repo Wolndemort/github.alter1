@@ -39,6 +39,30 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "map_search_organizations",
+            "description": "Найди организации рядом или по названию.",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "ll": {"type": "string"}}, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "map_route",
+            "description": "Построй маршрут между двумя точками.",
+            "parameters": {"type": "object", "properties": {"origin": {"type": "string"}, "destination": {"type": "string"}, "mode": {"type": "string"}}, "required": ["origin", "destination"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "map_distance",
+            "description": "Рассчитай расстояние и время между точками.",
+            "parameters": {"type": "object", "properties": {"origins": {"type": "string"}, "destinations": {"type": "string"}, "mode": {"type": "string"}}, "required": ["origins", "destinations"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "agent_create_reminder",
             "description": "Создай напоминание только когда пользователь явно разрешил внешние действия.",
             "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "remind_at": {"type": "string"}}, "required": ["text", "remind_at"]},

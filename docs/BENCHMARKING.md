@@ -53,6 +53,9 @@ are not written to the report, and the token is never printed.
 
 ```powershell
 $env:AUTH_TOKEN = (Get-Content .audit-token -Raw).Trim()
+
+# Windows PowerShell equivalent
+.\scripts\production-e2e.ps1
 py scripts/collect_speed_benchmark.py --output speed_benchmark.json --runs 3 --confirm-cost
 ```
 

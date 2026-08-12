@@ -124,3 +124,6 @@ layout-aware правок, сравнивает версии документо�
 и сигнал необходимости досэмплирования. Музыкальный анализ использует строгий
 контракт: название, исполнитель, жанр, настроение, инструменты, BPM,
 структура, lyrics и таймкоды остаются пустыми, пока модель их не подтвердила.
+\n+Map tools: `map_geocode`, `map_search_organizations`, `map_route`, and
+`map_distance`. Organization and route calls use dedicated keys and return a
+controlled unavailable result when a provider limit is exhausted.
