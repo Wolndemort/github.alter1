@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds, userFacingError } from "./App";
+import App, { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds, userFacingError } from "./App";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./src/api/client";
 
@@ -22,7 +22,7 @@ jest.mock("@react-navigation/native-stack", () => {
   const React = require("react");
   return { createNativeStackNavigator: () => ({
     Navigator: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    Screen: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    Screen: ({ children }: { children: React.ReactNode | (() => React.ReactNode) }) => <>{typeof children === "function" ? children() : children}</>,
   }) };
 });
 
@@ -59,6 +59,17 @@ describe("ALTER mobile critical screens", () => {
     render(<IntroScreen onFinished={onFinished} />);
     act(() => { jest.advanceTimersByTime(2300); });
     expect(onFinished).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it("keeps the intro visible while the local session is loading", async () => {
+    jest.useFakeTimers();
+    let resolveSession!: (value: string | null) => void;
+    (AsyncStorage.getItem as jest.Mock).mockReturnValueOnce(new Promise<string | null>((resolve) => { resolveSession = resolve; }));
+    const { getByText } = render(<App />);
+    act(() => { jest.advanceTimersByTime(2300); });
+    expect(getByText("ALTER")).toBeTruthy();
+    await act(async () => { resolveSession(null); await Promise.resolve(); });
     jest.useRealTimers();
   });
 
