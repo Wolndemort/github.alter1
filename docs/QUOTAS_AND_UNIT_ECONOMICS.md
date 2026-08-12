@@ -22,7 +22,7 @@ Payment safety:
 - Recurring payment failures disable auto-renewal.
 - Provider failures refund reserved credits.
 - Media cancellation refunds the reservation.
-- YouTube accepts `Idempotency-Key`; duplicate requests return `409` instead of charging twice.
+- All expensive authenticated POST routes accept `Idempotency-Key`; duplicate requests return `409` instead of charging twice. Failed requests release the key for retry.
 - Owner access bypasses subscription and credit charging by explicit configured owner identity.
 
 Useful commands:

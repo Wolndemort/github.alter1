@@ -13,7 +13,7 @@ Payment and quota rules, refunds, idempotency and unit economics are documented 
 
 ## Актуальный production baseline (2026-08-08)
 
-- Backend: 249 тестов проходят локально; mobile TypeScript и тесты проходят.
+- Backend: 476 тестов проходят локально; mobile TypeScript и тесты проходят.
 - Тарифы: ALTER Personal — 990 ₽/30 дней; ALTER Ego — 2990 ₽/30 дней.
 - Квоты: Personal — 1000 кредитов/месяц, Ego — 3500 кредитов/месяц. Telegram и мобильное приложение используют общий Redis-счётчик.
 - YooKassa: карта и СБП, проверка суммы/status/metadata, idempotency, webhook и автопродление.
@@ -44,7 +44,7 @@ Parity checks: `/new_session` and the mobile New Chat action persist summaries; 
 - fal.ai configuration uses `MEDIA_PROVIDER=fal`, `FAL_BASE_URL=https://fal.run`, `fal-ai/flux-pro/kontext/max` for image editing, and `fal-ai/kling-video/v2.1/master/image-to-video` for video. Keep the API key only in `.env` on the server.
 - The Telegram/app identity merge avoids lazy SQLAlchemy relationship IO; notification monitors never send an app database id as a Telegram chat id.
 
-Latest verification baseline: `249` backend tests, mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` pass. Expo Go push limitations are expected; production remote push requires a development build/TestFlight.
+Latest verification baseline: `476` backend tests, `23/23` mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` pass. Expo Go push limitations are expected; production remote push requires a development build/TestFlight.
 
 ### Metro / Expo quick start
 
@@ -111,7 +111,7 @@ cmd /c "npx tsc --noEmit"
 cmd /c "npm test -- --runInBand"
 ```
 
-Verified current result: `236` backend tests and `11` mobile tests pass.
+Verified current result: `476` backend tests and `23` mobile tests pass.
 TypeScript passes too. The SafeAreaView output is only a deprecation warning.
 
 ### Completed mobile work

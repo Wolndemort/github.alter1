@@ -52,5 +52,4 @@ These are observed production samples, not a universal guarantee; provider load 
 
 1. Repeat production smoke after every deployment.
 2. Track p50/p95/p99 by auth, quota, DB, model first token, full reply and TTS stages.
-3. Extend `Idempotency-Key` to every chargeable HTTP operation.
-4. Reconcile YooKassa payment records periodically with the provider.
+3. Reconcile YooKassa payment records periodically with the provider.

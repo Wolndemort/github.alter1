@@ -28,6 +28,7 @@ from api.calendar_routes import setup_calendar_routes
 from api.faq_routes import setup_faq_routes
 from utils.sentry_setup import init_sentry
 from utils.http_pool import close as close_http_pool
+from utils.idempotency import acquire as acquire_idempotency, release as release_idempotency
 
 
 async def main():
@@ -51,6 +52,8 @@ async def main():
 
     @web.middleware
     async def http_rate_limit(request, handler):
+        idempotency_storage_key = None
+        authenticated_user_id = None
         if request.path.startswith("/api/") and request.path not in {"/api/v1/usage"}:
             remote = request.remote or "unknown"
             try:
@@ -66,6 +69,7 @@ async def main():
             if expensive and header.startswith("Bearer ") and config.APP_AUTH_SECRET:
                 try:
                     user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())
+                    authenticated_user_id = user_id
                     owner_access = is_owner(user_id)
                     if not owner_access:
                         owner_cache_key = f"http-owner-access:{user_id}"
@@ -84,7 +88,19 @@ async def main():
                 except (RedisError, ValueError):
                     logging.exception("Authenticated HTTP quota check failed")
                     raise web.HTTPServiceUnavailable(text="quota service unavailable")
-        return await handler(request)
+            if request.method == "POST" and request.path.startswith(("/api/v1/chat/", "/api/v1/audio/", "/api/v1/youtube/", "/api/v1/media/")):
+                request_key = request.headers.get("Idempotency-Key")
+                if request_key and authenticated_user_id is not None:
+                    idempotency_redis = redis
+                    idempotency_storage_key = await acquire_idempotency(idempotency_redis, authenticated_user_id, request.path, request_key)
+                    if idempotency_storage_key == "":
+                        raise web.HTTPConflict(text="duplicate request")
+        try:
+            return await handler(request)
+        except Exception:
+            if idempotency_storage_key:
+                await release_idempotency(redis, idempotency_storage_key)
+            raise
 
     web_app.middlewares.append(http_rate_limit)
 
