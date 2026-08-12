@@ -24,6 +24,14 @@ READ_ONLY_CHECKS = (
 )
 
 
+def classify_status(status: int, expected: tuple[int, ...]) -> tuple[bool, bool, str | None]:
+    """Separate a tolerated optional-provider outage from a healthy endpoint."""
+    if status not in expected:
+        return False, False, f"unexpected_http_{status}"
+    degraded = status != 200
+    return True, degraded, "optional_provider_unavailable" if degraded else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
@@ -40,15 +48,15 @@ def main() -> None:
             try:
                 response = client.get(f"{args.base_url.rstrip('/')}{path}", headers=headers)
                 status = response.status_code
-                ok = status in expected
-                error = None if ok else f"unexpected_http_{status}"
+                ok, degraded, error = classify_status(status, expected)
             except httpx.HTTPError as exc:
-                status, ok, error = None, False, exc.__class__.__name__
+                status, ok, degraded, error = None, False, False, exc.__class__.__name__
             records.append({
                 "case_id": name,
                 "path": path,
                 "status": status,
                 "ok": ok,
+                "degraded": degraded,
                 "latency_ms": round((time.perf_counter() - started) * 1000, 1),
                 "error": error,
             })
