@@ -90,3 +90,11 @@ PDF editing is intentionally rejected until layout-aware/OCR export is enabled.
 For image scans, the optional local OCR adapter uses Pillow and Tesseract. If
 the native Tesseract binary is absent, the request remains safe and should use
 the hosted vision path instead.
+
+## Unified attachments
+
+`services.attachment_pipeline.prepare_attachment` classifies an attachment as
+document, image, video, or audio. Documents produce bounded text plus a
+structured profile for the agent; images may add local OCR and otherwise keep a
+vision fallback; video and audio remain on their existing frame/transcription
+pipelines. No paid provider is called by this preparation step.
