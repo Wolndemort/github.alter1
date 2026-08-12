@@ -13,7 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AccountResponse, LocationContext, MemoryResponse, MyDayResponse, api } from "./src/api/client";
+import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, api } from "./src/api/client";
 
 type ScenarioItem = { id: string; title: string; prompt: string; mode: string };
 type ActionItem = { action: string; status: string; at: string; route?: string; tool?: string };
@@ -371,6 +371,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [documentEditVisible, setDocumentEditVisible] = useState(false);
   const [documentInstruction, setDocumentInstruction] = useState("");
   const [audioActionsVisible, setAudioActionsVisible] = useState(false);
+  const [mediaJobsVisible, setMediaJobsVisible] = useState(false);
+  const [mediaJobs, setMediaJobs] = useState<MediaJob[]>([]);
+  const [mediaJobsLoading, setMediaJobsLoading] = useState(false);
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "searching" | "planning" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
@@ -729,6 +732,20 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { setMyDayData(await api.myDay(token)); } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось собрать твой день"); }
     finally { setMyDayLoading(false); }
   };
+  const openMediaJobs = async () => {
+    setMediaJobsVisible(true); setMenuVisible(false); setMediaJobsLoading(true);
+    try { setMediaJobs((await api.mediaHistory(token)).items); } catch (err) { setMenuError(userFacingError(err)); }
+    finally { setMediaJobsLoading(false); }
+  };
+  const cancelMediaJob = async (id: string) => {
+    try { await api.cancelMediaJob(token, id); setMediaJobs((items) => items.map((item) => item.id === id ? { ...item, status: "cancelled" } : item)); }
+    catch (err) { setMenuError(userFacingError(err)); }
+  };
+  useEffect(() => {
+    if (!mediaJobsVisible || !mediaJobs.some((item) => item.status === "queued" || item.status === "running")) return;
+    const timer = setInterval(() => { api.mediaHistory(token).then(({ items }) => setMediaJobs(items)).catch(() => undefined); }, 2500);
+    return () => clearInterval(timer);
+  }, [mediaJobsVisible, mediaJobs, token]);
   const forgetMemoryCategory = (category: string, title: string) => Alert.alert("Забыть категорию?", `Удалить из памяти «${title}»?`, [
     { text: "Отмена", style: "cancel" },
     { text: "Забыть", style: "destructive", onPress: async () => {
@@ -887,6 +904,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         <Pressable style={premiumStyles.menuAction} onPress={openScenarios}><Text style={premiumStyles.menuActionText}>Фирменные сценарии</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openMemory}><Text style={premiumStyles.menuActionText}>Память</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openActionLog}><Text style={premiumStyles.menuActionText}>Журнал действий</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
+        <Pressable style={premiumStyles.menuAction} onPress={openMediaJobs}><Text style={premiumStyles.menuActionText}>Медиа-задачи и прогресс</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={() => { setMenuVisible(false); setHistoryVisible(true); }}><Text style={premiumStyles.menuActionText}>История чата</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openFaq}><Text style={premiumStyles.menuActionText}>FAQ · как пользоваться</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={openReminders}><Text style={premiumStyles.menuActionText}>Напоминания</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable>
@@ -946,6 +964,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={audioActionsVisible} transparent animationType="fade" onRequestClose={() => setAudioActionsVisible(false)}>
     <Pressable style={sheetStyles.backdrop} onPress={() => setAudioActionsVisible(false)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Действия с аудио</Text><Pressable style={sheetStyles.action} onPress={() => runAudioAction("transcribe")} disabled={busy}><Text style={sheetStyles.actionIcon}>文</Text><Text style={sheetStyles.actionText}>Расшифровать в текст</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => runAudioAction("isolate")} disabled={busy}><Text style={sheetStyles.actionIcon}>◌</Text><Text style={sheetStyles.actionText}>Изолировать голос</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => runAudioAction("process")} disabled={busy}><Text style={sheetStyles.actionIcon}>✦</Text><Text style={sheetStyles.actionText}>Улучшить и убрать шум</Text></Pressable><Pressable style={sheetStyles.cancel} onPress={() => setAudioActionsVisible(false)}><Text style={sheetStyles.cancelText}>Отмена</Text></Pressable></Pressable></Pressable>
+  </Modal>
+  <Modal visible={mediaJobsVisible} animationType="slide" onRequestClose={() => setMediaJobsVisible(false)}>
+    <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Медиа-задачи</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMediaJobsVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+      {mediaJobsLoading ? <ActivityIndicator color="#fff" /> : mediaJobs.length === 0 ? <Text style={styles.emptyMemory}>Здесь появятся задачи генерации изображений и видео.</Text> : <ScrollView contentContainerStyle={styles.memoryList}>{mediaJobs.map((job) => <View key={job.id} style={styles.memoryRow}><Text style={styles.memoryKey}>{job.kind === "video" ? "Видео" : "Изображение"} · {job.status}</Text><Text style={styles.memoryValue}>{Math.round(job.progress || 0)}%</Text><View style={{ height: 4, backgroundColor: "#333", borderRadius: 4, marginVertical: 8 }}><View style={{ height: 4, width: `${Math.max(0, Math.min(100, job.progress || 0))}%`, backgroundColor: "#b8a6ff", borderRadius: 4 }} /></View>{job.error ? <Text style={styles.error}>{job.error}</Text> : null}{job.status === "queued" || job.status === "running" ? <Pressable style={premiumStyles.menuAction} onPress={() => cancelMediaJob(job.id)}><Text style={premiumStyles.menuActionText}>Отменить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable> : null}</View>)}</ScrollView>}
+    </SafeAreaView>
   </Modal>
   <Modal visible={feedbackFor !== null} transparent animationType="fade" onRequestClose={() => setFeedbackFor(null)}>
     <Pressable style={sheetStyles.backdrop} onPress={() => setFeedbackFor(null)}><Pressable style={sheetStyles.sheet} onPress={(event) => event.stopPropagation()}><View style={sheetStyles.handle} /><Text style={sheetStyles.title}>Насколько полезен ответ?</Text><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "positive")}><Text style={sheetStyles.actionIcon}>👍</Text><Text style={sheetStyles.actionText}>Полезно</Text></Pressable><Pressable style={sheetStyles.action} onPress={() => feedbackFor && setFeedback(feedbackFor, "negative")}><Text style={sheetStyles.actionIcon}>👎</Text><Text style={sheetStyles.actionText}>Мимо</Text></Pressable></Pressable></Pressable>
