@@ -51,6 +51,7 @@ from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
 from services.document_ingestion import edit_document, extract_document, document_profile
+from services.media_jobs import cancel_job, get_job, history as media_history, submit_job
 import logging
 
 router = Router()
@@ -1401,6 +1402,63 @@ async def cmd_calendar_add(message: types.Message, command: CommandObject, db_se
         await message.answer(f"Событие добавлено: {created.get('summary', parts[4])}")
     except Exception:
         await message.answer("Не удалось добавить событие. Проверь подключение через /calendar_connect.")
+
+
+@router.message(Command("media"))
+async def cmd_media_job(message: types.Message, command: CommandObject, db_session: AsyncSession):
+    parts = (command.args or "").split(maxsplit=1)
+    if len(parts) < 2 or parts[0].lower() not in {"image", "video"}:
+        await message.answer("Формат: /media image описание или /media video описание")
+        return
+    kind, prompt = parts[0].lower(), parts[1].strip()
+    user = await get_or_create_user(message, db_session)
+    cost = config.FAL_TEXT_VIDEO_CREDITS if kind == "video" else config.FAL_TEXT_IMAGE_CREDITS
+    if not await generation_allowed(user, cost):
+        await message.answer("Лимит кредитов для этой медиа-задачи исчерпан.")
+        return
+    try:
+        job_id = await submit_job(user.id, kind, prompt, None, parse_media_options(prompt, kind))
+        await message.answer(f"Задача {kind} поставлена в очередь: {job_id}\nПроверить: /media_jobs")
+    except Exception:
+        logging.exception("Telegram media job submit failed")
+        await message.answer("Не удалось поставить медиа-задачу в очередь. Попробуй ещё раз.")
+
+
+@router.message(Command("media_jobs"))
+async def cmd_media_jobs(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
+    items = await media_history(user.id)
+    if not items:
+        await message.answer("Медиа-задач пока нет.")
+        return
+    lines = ["Последние медиа-задачи:"]
+    for item in items[:10]:
+        lines.append(f"{item.get('id')} · {item.get('kind')} · {item.get('status')} · {item.get('progress', 0)}%")
+    await message.answer("\n".join(lines) + "\n\nСтатус: /media_status ID\nОтмена: /media_cancel ID")
+
+
+@router.message(Command("media_status"))
+async def cmd_media_status(message: types.Message, command: CommandObject, db_session: AsyncSession):
+    job_id = (command.args or "").strip()
+    if not job_id:
+        await message.answer("Формат: /media_status ID")
+        return
+    user = await get_or_create_user(message, db_session)
+    job = await get_job(job_id)
+    if not job or job.get("user_id") != user.id:
+        await message.answer("Задача не найдена.")
+        return
+    await message.answer(f"{job.get('kind')} · {job.get('status')} · {job.get('progress', 0)}%" + (f"\nОшибка: {job.get('error')}" if job.get("error") else ""))
+
+
+@router.message(Command("media_cancel"))
+async def cmd_media_cancel(message: types.Message, command: CommandObject, db_session: AsyncSession):
+    job_id = (command.args or "").strip()
+    if not job_id:
+        await message.answer("Формат: /media_cancel ID")
+        return
+    user = await get_or_create_user(message, db_session)
+    await message.answer("Задача отменена." if await cancel_job(job_id, user.id) else "Не удалось отменить задачу: проверь ID или статус.")
 
 
 @router.message(lambda message: message.text and detect_audio_action(message.text) == "effect")
