@@ -888,9 +888,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   };
   const runNativePickerAfterDismiss = (picker: () => Promise<void>) => {
     setMediaPickerVisible(false);
+    const watchdog = setTimeout(() => setMediaPickerBusy(false), 20_000);
     setTimeout(() => { void picker(); }, 350);
+    setTimeout(() => clearTimeout(watchdog), 20_500);
   };
-  const pickMedia = () => setMediaPickerVisible(true);
+  const pickMedia = () => { setMediaPickerBusy(false); setMediaPickerVisible(true); };
   const takePhoto = async () => {
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
