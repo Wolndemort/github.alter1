@@ -113,6 +113,9 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
         if not has_owner_access(user_id, account.email if account else None):
             raise web.HTTPForbidden(text="owner access required")
     counters = metrics_snapshot()
+    model_success = counters.get("ai.model.success", 0)
+    model_failures = counters.get("ai.model.failure", 0)
+    total_model_attempts = model_success + model_failures
     return web.json_response({
         "counters": counters,
         "latency": latency_snapshot(),
@@ -120,6 +123,11 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
         "tool_empty": counters.get("ai.tool.empty", 0),
         "tool_failures": counters.get("ai.tool.failure", 0) + counters.get("ai.tool.error", 0),
         "quality_warnings": sum(value for name, value in counters.items() if name == "ai.reply.quality_warning"),
+        "model_reliability": {
+            "success": model_success,
+            "failures": model_failures,
+            "fallback_rate": round(model_failures / total_model_attempts, 4) if total_model_attempts else 0.0,
+        },
         "configuration": configuration_snapshot(config),
     })
 

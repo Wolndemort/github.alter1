@@ -71,6 +71,9 @@ Provider-returned media URLs pass an SSRF guard before download: credentials,
 localhost, private/link-local/reserved addresses and unresolved hosts are
 rejected.
 
+Diagnostics also expose `model_reliability.fallback_rate`, calculated from
+model success/failure counters rather than from a synthetic benchmark.
+
 Run the non-secret configuration audit before deploy:
 
 ```powershell
