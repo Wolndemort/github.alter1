@@ -79,3 +79,10 @@ git diff --check
 
 The paid text/voice/search benchmarks remain separate and require the explicit
 `--confirm-cost` flag.
+
+## Document export
+
+`POST /api/v1/chat/document/edit` accepts multipart `file` and `instruction`.
+Instructions use auditable replacements, one per line: `old text => new text`.
+The endpoint returns the edited TXT, Markdown, CSV, JSON, or DOCX as a download.
+PDF editing is intentionally rejected until layout-aware/OCR export is enabled.

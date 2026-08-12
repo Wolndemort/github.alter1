@@ -31,7 +31,7 @@ from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
 from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
-from services.document_ingestion import extract_document, start_document_agent
+from services.document_ingestion import edit_document, extract_document, start_document_agent
 from utils.agent_engine import agent_view
 
 
@@ -162,6 +162,38 @@ async def document_chat_route(request: web.Request) -> web.Response:
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
     return web.json_response({"reply": result.reply, "session_id": result.session_id, "agent": agent, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
+
+
+async def document_edit_route(request: web.Request) -> web.Response:
+    """Apply explicit, auditable replacements and return the edited file."""
+    user_id = _bearer(request)
+    if not request.content_type.startswith("multipart/"):
+        raise web.HTTPBadRequest(text="multipart form required")
+    reader = await request.multipart()
+    filename, content_type, data, instruction = "document", "", b"", ""
+    async for part in reader:
+        if part.name == "instruction":
+            instruction = (await part.text())[:12000]
+        elif part.name == "file":
+            filename = part.filename or filename
+            content_type = part.headers.get("Content-Type", "")
+            data = await part.read(decode=False)
+    try:
+        artifact = edit_document(filename, data, instruction, content_type)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc))
+    async with async_session() as session:
+        from data.models import User, WebAccount
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
+            raise web.HTTPPaymentRequired(text="active subscription required")
+    response = web.Response(body=artifact.data, content_type=artifact.media_type or "application/octet-stream")
+    response.headers["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
+    response.headers["X-Alter-Edit-Mode"] = "explicit-replacements"
+    return response
 
 
 async def chat_stream_route(request: web.Request) -> web.StreamResponse:
@@ -484,6 +516,7 @@ def setup_chat_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/chat/history", history_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
     app.router.add_post("/api/v1/chat/document", document_chat_route)
+    app.router.add_post("/api/v1/chat/document/edit", document_edit_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
     app.router.add_get("/api/v1/media/capabilities", media_capabilities_route)
     app.router.add_post("/api/v1/media/jobs", media_job_create_route)

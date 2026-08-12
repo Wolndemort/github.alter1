@@ -47,3 +47,8 @@ def test_json_document_edit_preserves_valid_json():
 def test_pdf_edit_is_rejected_instead_of_corrupting_layout():
     with pytest.raises(ValueError, match="layout-aware"):
         edit_document("scan.pdf", b"not a pdf", "a => b")
+
+
+def test_document_edit_requires_explicit_instruction():
+    with pytest.raises(ValueError, match="explicit replacements"):
+        edit_document("notes.txt", b"unchanged", "сделай красиво")
