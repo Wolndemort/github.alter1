@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, extract_document, start_document_agent
+from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, edit_document, extract_document, start_document_agent
 
 
 def test_text_document_is_normalized_and_chunked():
@@ -31,3 +31,19 @@ def test_document_agent_keeps_bounded_context_and_creates_task_graph():
     assert len(agent["tasks"]) == 4
     assert agent["constraints"]["document_filename"] == "plan.txt"
     assert len(agent["constraints"]["document_context"]) <= 30000
+
+
+def test_text_document_edit_is_explicit_and_exportable():
+    result = edit_document("notes.txt", b"old value", "old value => new value")
+    assert result.filename == "notes.txt"
+    assert result.data == b"new value"
+
+
+def test_json_document_edit_preserves_valid_json():
+    result = edit_document("data.json", b'{"status": "draft"}', '"draft" => "ready"')
+    assert b'"ready"' in result.data
+
+
+def test_pdf_edit_is_rejected_instead_of_corrupting_layout():
+    with pytest.raises(ValueError, match="layout-aware"):
+        edit_document("scan.pdf", b"not a pdf", "a => b")

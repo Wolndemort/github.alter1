@@ -13,6 +13,7 @@ from utils.agent_engine import start_agent
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 MAX_DOCUMENT_CHARS = 120_000
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".json", ".csv", ".pdf", ".docx"}
+EDITABLE_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".docx"}
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,14 @@ class Document:
     @property
     def chars(self) -> int:
         return len(self.text)
+
+
+@dataclass(frozen=True)
+class EditedDocument:
+    """A bounded, exportable document result produced by an explicit edit."""
+    filename: str
+    media_type: str
+    data: bytes
 
 
 def _clean(text: str) -> str:
@@ -84,6 +93,50 @@ def extract_document(filename: str, data: bytes, media_type: str = "") -> Docume
 def document_chunks(document: Document, chunk_chars: int = 6000) -> list[str]:
     size = max(500, min(int(chunk_chars), 12000))
     return [document.text[index:index + size] for index in range(0, len(document.text), size)] or [""]
+
+
+def edit_document(filename: str, data: bytes, instruction: str, media_type: str = "") -> EditedDocument:
+    """Apply only deterministic replacements supplied as ``old => new`` lines.
+
+    AI-generated edits must be converted to this explicit format by the caller;
+    this keeps exports auditable and prevents accidental destructive rewrites.
+    """
+    extension = _extension(filename)
+    if extension not in EDITABLE_EXTENSIONS:
+        raise ValueError("this document format requires layout-aware editing")
+    document = extract_document(filename, data, media_type)
+    replacements = []
+    for line in (instruction or "").splitlines():
+        if "=>" in line:
+            old, new = line.split("=>", 1)
+            if old.strip():
+                replacements.append((old.strip(), new.strip()))
+    if not replacements:
+        raise ValueError("provide explicit replacements in the form: old => new")
+    text = document.text
+    for old, new in replacements:
+        text = text.replace(old, new)
+    if extension == ".json":
+        try:
+            output = json.dumps(json.loads(text), ensure_ascii=False, indent=2).encode("utf-8")
+        except json.JSONDecodeError as exc:
+            raise ValueError("edit would produce invalid JSON") from exc
+    elif extension == ".docx":
+        try:
+            from docx import Document as DocxDocument
+            source = DocxDocument(io.BytesIO(bytes(data)))
+            for paragraph in source.paragraphs:
+                for old, new in replacements:
+                    for run in paragraph.runs:
+                        run.text = run.text.replace(old, new)
+            output_buffer = io.BytesIO()
+            source.save(output_buffer)
+            output = output_buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("DOCX support is not installed") from exc
+    else:
+        output = text.encode("utf-8")
+    return EditedDocument(document.filename, document.media_type, output)
 
 
 def start_document_agent(settings: dict | None, document: Document, goal: str, *, horizon_minutes: int = 60) -> dict:
