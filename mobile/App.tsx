@@ -10,7 +10,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, api } from "./src/api/client";
@@ -1065,6 +1065,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [introDone, setIntroDone] = useState(false);
   const [, setForegroundTick] = useState(0);
+  const finishIntro = useCallback(() => setIntroDone(true), []);
   useEffect(() => { AsyncStorage.getItem("alter_access_token").then((value) => setToken(value)).catch(() => setToken(null)).finally(() => setLoading(false)); }, []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -1072,7 +1073,7 @@ export default function App() {
     });
     return () => subscription.remove();
   }, []);
-  if (!introDone || loading) return <IntroScreen onFinished={() => setIntroDone(true)} />;
+  if (!introDone || loading) return <IntroScreen onFinished={finishIntro} />;
   return <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>{token ? <Stack.Screen name="Chat">{() => <ChatScreen token={token} onLogout={() => { AsyncStorage.removeItem("alter_access_token"); setToken(null); }} />}</Stack.Screen> : <Stack.Screen name="Auth">{() => <AuthScreen onAuthenticated={setToken} />}</Stack.Screen>}</Stack.Navigator></NavigationContainer>;
 }
 
