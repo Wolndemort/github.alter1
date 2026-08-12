@@ -51,6 +51,7 @@ def latency_snapshot() -> dict[str, dict[str, float | int]]:
                 "count": len(ordered),
                 "p50_ms": round(ordered[(len(ordered) - 1) * 50 // 100], 1),
                 "p95_ms": round(ordered[(len(ordered) - 1) * 95 // 100], 1),
+                "p99_ms": round(ordered[(len(ordered) - 1) * 99 // 100], 1),
                 "last_ms": round(ordered[-1], 1),
             }
         return result

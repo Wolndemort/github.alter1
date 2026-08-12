@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from utils.agent_engine import start_agent
+from utils.external_content import audit_external_content
 
 
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
@@ -197,5 +198,5 @@ def start_document_agent(settings: dict | None, document: Document, goal: str, *
     ]
     return start_agent(
         settings, goal or f"Работа с документом {document.filename}", horizon_minutes=horizon_minutes,
-        tasks=tasks, constraints={"document_context": bounded_text, "document_filename": document.filename, "document_profile": document_profile(document)},
+        tasks=tasks, constraints={"document_context": bounded_text, "document_filename": document.filename, "document_profile": document_profile(document), "external_content_audit": audit_external_content(bounded_text)},
     )
