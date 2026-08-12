@@ -374,6 +374,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [mediaJobsVisible, setMediaJobsVisible] = useState(false);
   const [mediaJobs, setMediaJobs] = useState<MediaJob[]>([]);
   const [mediaJobsLoading, setMediaJobsLoading] = useState(false);
+  const [mediaJobPrompt, setMediaJobPrompt] = useState("");
+  const [mediaJobKind, setMediaJobKind] = useState<"image" | "video">("image");
   const [activity, setActivity] = useState<"" | "thinking" | "analyzing" | "searching" | "planning" | "recording">("");
   const [location, setLocation] = useState<LocationContext | null>(null);
   const listRef = React.useRef<FlatList<ChatItem>>(null);
@@ -741,6 +743,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { await api.cancelMediaJob(token, id); setMediaJobs((items) => items.map((item) => item.id === id ? { ...item, status: "cancelled" } : item)); }
     catch (err) { setMenuError(userFacingError(err)); }
   };
+  const createMediaJob = async () => {
+    if (!mediaJobPrompt.trim() || mediaJobsLoading) return;
+    setMediaJobsLoading(true); setMenuError("");
+    try { const job = await api.createMediaJob(token, mediaJobKind, mediaJobPrompt.trim()); setMediaJobs((items) => [job, ...items]); setMediaJobPrompt(""); }
+    catch (err) { setMenuError(userFacingError(err)); }
+    finally { setMediaJobsLoading(false); }
+  };
   useEffect(() => {
     if (!mediaJobsVisible || !mediaJobs.some((item) => item.status === "queued" || item.status === "running")) return;
     const timer = setInterval(() => { api.mediaHistory(token).then(({ items }) => setMediaJobs(items)).catch(() => undefined); }, 2500);
@@ -967,6 +976,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   </Modal>
   <Modal visible={mediaJobsVisible} animationType="slide" onRequestClose={() => setMediaJobsVisible(false)}>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Медиа-задачи</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMediaJobsVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}><TextInput value={mediaJobPrompt} onChangeText={setMediaJobPrompt} placeholder="Что создать? Например: кинематографичное видео города" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><View style={{ flexDirection: "row", gap: 8 }}><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("image")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "image" ? "✓ " : ""}Изображение</Text></Pressable><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("video")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "video" ? "✓ " : ""}Видео</Text></Pressable></View><Pressable style={[permissionStyles.primary, { opacity: mediaJobPrompt.trim() && !mediaJobsLoading ? 1 : 0.45, marginTop: 8 }]} onPress={createMediaJob} disabled={!mediaJobPrompt.trim() || mediaJobsLoading}><Text style={permissionStyles.primaryText}>Запустить задачу</Text></Pressable></View>
       {mediaJobsLoading ? <ActivityIndicator color="#fff" /> : mediaJobs.length === 0 ? <Text style={styles.emptyMemory}>Здесь появятся задачи генерации изображений и видео.</Text> : <ScrollView contentContainerStyle={styles.memoryList}>{mediaJobs.map((job) => <View key={job.id} style={styles.memoryRow}><Text style={styles.memoryKey}>{job.kind === "video" ? "Видео" : "Изображение"} · {job.status}</Text><Text style={styles.memoryValue}>{Math.round(job.progress || 0)}%</Text><View style={{ height: 4, backgroundColor: "#333", borderRadius: 4, marginVertical: 8 }}><View style={{ height: 4, width: `${Math.max(0, Math.min(100, job.progress || 0))}%`, backgroundColor: "#b8a6ff", borderRadius: 4 }} /></View>{job.error ? <Text style={styles.error}>{job.error}</Text> : null}{job.status === "queued" || job.status === "running" ? <Pressable style={premiumStyles.menuAction} onPress={() => cancelMediaJob(job.id)}><Text style={premiumStyles.menuActionText}>Отменить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable> : null}</View>)}</ScrollView>}
     </SafeAreaView>
   </Modal>
