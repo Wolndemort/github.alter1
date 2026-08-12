@@ -892,9 +892,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const runNativePickerAfterDismiss = (picker: () => Promise<void>) => {
     setMediaPickerVisible(false);
     const watchdog = setTimeout(() => setMediaPickerBusy(false), 20_000);
-    InteractionManager.runAfterInteractions(() => {
-      setTimeout(() => { void picker(); }, 120);
-    });
+    let launched = false;
+    const launch = () => { if (launched) return; launched = true; void picker(); };
+    const fallback = setTimeout(launch, 700);
+    InteractionManager.runAfterInteractions(() => { clearTimeout(fallback); setTimeout(launch, 120); });
     setTimeout(() => clearTimeout(watchdog), 20_500);
   };
   const pickMedia = () => { setMediaPickerBusy(false); setMediaPickerVisible(true); };
