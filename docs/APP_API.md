@@ -186,3 +186,6 @@ They are sent to `POST /api/v1/chat/document` with `agent=true`; the response
 contains the analysis and an active document agent. TXT/MD/CSV/JSON/DOCX edits
 are returned by `POST /api/v1/chat/document/edit`; PDF is readable/comparable
 but layout-aware editing remains intentionally disabled.
+\n+Telegram документный pipeline принимает PDF, DOCX, TXT, Markdown, CSV и JSON
+как вложение с caption, извлекает bounded-текст и профиль документа и отвечает
+по содержимому. Лимит — 25 MB.

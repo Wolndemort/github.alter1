@@ -50,6 +50,7 @@ from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
+from services.document_ingestion import extract_document, document_profile
 import logging
 
 router = Router()
@@ -634,6 +635,30 @@ def media_generation_requested(prompt: str) -> bool:
     )
     first_word = normalized.split(" ", 1)[0].rstrip(" ,.!?:;—–-\n")
     return first_word in command_words
+
+
+@router.message(lambda message: message.document is not None)
+async def handle_document(message: types.Message, db_session: AsyncSession):
+    """Read supported Telegram documents through the same bounded pipeline."""
+    document = message.document
+    if document.file_size and document.file_size > 25 * 1024 * 1024:
+        await message.answer("Файл слишком большой. Пришли документ до 25 МБ.")
+        return
+    try:
+        user = await get_or_create_user(message, db_session)
+        await message.bot.send_chat_action(message.chat.id, "typing")
+        buffer = await message.bot.download(document, destination=BytesIO())
+        filename = document.file_name or "document"
+        parsed = extract_document(filename, buffer.getvalue(), document.mime_type or "")
+        prompt = message.caption or "Прочитай документ, выдели главное и предложи следующие шаги."
+        context = f"\n\nDOCUMENT: {parsed.filename}\n<document_text>\n{parsed.text}\n</document_text>\nDOCUMENT_PROFILE: {document_profile(parsed)}"
+        reply = await generate_reply([{"role": "user", "content": prompt + context}], memory=dict(user.memory or {}))
+        await message.answer(sanitize_public_reply(reply))
+    except ValueError as exc:
+        await message.answer(f"Не удалось прочитать документ: {exc}")
+    except Exception:
+        logging.exception("Telegram document processing failed")
+        await message.answer("Не удалось обработать документ. Проверь формат и попробуй ещё раз.")
 
 
 @router.message(lambda message: message.photo or message.video)
