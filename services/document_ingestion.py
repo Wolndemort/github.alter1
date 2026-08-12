@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from utils.agent_engine import start_agent
+
 
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 MAX_DOCUMENT_CHARS = 120_000
@@ -82,3 +84,18 @@ def extract_document(filename: str, data: bytes, media_type: str = "") -> Docume
 def document_chunks(document: Document, chunk_chars: int = 6000) -> list[str]:
     size = max(500, min(int(chunk_chars), 12000))
     return [document.text[index:index + size] for index in range(0, len(document.text), size)] or [""]
+
+
+def start_document_agent(settings: dict | None, document: Document, goal: str, *, horizon_minutes: int = 60) -> dict:
+    """Create a durable document agent without storing unbounded raw input."""
+    bounded_text = document.text[:30000]
+    tasks = [
+        {"id": "document_scope", "title": "Определить цель и структуру документа", "priority": 1},
+        {"id": "document_facts", "title": "Извлечь ключевые факты, даты, числа и ограничения", "depends_on": ["document_scope"]},
+        {"id": "document_actions", "title": "Сформировать практические выводы и задачи", "depends_on": ["document_facts"]},
+        {"id": "document_verify", "title": "Проверить выводы и подготовить результат", "depends_on": ["document_actions"]},
+    ]
+    return start_agent(
+        settings, goal or f"Работа с документом {document.filename}", horizon_minutes=horizon_minutes,
+        tasks=tasks, constraints={"document_context": bounded_text, "document_filename": document.filename},
+    )

@@ -31,7 +31,8 @@ from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
 from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
-from services.document_ingestion import extract_document
+from services.document_ingestion import extract_document, start_document_agent
+from utils.agent_engine import agent_view
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -114,10 +115,19 @@ async def document_chat_route(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="multipart form required")
     reader = await request.multipart()
     prompt = "Проанализируй документ и выдели главное."
+    agent_mode = False
+    agent_horizon = 60
     filename, content_type, data = "document", "", b""
     async for part in reader:
         if part.name == "prompt":
             prompt = (await part.text())[:2000] or prompt
+        elif part.name == "agent":
+            agent_mode = (await part.text()).strip().casefold() in {"1", "true", "yes", "on"}
+        elif part.name == "horizon_minutes":
+            try:
+                agent_horizon = max(5, min(int((await part.text()).strip()), 60 * 24 * 90))
+            except ValueError:
+                raise web.HTTPBadRequest(text="horizon_minutes must be an integer")
         elif part.name == "file":
             filename = part.filename or filename
             content_type = part.headers.get("Content-Type", "")
@@ -142,12 +152,16 @@ async def document_chat_route(request: web.Request) -> web.Response:
                     raise web.HTTPTooManyRequests(text="monthly AI limit reached")
             finally:
                 await close_redis(redis)
+        agent = None
+        if agent_mode:
+            user.tech_stack = start_document_agent(user.tech_stack, document, prompt, horizon_minutes=agent_horizon)
+            agent = agent_view(user.tech_stack)
         context = f"\n\nDOCUMENT: {document.filename}\n<document_text>\n{document.text}\n</document_text>"
         try:
             result = await ChatService().reply(session, user_id, prompt + context)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
-    return web.json_response({"reply": result.reply, "session_id": result.session_id, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
+    return web.json_response({"reply": result.reply, "session_id": result.session_id, "agent": agent, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
 
 
 async def chat_stream_route(request: web.Request) -> web.StreamResponse:

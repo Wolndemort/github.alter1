@@ -59,7 +59,9 @@ input pipeline: images and sampled video frames are sent to the vision model,
 and video audio is transcribed and supplied as additional context.
 
 Documents can be sent to `POST /api/v1/chat/document` as multipart `file` plus
-an optional `prompt`. TXT, Markdown, CSV and JSON work without extra services;
+an optional `prompt`. Add `agent=true` and optionally `horizon_minutes` to
+automatically create an active document agent with extraction, fact-check,
+action and verification tasks. TXT, Markdown, CSV and JSON work without extra services;
 PDF and DOCX extraction is bounded to 25 MB and 120,000 characters. The
 document is passed to the same chat/session pipeline, so the agent can turn it
 into tasks or a plan in the next message.
