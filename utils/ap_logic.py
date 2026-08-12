@@ -102,6 +102,9 @@ TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
         },
     },
+    {"type": "function", "function": {"name": "map_search_organizations", "description": "Найди организации рядом или по названию.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "ll": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "map_route", "description": "Построй маршрут между двумя точками.", "parameters": {"type": "object", "properties": {"origin": {"type": "string"}, "destination": {"type": "string"}, "mode": {"type": "string"}}, "required": ["origin", "destination"]}}},
+    {"type": "function", "function": {"name": "map_distance", "description": "Рассчитай расстояние и время между точками.", "parameters": {"type": "object", "properties": {"origins": {"type": "string"}, "destinations": {"type": "string"}, "mode": {"type": "string"}}, "required": ["origins", "destinations"]}}},
 ]
 
 COMPLEX_REQUEST_PATTERNS = (
@@ -530,6 +533,14 @@ async def execute_tool(name: str, arguments: dict) -> list | str:
         from services.yandex_maps import geocode
         try:
             return await geocode(str(arguments.get("query") or ""))
+        except Exception as exc:
+            return {"status": "unavailable", "reason": str(exc)}
+    if name in {"map_search_organizations", "map_route", "map_distance"}:
+        from services import yandex_maps
+        try:
+            if name == "map_search_organizations": return await yandex_maps.search_organizations(arguments.get("query", ""), ll=arguments.get("ll"))
+            if name == "map_route": return await yandex_maps.route(arguments.get("origin", ""), arguments.get("destination", ""), mode=arguments.get("mode", "driving"))
+            return await yandex_maps.distance_matrix(arguments.get("origins", ""), arguments.get("destinations", ""), mode=arguments.get("mode", "driving"))
         except Exception as exc:
             return {"status": "unavailable", "reason": str(exc)}
     return "Неизвестный инструмент."

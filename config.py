@@ -54,6 +54,8 @@ class Setting(BaseSettings):
     YANDEX_SEARCH_API_KEY: SecretStr | None = None
     YANDEX_MAPS_GEOCODER_API_KEY: SecretStr | None = None
     YANDEX_MAPS_ORG_API_KEY: SecretStr | None = None
+    YANDEX_MAPS_ROUTE_API_KEY: SecretStr | None = None
+    YANDEX_MAPS_DISTANCE_MATRIX_API_KEY: SecretStr | None = None
     TWOGIS_API_KEY: SecretStr | None = None
     SEARCH_PROVIDER_TIMEOUT_SECONDS: int = 8
     SEARCH_FAST_RETURN_SECONDS: int = 4

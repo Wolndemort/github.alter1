@@ -80,7 +80,7 @@ AGENT_TOOL_DEFINITIONS = [
 
 
 async def execute_agent_tool(name: str, arguments: dict, *, db, user, allow_external_actions: bool = False):
-    if name in {"web_search", "get_weather", "map_geocode"}:
+    if name in {"web_search", "get_weather", "map_geocode", "map_search_organizations", "map_route", "map_distance"}:
         return await execute_tool(name, arguments)
     if name == "agent_recall_memory":
         return await recall(db, user.id, str(arguments.get("query") or ""))
