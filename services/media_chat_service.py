@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import config
 from data.models import Session, User
 from services.chat_service import _append, validate_message
-from utils.media import video_audio, video_preview
+from utils.media import video_audio, video_duration, video_preview
+from services.media_quality import video_context
 from utils.media_logic import generate_media_reply
 from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
@@ -134,6 +135,8 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not media:
             raise ValueError("video could not be processed")
         audio = await video_audio(data)
+        quality = video_context(duration_seconds=await video_duration(data), frame_count=len(media), transcript="")
+        analysis_prompt += f"\n\nTechnical video quality context: {quality}"
         if audio:
             transcript = await transcribe_voice(audio)
             if transcript:
