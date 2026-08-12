@@ -11,7 +11,7 @@ class YandexMapsError(RuntimeError):
 
 
 def _api_key() -> str:
-    key = getattr(config, "YANDEX_MAPS_API_KEY", None) or config.YANDEX_SEARCH_API_KEY
+    key = getattr(config, "YANDEX_MAPS_GEOCODER_API_KEY", None) or getattr(config, "YANDEX_MAPS_API_KEY", None) or config.YANDEX_SEARCH_API_KEY
     if not key:
         raise YandexMapsError("Yandex Maps API key is not configured")
     return key.get_secret_value()

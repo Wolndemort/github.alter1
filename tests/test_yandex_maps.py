@@ -7,7 +7,7 @@ from services import yandex_maps
 
 
 def test_geocode_uses_yandex_key_and_normalizes_response(monkeypatch):
-    yandex_maps.config.YANDEX_SEARCH_API_KEY = SecretStr("test")
+    yandex_maps.config.YANDEX_MAPS_GEOCODER_API_KEY = SecretStr("test")
 
     class Response:
         status_code = 200
