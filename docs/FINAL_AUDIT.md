@@ -47,9 +47,16 @@ These are observed production samples, not a universal guarantee; provider load 
 - Deterministic quality benchmark: `7/7`.
 - Middleware/API targeted checks: green.
 - Public production smoke: `/health=200`, `/ready=200`, unauthenticated stream=`401`, malformed webhook=`400`.
+- Non-billing availability load check: 50 requests at concurrency 10, 0 failures, p50 `84.8 ms`, p95 `688.3 ms`.
 
 ## Remaining operational work
 
 1. Repeat production smoke after every deployment.
 2. Track p50/p95/p99 by auth, quota, DB, model first token, full reply and TTS stages.
 3. Reconcile YooKassa payment records periodically with the provider.
+
+The bounded public load check is safe to run without a user token:
+
+```powershell
+py scripts/load_smoke.py --base-url https://api.alterai.ru --requests 50 --concurrency 10
+```
