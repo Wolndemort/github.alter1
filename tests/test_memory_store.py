@@ -25,3 +25,10 @@ def test_explicit_fact_lists_are_merged_without_stringifying():
     memory = merge_memory_facts({}, {"preferences": {"explicit_facts": ["любит кофе"]}}, now=NOW)
     memory = merge_memory_facts(memory, {"preferences": {"explicit_facts": ["любит музыку"]}}, now=NOW)
     assert memory["preferences"]["explicit_facts"] == ["любит кофе", "любит музыку"]
+
+
+def test_legacy_list_category_does_not_break_memory_merge():
+    current = {"open_loops": ["старое дело"]}
+    merged = merge_memory_facts(current, {"open_loops": {"title": "новое дело"}}, now=NOW)
+    assert merged["open_loops"]["items"] == ["старое дело"]
+    assert merged["open_loops"]["title"] == "новое дело"

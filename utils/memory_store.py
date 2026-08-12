@@ -35,6 +35,15 @@ def merge_memory_facts(current: dict | None, incoming: dict | None, *, now: date
         if category == META_KEY or not isinstance(fields, dict):
             continue
         target = result.setdefault(category, {})
+        # Older memory records may contain a list at category level (notably
+        # open_loops/important_events). Normalize that shape before merging so
+        # one malformed legacy record can never break the whole chat handler.
+        if isinstance(target, list):
+            target = {"items": target}
+            result[category] = target
+        elif not isinstance(target, dict):
+            target = {}
+            result[category] = target
         category_meta = metadata.setdefault(category, {})
         for key, raw_value in fields.items():
             is_list = isinstance(raw_value, list)
