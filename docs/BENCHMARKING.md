@@ -60,4 +60,37 @@ Each run contains three text SSE cases and two voice cases. Compare text
 `first_token_ms` and `total_ms` separately from voice `total_ms`; voice is an
 ALTER capability benchmark and has no ChatGPT/Gemini baseline in this suite.
 
+### What p50 and p95 mean
+
+The `p` means percentile. `p50` is the median: half of requests completed
+faster and half slower. `p95` is the tail latency: 95% completed within this
+time, while the slowest 5% took longer. p50 shows the normal user experience;
+p95 exposes cold starts, provider stalls and fallback delays. We track both
+so one exceptionally fast answer cannot hide rare 20–30 second delays.
+
+### Complete benchmark map
+
+```powershell
+# Local quality and regression suite (no provider calls)
+py -m pytest -q
+py -m compileall -q .
+
+# ALTER vs ChatGPT/Gemini quality benchmark (paid; explicit confirmation)
+$env:AUTH_TOKEN = (Get-Content .audit-token -Raw).Trim()
+py -m scripts.collect_alter_benchmark --output alter_results.json --limit 20 --confirm-cost
+py -m scripts.score_benchmark --input all_results.json --output benchmark_report.json
+
+# Production public/auth boundary smoke
+bash scripts/production-e2e.sh
+
+# Read-only capability smoke (requires AUTH_TOKEN; optional providers are marked degraded)
+py -m scripts.collect_capability_smoke --output capability_smoke.json
+
+# Stateful reminder/workflow smoke (creates and cleans up a test reminder)
+py -m scripts.collect_capability_stateful_smoke --output capability_stateful_smoke.json
+
+# Text + voice latency benchmark (paid; 3 runs = 9 text + 6 voice requests)
+py -m scripts.collect_speed_benchmark --output speed_benchmark.json --runs 3 --confirm-cost
+```
+
 Для повторной проверки только провалившихся кейсов можно указать `--case-id` несколько раз, не оплачивая весь suite заново.

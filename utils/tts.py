@@ -117,7 +117,8 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
     if selected_voice == "elevenlabs" and premium_available:
         try:
             selected_voice_id = effective_voice_id
-            async with httpx.AsyncClient(timeout=45) as eleven_client:
+            timeout_seconds = config.ELEVENLABS_FAST_TIMEOUT_SECONDS if fast else 45
+            async with httpx.AsyncClient(timeout=timeout_seconds) as eleven_client:
                 response = await eleven_client.post(
                     f"https://api.elevenlabs.io/v1/text-to-speech/{selected_voice_id}",
                     headers={"xi-api-key": config.ELEVENLABS_API_KEY.get_secret_value(), "Accept": "audio/pcm"},
@@ -140,10 +141,10 @@ async def synthesize_speech(text: str, voice: str | None = None, output_format: 
                 logging.error("ElevenLabs Premium rejected TTS: payment/credits required (HTTP 402)")
             else:
                 logging.exception("ElevenLabs Premium TTS failed with HTTP %s", exc.response.status_code)
-            return b""
+            logging.warning("Falling back from ElevenLabs Premium TTS after HTTP error")
         except Exception:
             logging.exception("ElevenLabs speech synthesis failed for explicitly selected Premium voice")
-            return b""
+            logging.warning("Falling back from ElevenLabs Premium TTS")
     try:
         provider_voice = config.TTS_VOICE if selected_voice == "elevenlabs" else (selected_voice or config.TTS_VOICE)
         # Make the brand pronunciation unambiguous for Russian speech models:

@@ -168,6 +168,40 @@ def test_fast_auto_voice_uses_elevenlabs_turbo_and_shortens_text(monkeypatch):
     assert len(calls[0][1]["json"]["text"]) <= tts.config.TTS_AUTO_MAX_CHARS
 
 
+def test_fast_premium_timeout_falls_back_to_openrouter(monkeypatch):
+    timeouts = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            timeouts.append(kwargs.get("timeout"))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, *args, **kwargs):
+            raise TimeoutError("provider stalled")
+
+    monkeypatch.setattr(tts.config, "ELEVENLABS_ENABLED", True)
+    monkeypatch.setattr(tts.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(tts.config, "ELEVENLABS_VOICE_ID", "premium-voice")
+    monkeypatch.setattr(tts.config, "ELEVENLABS_FAST_TIMEOUT_SECONDS", 8)
+    monkeypatch.setattr(tts.httpx, "AsyncClient", Client)
+
+    async def openrouter_audio(**kwargs):
+        data = base64.b64encode(b"pcm").decode()
+        async def stream():
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(audio=SimpleNamespace(data=data)))])
+        return stream()
+
+    monkeypatch.setattr(tts.client.chat.completions, "create", openrouter_audio)
+    result = run(tts.synthesize_speech("hello", voice="elevenlabs", output_format="wav", fast=True, voice_id="created-voice"))
+    assert result.startswith(b"RIFF")
+    assert timeouts == [8]
+
+
 def test_synthesize_returns_empty_without_audio(monkeypatch):
     async def create(**kwargs):
         async def stream():

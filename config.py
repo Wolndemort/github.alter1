@@ -63,6 +63,7 @@ class Setting(BaseSettings):
     ELEVENLABS_VOICE_ID: str | None = None
     ELEVENLABS_MODEL: str = "eleven_multilingual_v2"
     ELEVENLABS_FAST_MODEL: str = "eleven_flash_v2_5"
+    ELEVENLABS_FAST_TIMEOUT_SECONDS: int = 8
     ELEVENLABS_ENABLED: bool = False
     VOICE_REPLY_DEFAULT: bool = True
 
