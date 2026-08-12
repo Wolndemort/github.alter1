@@ -51,6 +51,28 @@ async def test_video_requires_extractable_preview(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_video_reply_combines_frames_with_audio_transcript(monkeypatch):
+    captured = {}
+
+    async def preview(data): return [("image/jpeg", b"frame")]
+    async def audio(data): return b"audio"
+    async def transcribe(data): return "Человек говорит о сроках проекта"
+    async def vision(prompt, media, **kwargs):
+        captured["prompt"] = prompt
+        assert media == [("image/jpeg", b"frame")]
+        return "Понял видео"
+
+    monkeypatch.setattr(media_chat_service, "video_preview", preview)
+    monkeypatch.setattr(media_chat_service, "video_audio", audio)
+    monkeypatch.setattr(media_chat_service, "transcribe_voice", transcribe)
+    monkeypatch.setattr(media_chat_service, "generate_media_reply", vision)
+    result = await media_chat_service.reply(Db(), 7, "Разбери видео", "video/mp4", b"video")
+    assert result.reply == "Понял видео"
+    assert result.transcript == "Человек говорит о сроках проекта"
+    assert "Транскрипт аудиодорожки видео" in captured["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_audio_is_transcribed_and_delegated_to_text_chat(monkeypatch):
     async def transcribe(data): return "transcribed message"
     monkeypatch.setattr(media_chat_service, "transcribe_voice", transcribe)

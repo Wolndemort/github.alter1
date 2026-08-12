@@ -14,6 +14,7 @@ from utils.scenarios import get_scenario, list_scenarios
 from utils.billing import has_owner_access
 from utils.metrics import latency_snapshot, snapshot as metrics_snapshot
 from utils.workflow_state import advance_workflow, start_workflow, workflow_view
+from utils.agent_engine import agent_view, block_task, claim_next_task, complete_task, replan_agent, start_agent
 
 
 def _parse_datetime(value: object) -> datetime:
@@ -171,6 +172,89 @@ async def workflow_next_route(request: web.Request) -> web.Response:
         return web.json_response({"workflow": workflow_view(user.tech_stack)})
 
 
+async def agent_start_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    goal = str(payload.get("goal") or "").strip()
+    if not goal:
+        raise web.HTTPBadRequest(text="goal is required")
+    try:
+        horizon = int(payload.get("horizon_minutes", 60))
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(text="horizon_minutes must be an integer")
+    tasks = payload.get("tasks")
+    if tasks is not None and (not isinstance(tasks, list) or len(tasks) > 64):
+        raise web.HTTPBadRequest(text="tasks must be a list with at most 64 items")
+    constraints = payload.get("constraints") or {}
+    if not isinstance(constraints, dict):
+        raise web.HTTPBadRequest(text="constraints must be an object")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if (user.tech_stack or {}).get("private_mode") is True:
+            raise web.HTTPConflict(text="agent persistence is disabled in private mode")
+        user.tech_stack = start_agent(user.tech_stack, goal, horizon_minutes=horizon, tasks=tasks, constraints=constraints)
+        await session.commit()
+        return web.json_response({"agent": agent_view(user.tech_stack)}, status=201)
+
+
+async def agent_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        return web.json_response({"agent": agent_view(user.tech_stack)})
+
+
+async def agent_next_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if (user.tech_stack or {}).get("private_mode") is True:
+            raise web.HTTPConflict(text="agent persistence is disabled in private mode")
+        user.tech_stack = claim_next_task(user.tech_stack)
+        await session.commit()
+        return web.json_response({"agent": agent_view(user.tech_stack)})
+
+
+async def agent_task_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    task_id = str(payload.get("task_id") or "").strip()
+    status = str(payload.get("status") or "done").strip().casefold()
+    if not task_id or status not in {"done", "blocked"}:
+        raise web.HTTPBadRequest(text="task_id and status=done|blocked are required")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        if status == "done":
+            user.tech_stack = complete_task(user.tech_stack, task_id, str(payload.get("result") or ""))
+        else:
+            user.tech_stack = block_task(user.tech_stack, task_id, str(payload.get("reason") or ""))
+        await session.commit()
+        return web.json_response({"agent": agent_view(user.tech_stack)})
+
+
+async def agent_replan_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list) or not tasks or len(tasks) > 64:
+        raise web.HTTPBadRequest(text="tasks must be a non-empty list with at most 64 items")
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        user.tech_stack = replan_agent(user.tech_stack, tasks, str(payload.get("reason") or ""))
+        await session.commit()
+        return web.json_response({"agent": agent_view(user.tech_stack)})
+
+
 async def checkins_route(request: web.Request) -> web.Response:
     user_id = _bearer(request); payload = await _json(request)
     if not isinstance(payload.get("enabled"), bool): raise web.HTTPBadRequest(text="enabled must be boolean")
@@ -240,6 +324,11 @@ def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/workflow/start", workflow_start_route)
     app.router.add_get("/api/v1/workflow", workflow_route)
     app.router.add_post("/api/v1/workflow/next", workflow_next_route)
+    app.router.add_post("/api/v1/agent/start", agent_start_route)
+    app.router.add_get("/api/v1/agent", agent_route)
+    app.router.add_post("/api/v1/agent/next", agent_next_route)
+    app.router.add_post("/api/v1/agent/task", agent_task_route)
+    app.router.add_post("/api/v1/agent/replan", agent_replan_route)
     app.router.add_post("/api/v1/checkins", checkins_route)
     app.router.add_post("/api/v1/push-token", push_token_route)
     app.router.add_get("/api/v1/reminders", reminders_route)

@@ -26,6 +26,7 @@ from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from utils.action_log import append_action
 from utils.workflow_state import workflow_view
+from utils.agent_engine import agent_view
 from datetime import timedelta
 
 
@@ -171,6 +172,9 @@ class ChatService:
         workflow = workflow_view(user.tech_stack)
         if workflow:
             memory["active_workflow"] = workflow
+        agent = agent_view(user.tech_stack)
+        if agent:
+            memory["active_agent"] = agent
         if isinstance(location, dict):
             memory["current_location"] = {
                 key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
@@ -296,6 +300,9 @@ class ChatService:
         workflow = workflow_view(user.tech_stack)
         if workflow:
             memory["active_workflow"] = workflow
+        agent = agent_view(user.tech_stack)
+        if agent:
+            memory["active_agent"] = agent
         if isinstance(location, dict):
             memory["current_location"] = {key: location[key] for key in ("city", "region", "country") if location.get(key) not in (None, "")}
         events = [{"title": event.title, "event_type": event.event_type, "description": event.description} for event in events_result.scalars()]

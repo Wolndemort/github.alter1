@@ -85,6 +85,27 @@ async def test_workflow_persistence_is_blocked_in_private_mode(monkeypatch, user
 
 
 @pytest.mark.asyncio
+async def test_agent_routes_persist_plan_claim_complete_and_replan(monkeypatch, user):
+    db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    response = await routes.agent_start_route(Request({
+        "goal": "Подготовить диету",
+        "horizon_minutes": 90,
+        "tasks": [{"id": "goals", "title": "Определить цель"}, {"id": "menu", "title": "Составить меню", "depends_on": ["goals"]}],
+    }))
+    assert response.status == 201
+    assert user.tech_stack["active_agent"]["goal"] == "Подготовить диету"
+    response = await routes.agent_next_route(Request())
+    assert response.status == 200
+    assert user.tech_stack["active_agent"]["tasks"][0]["status"] == "in_progress"
+    response = await routes.agent_task_route(Request({"task_id": "goals", "status": "done", "result": "готово"}))
+    assert response.status == 200
+    assert user.tech_stack["active_agent"]["tasks"][0]["status"] == "done"
+    response = await routes.agent_replan_route(Request({"tasks": [{"id": "goals", "title": "Определить цель"}, {"id": "shopping", "title": "Список покупок", "depends_on": ["goals"]}], "reason": "новые условия"}))
+    assert response.status == 200
+    assert user.tech_stack["active_agent"]["tasks"][0]["status"] == "done"
+
+
+@pytest.mark.asyncio
 async def test_quality_diagnostics_requires_owner_and_returns_dashboard(monkeypatch, user):
     db = Db(user); monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
     monkeypatch.setattr(routes, "has_owner_access", lambda *args: True)

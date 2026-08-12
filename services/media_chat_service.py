@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import config
 from data.models import Session, User
 from services.chat_service import _append, validate_message
-from utils.media import video_preview
+from utils.media import video_audio, video_preview
 from utils.media_logic import generate_media_reply
 from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
@@ -126,11 +126,20 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         from services.chat_service import ChatService
         result = await ChatService().reply(db, user_id, prompt)
         return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)
+    transcript = None
+    analysis_prompt = prompt
     media = [("image/jpeg" if kind == "image" else "video/mp4", data)]
     if kind == "video":
         media = await video_preview(data)
         if not media:
             raise ValueError("video could not be processed")
+        audio = await video_audio(data)
+        if audio:
+            transcript = await transcribe_voice(audio)
+            if transcript:
+                analysis_prompt = (
+                    f"{prompt}\n\nТранскрипт аудиодорожки видео (используй только как дополнительный контекст):\n{transcript[:12000]}"
+                )
     _append(session, "user", prompt)
     memory = dict(user.memory or {})
     feedback = feedback_context(user.tech_stack)
@@ -140,8 +149,8 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         recalled = await recall(db, user_id, prompt)
         if recalled:
             memory["related_previous_context"] = recalled
-    answer = sanitize_public_reply(await generate_media_reply(prompt, media, memory=memory, conversation_context=session.raw_messages[:-1]))
+    answer = sanitize_public_reply(await generate_media_reply(analysis_prompt, media, memory=memory, conversation_context=session.raw_messages[:-1]))
     _append(session, "assistant", answer)
     await remember(db, user_id, prompt, source="user_message")
     await db.commit()
-    return MediaChatResult(reply=answer, session_id=session.id)
+    return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript)
