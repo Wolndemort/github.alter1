@@ -10,3 +10,10 @@ def test_s3_backup_script_uses_verified_dump_and_yandex_endpoint():
     assert "CLOUD_RETENTION_DAYS" in source
     assert "aws s3 rm" in source
     assert "S3_BUCKET" in source
+
+
+def test_windows_backup_uses_custom_dump_and_restore_verification():
+    source = (Path(__file__).parents[1] / "scripts" / "backup-db.ps1").read_text(encoding="utf-8")
+    assert "format=custom" in source
+    assert "pg_restore --list" in source
+    assert "alter-$stamp.dump" in source

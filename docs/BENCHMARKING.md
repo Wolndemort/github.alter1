@@ -77,6 +77,10 @@ Run the non-secret configuration audit before deploy:
 py -3 scripts/config-audit.py
 ```
 
+Backup dry-run/verification uses custom PostgreSQL dumps and `pg_restore --list`.
+The Windows equivalent is `scripts/backup-db.ps1`; it does not upload or delete
+remote data by itself.
+
 ### What p50 and p95 mean
 
 The `p` means percentile. `p50` is the median: half of requests completed
