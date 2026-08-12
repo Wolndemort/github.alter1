@@ -31,6 +31,7 @@ from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
 from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
+from services.document_ingestion import extract_document
 
 
 async def chat_route(request: web.Request) -> web.Response:
@@ -104,6 +105,49 @@ async def chat_route(request: web.Request) -> web.Response:
     if hasattr(result, "transcript"):
         payload["transcript"] = result.transcript
     return web.json_response(payload)
+
+
+async def document_chat_route(request: web.Request) -> web.Response:
+    """Extract a document and answer against its bounded text context."""
+    user_id = _bearer(request)
+    if not request.content_type.startswith("multipart/"):
+        raise web.HTTPBadRequest(text="multipart form required")
+    reader = await request.multipart()
+    prompt = "Проанализируй документ и выдели главное."
+    filename, content_type, data = "document", "", b""
+    async for part in reader:
+        if part.name == "prompt":
+            prompt = (await part.text())[:2000] or prompt
+        elif part.name == "file":
+            filename = part.filename or filename
+            content_type = part.headers.get("Content-Type", "")
+            data = await part.read(decode=False)
+    try:
+        document = extract_document(filename, data, content_type)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc))
+    async with async_session() as session:
+        from data.models import User, WebAccount
+        user = await session.get(User, user_id)
+        account = (await session.execute(select(WebAccount).where(WebAccount.user_id == user_id))).scalar_one_or_none()
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        owner_access = has_owner_access(user_id, account.email if account else None)
+        if not owner_access and not has_active_subscription(user):
+            raise web.HTTPPaymentRequired(text="active subscription required")
+        if not owner_access:
+            redis = create_redis()
+            try:
+                if not await charge_user_id_credits(redis, user_id, 1, async_session):
+                    raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+            finally:
+                await close_redis(redis)
+        context = f"\n\nDOCUMENT: {document.filename}\n<document_text>\n{document.text}\n</document_text>"
+        try:
+            result = await ChatService().reply(session, user_id, prompt + context)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
+    return web.json_response({"reply": result.reply, "session_id": result.session_id, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
 
 
 async def chat_stream_route(request: web.Request) -> web.StreamResponse:
@@ -425,6 +469,7 @@ def setup_chat_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/chat/new", new_session_route)
     app.router.add_get("/api/v1/chat/history", history_route)
     app.router.add_post("/api/v1/chat/media", media_chat_route)
+    app.router.add_post("/api/v1/chat/document", document_chat_route)
     app.router.add_post("/api/v1/media/generate", media_generate_route)
     app.router.add_get("/api/v1/media/capabilities", media_capabilities_route)
     app.router.add_post("/api/v1/media/jobs", media_job_create_route)

@@ -16,13 +16,28 @@ def test_chat_fallback_uses_second_model(monkeypatch):
         calls.append(kwargs["model"])
         if len(calls) == 1:
             raise RuntimeError("primary down")
-        return SimpleNamespace(choices=[])
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
 
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     result = run(ap_logic.chat_with_fallback([{"role": "user", "content": "hi"}]))
-    assert result.choices == []
+    assert result.choices[0].message.content == "ok"
     assert calls[0] == ap_logic.config.OPENROUTER_FREE_MODEL
     assert len(calls) == 2
+
+
+def test_http_200_without_choices_uses_fallback(monkeypatch):
+    calls = []
+
+    async def create(**kwargs):
+        calls.append(kwargs["model"])
+        if len(calls) == 1:
+            return SimpleNamespace(choices=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="fallback"))])
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    result = run(ap_logic.chat_with_fallback([{"role": "user", "content": "hi"}], models=["first", "second"]))
+    assert result.choices[0].message.content == "fallback"
+    assert calls == ["first", "second"]
 
 
 def test_rate_limited_model_moves_to_tail_for_next_request(monkeypatch):
@@ -37,7 +52,7 @@ def test_rate_limited_model_moves_to_tail_for_next_request(monkeypatch):
         calls.append(kwargs["model"])
         if len(calls) == 1:
             raise RateLimited("upstream rate limit")
-        return SimpleNamespace(choices=[])
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
 
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     try:

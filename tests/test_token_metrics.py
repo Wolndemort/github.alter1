@@ -10,7 +10,7 @@ def test_provider_usage_is_recorded_without_persisting_content(monkeypatch):
         completion_tokens = 7
 
     async def create(**kwargs):
-        return SimpleNamespace(choices=[], usage=Usage())
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))], usage=Usage())
 
     monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
     monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)

@@ -442,6 +442,10 @@ async def chat_with_fallback(messages, max_tokens=None, task=None, models=None, 
             else:
                 logging.exception("Chat model failed: %s request_id=%s", model, request_id)
             continue
+        if not getattr(response, "choices", None):
+            increment("ai.model.failure", model=model, status="empty_choices")
+            logging.warning("Chat model returned HTTP success without choices: model=%s request_id=%s", model, request_id)
+            continue
         increment("ai.model.success", model=model)
         usage = getattr(response, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
