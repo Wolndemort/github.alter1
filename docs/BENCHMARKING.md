@@ -67,6 +67,12 @@ Production diagnostics expose `p50_ms`, `p95_ms`, and `p99_ms`. External files
 and web evidence are treated as untrusted data; instruction-like content is
 audited and never becomes an agent instruction automatically.
 
+Run the non-secret configuration audit before deploy:
+
+```powershell
+py -3 scripts/config-audit.py
+```
+
 ### What p50 and p95 mean
 
 The `p` means percentile. `p50` is the median: half of requests completed
