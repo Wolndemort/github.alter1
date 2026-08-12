@@ -96,6 +96,10 @@ ALTER принимает текст, голос, изображения, вид�
 
 Следующие реальные улучшения computer vision: layout-aware редактирование PDF, сравнение версий документов, координаты объектов и OCR рукописного текста.
 
+`POST /api/v1/chat/document/compare` принимает multipart-файлы `before` и
+`after`, извлекает текст и возвращает добавленные/удалённые строки без
+расхода AI-кредитов.
+
 ### Vision quality layer
 
 `services.vision_quality` нормализует confidence, строит безопасный план
