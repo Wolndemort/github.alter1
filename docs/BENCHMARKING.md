@@ -45,4 +45,19 @@ ALTER и внешней модели затем объединяются в од
 
 Authenticated production smoke запускается через `scripts/production-e2e.sh`. Без `AUTH_TOKEN` он проверяет public health, ready и auth boundaries; с токеном дополнительно проверяет scenarios, workflow, SSE и action-log.
 
+## Text and voice speed benchmark
+
+Use the reproducible speed collector for multiple production samples. It
+stores only timings, HTTP statuses and audio byte counts; prompts and replies
+are not written to the report, and the token is never printed.
+
+```powershell
+$env:AUTH_TOKEN = (Get-Content .audit-token -Raw).Trim()
+py scripts/collect_speed_benchmark.py --output speed_benchmark.json --runs 3 --confirm-cost
+```
+
+Each run contains three text SSE cases and two voice cases. Compare text
+`first_token_ms` and `total_ms` separately from voice `total_ms`; voice is an
+ALTER capability benchmark and has no ChatGPT/Gemini baseline in this suite.
+
 Для повторной проверки только провалившихся кейсов можно указать `--case-id` несколько раз, не оплачивая весь suite заново.
