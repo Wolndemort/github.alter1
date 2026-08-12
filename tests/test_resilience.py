@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from utils import ap_logic, web_search, youtube_search
 from utils.tasks import process_session
 from data.models import Session, User
@@ -9,6 +11,12 @@ from utils import metrics
 
 def run(coro):
     return asyncio.run(coro)
+
+
+@pytest.fixture(autouse=True)
+def disable_optional_search_providers(monkeypatch):
+    for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+        monkeypatch.setattr(web_search.config, name, None)
 
 
 def test_openrouter_failure_returns_safe_reply(monkeypatch):
@@ -77,7 +85,11 @@ def test_web_search_returns_valid_results(monkeypatch):
     monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", SimpleNamespace(get_secret_value=lambda: "key"))
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     result = run(web_search.search_web("test"))
-    assert result == [{"title": "Useful", "url": "https://example.com", "content": "Fact"}]
+    assert result == [{
+        "title": "Useful",
+        "url": "https://example.com",
+        "content": "Fact",
+    }]
 
 
 def test_web_search_handles_api_error(monkeypatch):

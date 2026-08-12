@@ -32,6 +32,8 @@ def test_tavily_is_primary_and_does_not_wait_for_firecrawl(monkeypatch):
 
     monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", _key("tavily-secret"))
     monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("firecrawl-secret"))
+    for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+        monkeypatch.setattr(web_search.config, name, None)
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     assert run(web_search.search_web("test", max_results=5)) == [
         {"title": "A", "url": "https://a.test", "content": "a"},
@@ -63,6 +65,8 @@ def test_search_returns_empty_when_both_providers_fail(monkeypatch):
 
     monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", _key("tavily"))
     monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("firecrawl"))
+    for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+        monkeypatch.setattr(web_search.config, name, None)
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     assert run(web_search.search_web("test")) == []
 
@@ -98,6 +102,8 @@ def test_tavily_results_survive_cancelled_firecrawl(monkeypatch):
 
     monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", _key("tavily"))
     monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("firecrawl"))
+    for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+        monkeypatch.setattr(web_search.config, name, None)
     monkeypatch.setattr(web_search, "_tavily", tavily)
     monkeypatch.setattr(web_search, "_firecrawl", firecrawl)
     assert run(web_search.search_web("test")) == [

@@ -2,13 +2,60 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import time
+import xml.etree.ElementTree as ET
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
 from config import config
 from utils.metrics import increment
+
+
+_PROVIDER_FAILURES: dict[str, tuple[int, float]] = {}
+
+
+def _provider_is_available(name: str) -> bool:
+    failures, last_failure = _PROVIDER_FAILURES.get(name, (0, 0.0))
+    if failures < config.SEARCH_PROVIDER_FAILURE_THRESHOLD:
+        return True
+    if time.monotonic() - last_failure >= config.SEARCH_PROVIDER_COOLDOWN_SECONDS:
+        _PROVIDER_FAILURES.pop(name, None)
+        return True
+    increment("search.web.provider_skipped", provider=name, reason="circuit_open")
+    return False
+
+
+def _record_provider_result(name: str, results: list[dict]) -> None:
+    if results:
+        _PROVIDER_FAILURES.pop(name, None)
+        return
+    failures, _ = _PROVIDER_FAILURES.get(name, (0, 0.0))
+    _PROVIDER_FAILURES[name] = (failures + 1, time.monotonic())
+
+
+async def _run_provider(name: str, operation_factory) -> list[dict]:
+    if not _provider_is_available(name):
+        return []
+    try:
+        results = await operation_factory()
+    except asyncio.CancelledError:
+        # A provider may cancel its own request; keep other providers alive.
+        # Propagate cancellation only when our orchestrator cancelled the task.
+        if asyncio.current_task() and asyncio.current_task().cancelling():
+            raise
+        results = []
+    except Exception:
+        results = []
+    _record_provider_result(name, results if isinstance(results, list) else [])
+    return results if isinstance(results, list) else []
+
+
+def _reset_provider_breakers() -> None:
+    """Reset state for deterministic tests and process-local recovery."""
+    _PROVIDER_FAILURES.clear()
 
 
 def _clean_query(query: str) -> str:
@@ -175,13 +222,31 @@ async def _yandex(session, query: str, limit: int) -> list[dict]:
         async with session.post(
             "https://searchapi.api.cloud.yandex.net/v2/web/search",
             headers={"Authorization": f"Api-Key {config.YANDEX_SEARCH_API_KEY.get_secret_value()}"},
-            json={"query": {"searchQuery": query}, "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE"}, "groupSpec": {"groupMode": "GROUP_MODE_FLAT"}, "maxPassages": 2, "region": 0, "l10n": "ru"},
+            json={"query": {"searchType": "SEARCH_TYPE_RU", "queryText": query}, "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE"}, "groupSpec": {"groupMode": "GROUP_MODE_FLAT"}, "maxPassages": 2, "region": "225", "l10n": "LOCALIZATION_RU"},
         ) as response:
             if response.status != 200:
                 increment("search.web.yandex.failure", status=response.status)
                 return []
             data = await response.json()
             raw = data.get("results") or data.get("items") or data.get("webPages", {}).get("value", [])
+            if not raw and data.get("rawData"):
+                try:
+                    document = ET.fromstring(base64.b64decode(data["rawData"]))
+                    raw = []
+                    for node in document.findall(".//doc"):
+                        title_node = node.find("title")
+                        url_node = node.find("url")
+                        passage_nodes = node.findall("./passages/passage")
+                        headline_node = node.find("headline")
+                        raw.append({
+                            "title": "".join(title_node.itertext()) if title_node is not None else "",
+                            "url": url_node.text if url_node is not None else "",
+                            "description": " ".join(
+                                "".join(item.itertext()) for item in passage_nodes
+                            ) or ("".join(headline_node.itertext()) if headline_node is not None else ""),
+                        })
+                except (ValueError, ET.ParseError):
+                    raw = []
             results = _normalize(raw, limit)
             increment("search.web.yandex.success", results=len(results))
             return results
@@ -235,24 +300,45 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
         # to cancel an otherwise successful search stream.
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.SEARCH_PROVIDER_TIMEOUT_SECONDS)) as session:
             if enhanced:
-                tasks = []
+                tasks: dict[asyncio.Task, str] = {}
+                def add_provider(name: str, operation_factory) -> None:
+                    task = asyncio.create_task(_run_provider(name, operation_factory))
+                    tasks[task] = name
                 if config.TAVILY_API_KEY:
-                    tasks.append(_tavily(session, query, limit))
+                    add_provider("tavily", lambda: _tavily(session, query, limit))
                 if config.FIRECRAWL_API_KEY:
-                    tasks.append(_firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
+                    add_provider("firecrawl", lambda: _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
                 if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
-                    tasks.append(_google_cse(session, query, limit))
+                    add_provider("google", lambda: _google_cse(session, query, limit))
                 if config.SERPER_API_KEY:
-                    tasks.append(_serper(session, query, limit))
+                    add_provider("serper", lambda: _serper(session, query, limit))
                 if config.YANDEX_SEARCH_API_KEY:
-                    tasks.append(_yandex(session, query, limit))
+                    add_provider("yandex", lambda: _yandex(session, query, limit))
                 if config.TWOGIS_API_KEY:
-                    tasks.append(_twogis(session, query, limit))
-                provider_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    add_provider("2gis", lambda: _twogis(session, query, limit))
+                provider_results: dict[str, list[dict]] = {}
+                pending = set(tasks)
+                deadline = asyncio.get_running_loop().time() + max(1, config.SEARCH_FAST_RETURN_SECONDS)
+                while pending:
+                    remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+                    if not remaining:
+                        break
+                    done, pending = await asyncio.wait(pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        try:
+                            provider_results[tasks[task]] = task.result()
+                        except Exception:
+                            provider_results[tasks[task]] = []
+                    current = _normalize([item for provider in provider_results.values() for item in provider], limit)
+                    if len(current) >= max(1, config.SEARCH_MIN_RESULTS_BEFORE_FAST_RETURN):
+                        break
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
                 merged = _annotate_results(_rank_results(_normalize([
                     item for provider in provider_results
-                    if isinstance(provider, list)
-                    for item in provider
+                    for item in provider_results[provider]
                 ], limit), limit))
                 if merged:
                     increment("search.web.success", results=len(merged), providers=len(tasks))

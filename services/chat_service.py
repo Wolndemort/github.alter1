@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
+from utils.ap_logic import _append_source_links, clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
@@ -61,6 +61,8 @@ async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bo
                 yield candidate[index:index + chunk_size]
     reply = sanitize_public_reply("".join(parts))
     trace = tool_trace()
+    if tool_mode:
+        reply = _append_source_links(reply, trace)
     if tool_mode and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
         failed = any(str(item.get("status") or "") != "ok" for item in trace)
         note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed or not trace else "Источник: подключённый инструмент ALTER."

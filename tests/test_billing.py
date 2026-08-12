@@ -103,6 +103,7 @@ def configured_yookassa(monkeypatch):
 
 def test_owner_and_price_helpers(monkeypatch):
     monkeypatch.setattr(config, "OWNER_TELEGRAM_IDS", "1271717628, 42, invalid")
+    monkeypatch.setattr(config, "OWNER_WEB_USER_IDS", "")
     assert billing.owner_ids() == {1271717628, 42}
     assert billing.is_owner(1271717628)
     assert not billing.is_owner(7)

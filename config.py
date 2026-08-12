@@ -54,6 +54,10 @@ class Setting(BaseSettings):
     YANDEX_SEARCH_API_KEY: SecretStr | None = None
     TWOGIS_API_KEY: SecretStr | None = None
     SEARCH_PROVIDER_TIMEOUT_SECONDS: int = 8
+    SEARCH_FAST_RETURN_SECONDS: int = 4
+    SEARCH_MIN_RESULTS_BEFORE_FAST_RETURN: int = 3
+    SEARCH_PROVIDER_FAILURE_THRESHOLD: int = 3
+    SEARCH_PROVIDER_COOLDOWN_SECONDS: int = 60
     # Number of Firecrawl results returned per search, not a monthly quota.
     FIRECRAWL_SEARCH_LIMIT: int = 10
     GOOGLE_CLIENT_ID: str | None = None

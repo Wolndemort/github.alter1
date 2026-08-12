@@ -43,10 +43,30 @@ def _start_tool_trace() -> None:
     _TOOL_TRACE.set([])
 
 
-def _record_tool(name: str, status: str) -> None:
+def _record_tool(name: str, status: str, sources: list[str] | None = None) -> None:
     trace = list(_TOOL_TRACE.get())
-    trace.append({"tool": str(name)[:40], "status": str(status)[:24]})
+    item = {"tool": str(name)[:40], "status": str(status)[:24]}
+    if sources:
+        item["sources"] = list(dict.fromkeys(sources))[:10]
+    trace.append(item)
     _TOOL_TRACE.set(trace)
+
+
+def _source_urls(trace: list[dict]) -> list[str]:
+    urls = []
+    for item in trace:
+        for url in item.get("sources") or []:
+            value = str(url).strip()
+            if value.startswith(("http://", "https://")):
+                urls.append(value)
+    return list(dict.fromkeys(urls))[:10]
+
+
+def _append_source_links(reply: str, trace: list[dict]) -> str:
+    urls = _source_urls(trace)
+    if not urls or "http://" in reply or "https://" in reply:
+        return reply
+    return reply.rstrip() + "\n\nИсточники:\n" + "\n".join(f"• {url}" for url in urls)
 MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops", "response_feedback"}
 KEY_ALIASES = {"имя": "name", "возраст": "age", "город": "city", "работа": "job", "профессия": "job"}
 TOOL_DEFINITIONS = [
@@ -590,11 +610,13 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
                 increment("ai.tool.failure", tool=function.name)
                 logging.exception("Tool failed: %s", function.name)
                 status, result_for_model = "error", "Инструмент временно недоступен. Измени запрос или продолжи без него."
-            return call, status, result_for_model
+            sources = [str(item.get("url")) for item in result_for_model if isinstance(item, dict) and item.get("url")] if isinstance(result_for_model, list) else []
+            return call, status, result_for_model, sources
         tool_results = await asyncio.gather(*(run_tool(call) for call in tool_calls))
-        for call, status, result_for_model in tool_results:
+        for call, status, result_for_model, *source_parts in tool_results:
+            sources = source_parts[0] if source_parts else []
             function = getattr(call, "function", None)
-            _record_tool(getattr(function, "name", "unknown"), status)
+            _record_tool(getattr(function, "name", "unknown"), status, sources)
             working.append({
                 "role": "tool",
                 "tool_call_id": getattr(call, "id", ""),
@@ -647,11 +669,13 @@ async def stream_chat_with_tools(messages, max_tokens=None, task=None):
                 increment("ai.tool.failure", tool=function.name)
                 logging.exception("Tool failed: %s", function.name)
                 status, result_for_model = "error", "Инструмент временно недоступен."
-            return call, status, result_for_model
+            sources = [str(item.get("url")) for item in result_for_model if isinstance(item, dict) and item.get("url")] if isinstance(result_for_model, list) else []
+            return call, status, result_for_model, sources
 
-        for call, status, result_for_model in await asyncio.gather(*(run_tool(call) for call in tool_calls)):
+        for call, status, result_for_model, *source_parts in await asyncio.gather(*(run_tool(call) for call in tool_calls)):
+            sources = source_parts[0] if source_parts else []
             function = getattr(call, "function", None)
-            _record_tool(getattr(function, "name", "unknown"), status)
+            _record_tool(getattr(function, "name", "unknown"), status, sources)
             working.append({
                 "role": "tool", "tool_call_id": getattr(call, "id", ""),
                 "content": json.dumps({"status": status, "data": result_for_model}, ensure_ascii=False)[:12000],
@@ -731,6 +755,7 @@ async def generate_reply(messages, memory=None, search_results=None):
         if config.AI_DEEP_REVIEW_ENABLED and (_needs_deep_review(messages, search_results) or has_language_mismatch(reply, latest_request)):
             reply = await _deep_review_reply(messages, reply, search_results)
         reply = sanitize_public_reply(reply)
+        reply = _append_source_links(reply, tool_trace())
         if len(reply) > 3000 or has_internal_leak(reply) or has_language_mismatch(reply, latest_request):
             logging.warning("Rejecting final reply as possible reasoning leak: chars=%d", len(reply))
             reply = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — отвечу коротко и по делу."
