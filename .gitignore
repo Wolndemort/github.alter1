@@ -19,5 +19,6 @@ capability_smoke*.json
 capability_stateful_smoke*.json
 production_latency*.json
 speed_benchmark*.json
+search_benchmark*.json
 chatgpt_*.json
 gemini_*.json

@@ -91,6 +91,9 @@ py -m scripts.collect_capability_stateful_smoke --output capability_stateful_smo
 
 # Text + voice latency benchmark (paid; 3 runs = 9 text + 6 voice requests)
 py -m scripts.collect_speed_benchmark --output speed_benchmark.json --runs 3 --confirm-cost
+
+# Search quality benchmark (paid; six fresh/local/source scenarios)
+py -m scripts.collect_search_benchmark --output search_benchmark.json --confirm-cost
 ```
 
 Для повторной проверки только провалившихся кейсов можно указать `--case-id` несколько раз, не оплачивая весь suite заново.

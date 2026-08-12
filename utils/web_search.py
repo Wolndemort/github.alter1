@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -22,14 +23,53 @@ def _normalize(items, limit: int) -> list[dict]:
             continue
         url = item.get("url") or item.get("link")
         title = item.get("title") or item.get("name")
-        if not url or not title or url in seen_urls:
+        if not url or not title:
             continue
-        seen_urls.add(url)
+        canonical = _canonical_url(str(url))
+        if canonical in seen_urls:
+            continue
+        seen_urls.add(canonical)
         content = item.get("content") or item.get("markdown") or item.get("description") or ""
         results.append({"title": str(title)[:500], "url": str(url), "content": str(content)[:3000]})
         if len(results) >= limit:
             break
     return results
+
+
+def _canonical_url(url: str) -> str:
+    """Deduplicate tracking variants without changing the displayed URL."""
+    try:
+        parsed = urlsplit(url.strip())
+        query = [(key, value) for key, value in parse_qsl(parsed.query) if not key.casefold().startswith(("utm_", "yclid", "gclid"))]
+        return urlunsplit((parsed.scheme.casefold(), parsed.netloc.casefold(), parsed.path.rstrip("/"), urlencode(query), ""))
+    except ValueError:
+        return url.strip().casefold()
+
+
+def _rank_results(items: list[dict], limit: int) -> list[dict]:
+    """Prefer official and local-directory sources while keeping relevance order."""
+    def score(item: dict) -> int:
+        host = urlsplit(str(item.get("url") or "")).netloc.casefold()
+        if any(marker in host for marker in (".gov", ".gov.ru", "yandex.ru", "google.com", "2gis.ru")):
+            return 3
+        if any(marker in host for marker in ("wikipedia.org", "youtube.com")):
+            return 2
+        return 1
+    return [item for _, item in sorted(enumerate(items), key=lambda pair: (-score(pair[1]), pair[0]))[:limit]]
+
+
+def _annotate_results(items: list[dict]) -> list[dict]:
+    """Attach safe evidence metadata for the model's source comparison step."""
+    annotated = []
+    for item in items:
+        value = dict(item)
+        host = urlsplit(str(value.get("url") or "")).netloc.casefold()
+        value["source_domain"] = host.removeprefix("www.")
+        value["source_quality"] = "official" if any(marker in host for marker in (".gov", ".gov.ru")) else (
+            "local_directory" if any(marker in host for marker in ("2gis.ru", "yandex.ru", "google.com")) else "web"
+        )
+        annotated.append(value)
+    return annotated
 
 
 async def _tavily(session, query: str, limit: int) -> list[dict]:
@@ -60,6 +100,7 @@ async def _tavily(session, query: str, limit: int) -> list[dict]:
 async def _firecrawl(session, query: str, limit: int) -> list[dict]:
     if not config.FIRECRAWL_API_KEY:
         return []
+
     headers = {
         "Authorization": f"Bearer {config.FIRECRAWL_API_KEY.get_secret_value()}",
         "Content-Type": "application/json",
@@ -72,7 +113,6 @@ async def _firecrawl(session, query: str, limit: int) -> list[dict]:
                 logging.warning("Firecrawl search failed with HTTP %s", response.status)
                 return []
             data = await response.json()
-            # Firecrawl has returned both {data: [...]} and {results: [...]} across API versions.
             items = data.get("data") or data.get("results") or []
             results = _normalize(items, limit)
             increment("search.web.firecrawl.success", results=len(results))
@@ -83,19 +123,142 @@ async def _firecrawl(session, query: str, limit: int) -> list[dict]:
         return []
 
 
+async def _google_cse(session, query: str, limit: int) -> list[dict]:
+    if not config.GOOGLE_CSE_API_KEY or not config.GOOGLE_CSE_ID:
+        return []
+    params = {
+        "key": config.GOOGLE_CSE_API_KEY.get_secret_value(),
+        "cx": config.GOOGLE_CSE_ID,
+        "q": query,
+        "num": min(limit, 10),
+    }
+    try:
+        async with session.get("https://www.googleapis.com/customsearch/v1", params=params) as response:
+            if response.status != 200:
+                increment("search.web.google.failure", status=response.status)
+                return []
+            data = await response.json()
+            results = _normalize(data.get("items"), limit)
+            increment("search.web.google.success", results=len(results))
+            return results
+    except Exception:
+        increment("search.web.google.failure", reason="exception")
+        logging.exception("Google CSE search failed")
+        return []
+
+
+async def _serper(session, query: str, limit: int) -> list[dict]:
+    if not config.SERPER_API_KEY:
+        return []
+    try:
+        async with session.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": config.SERPER_API_KEY.get_secret_value(), "Content-Type": "application/json"},
+            json={"q": query, "num": min(limit, 10)},
+        ) as response:
+            if response.status != 200:
+                increment("search.web.serper.failure", status=response.status)
+                return []
+            results = _normalize((await response.json()).get("organic"), limit)
+            increment("search.web.serper.success", results=len(results))
+            return results
+    except Exception:
+        increment("search.web.serper.failure", reason="exception")
+        logging.exception("Serper search failed")
+        return []
+
+
+async def _yandex(session, query: str, limit: int) -> list[dict]:
+    if not config.YANDEX_SEARCH_API_KEY:
+        return []
+    try:
+        async with session.post(
+            "https://searchapi.api.cloud.yandex.net/v2/web/search",
+            headers={"Authorization": f"Api-Key {config.YANDEX_SEARCH_API_KEY.get_secret_value()}"},
+            json={"query": {"searchQuery": query}, "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE"}, "groupSpec": {"groupMode": "GROUP_MODE_FLAT"}, "maxPassages": 2, "region": 0, "l10n": "ru"},
+        ) as response:
+            if response.status != 200:
+                increment("search.web.yandex.failure", status=response.status)
+                return []
+            data = await response.json()
+            raw = data.get("results") or data.get("items") or data.get("webPages", {}).get("value", [])
+            results = _normalize(raw, limit)
+            increment("search.web.yandex.success", results=len(results))
+            return results
+    except Exception:
+        increment("search.web.yandex.failure", reason="exception")
+        logging.exception("Yandex search failed")
+        return []
+
+
+async def _twogis(session, query: str, limit: int) -> list[dict]:
+    if not config.TWOGIS_API_KEY:
+        return []
+    try:
+        async with session.get(
+            "https://catalog.api.2gis.com/3.0/items",
+            params={"q": query, "page_size": min(limit, 10), "key": config.TWOGIS_API_KEY.get_secret_value()},
+        ) as response:
+            if response.status != 200:
+                increment("search.web.2gis.failure", status=response.status)
+                return []
+            data = await response.json()
+            raw = []
+            for item in (data.get("result", {}).get("items", []) if isinstance(data, dict) else []):
+                if not isinstance(item, dict):
+                    continue
+                raw.append({
+                    "title": item.get("name") or item.get("full_name"),
+                    "url": item.get("url") or (f"https://2gis.ru/firm/{item.get('id')}" if item.get("id") else None),
+                    "description": item.get("address_name") or item.get("full_name") or "",
+                })
+            results = _normalize(raw, limit)
+            increment("search.web.2gis.success", results=len(results))
+            return results
+    except Exception:
+        increment("search.web.2gis.failure", reason="exception")
+        logging.exception("2GIS search failed")
+        return []
 async def search_web(query: str, max_results: int = 10) -> list[dict]:
     query = _clean_query(query)
     if not query:
         return []
     limit = max(1, min(int(max_results), 10))
     if not config.TAVILY_API_KEY and not config.FIRECRAWL_API_KEY:
-        logging.warning("Web search skipped: neither TAVILY_API_KEY nor FIRECRAWL_API_KEY is configured")
-        return []
+        if not any((config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID, config.SERPER_API_KEY, config.YANDEX_SEARCH_API_KEY, config.TWOGIS_API_KEY)):
+            logging.warning("Web search skipped: no search provider is configured")
+            return []
     try:
+        enhanced = any((config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID, config.SERPER_API_KEY, config.YANDEX_SEARCH_API_KEY, config.TWOGIS_API_KEY))
         # Tavily is the primary path.  Firecrawl is a fallback only; waiting
         # for two providers in parallel allowed a stalled Firecrawl connection
         # to cancel an otherwise successful search stream.
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.SEARCH_PROVIDER_TIMEOUT_SECONDS)) as session:
+            if enhanced:
+                tasks = []
+                if config.TAVILY_API_KEY:
+                    tasks.append(_tavily(session, query, limit))
+                if config.FIRECRAWL_API_KEY:
+                    tasks.append(_firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
+                if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
+                    tasks.append(_google_cse(session, query, limit))
+                if config.SERPER_API_KEY:
+                    tasks.append(_serper(session, query, limit))
+                if config.YANDEX_SEARCH_API_KEY:
+                    tasks.append(_yandex(session, query, limit))
+                if config.TWOGIS_API_KEY:
+                    tasks.append(_twogis(session, query, limit))
+                provider_results = await asyncio.gather(*tasks, return_exceptions=True)
+                merged = _annotate_results(_rank_results(_normalize([
+                    item for provider in provider_results
+                    if isinstance(provider, list)
+                    for item in provider
+                ], limit), limit))
+                if merged:
+                    increment("search.web.success", results=len(merged), providers=len(tasks))
+                else:
+                    increment("search.web.failure", reason="empty")
+                return merged
             tavily = await _tavily(session, query, limit)
             firecrawl = []
             if not tavily:
