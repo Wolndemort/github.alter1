@@ -1065,15 +1065,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [introDone, setIntroDone] = useState(false);
   const [, setForegroundTick] = useState(0);
-  useEffect(() => { AsyncStorage.getItem("alter_access_token").then((value) => { setToken(value); setLoading(false); }); }, []);
+  useEffect(() => { AsyncStorage.getItem("alter_access_token").then((value) => setToken(value)).catch(() => setToken(null)).finally(() => setLoading(false)); }, []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") setTimeout(() => setForegroundTick((value) => value + 1), 0);
     });
     return () => subscription.remove();
   }, []);
-  if (!introDone) return <IntroScreen onFinished={() => setIntroDone(true)} />;
-  if (loading) return <SafeAreaView style={styles.container}><ActivityIndicator color="#ffffff" /></SafeAreaView>;
+  if (!introDone || loading) return <IntroScreen onFinished={() => setIntroDone(true)} />;
   return <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>{token ? <Stack.Screen name="Chat">{() => <ChatScreen token={token} onLogout={() => { AsyncStorage.removeItem("alter_access_token"); setToken(null); }} />}</Stack.Screen> : <Stack.Screen name="Auth">{() => <AuthScreen onAuthenticated={setToken} />}</Stack.Screen>}</Stack.Navigator></NavigationContainer>;
 }
 
