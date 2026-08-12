@@ -566,7 +566,7 @@ def _tool_call_payload(call) -> dict:
     }
 
 
-async def chat_with_tools(messages, max_tokens=None, task=None):
+async def chat_with_tools(messages, max_tokens=None, task=None, tool_definitions=None, tool_executor=None):
     """Let the model call allowed tools, then continue with their results."""
     _start_tool_trace()
     working = list(messages)
@@ -576,7 +576,7 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
             working,
             max_tokens=max_tokens,
             task=task,
-            tools=TOOL_DEFINITIONS,
+            tools=tool_definitions or TOOL_DEFINITIONS,
             tool_choice="auto",
         )
         message = response.choices[0].message
@@ -599,7 +599,7 @@ async def chat_with_tools(messages, max_tokens=None, task=None):
                 arguments = {}
             try:
                 result = await asyncio.wait_for(
-                    execute_tool(function.name, arguments),
+                    (tool_executor or execute_tool)(function.name, arguments),
                     timeout=max(1, int(getattr(config, "AI_TOOL_TIMEOUT_SECONDS", 12))),
                 )
                 status, result_for_model = validate_tool_result(function.name, result)

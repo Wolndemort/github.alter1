@@ -6,6 +6,7 @@ from typing import Any
 
 from utils.agent_engine import agent_view, block_task, claim_next_task, complete_task, next_ready_task
 from utils.ap_logic import chat_with_tools
+from services.agent_tools import AGENT_TOOL_DEFINITIONS, execute_agent_tool
 
 
 TaskExecutor = Callable[[dict, dict], Awaitable[str | dict[str, Any]]]
@@ -41,7 +42,7 @@ async def run_agent_steps(settings: dict, executor: TaskExecutor, max_steps: int
     return current
 
 
-async def model_agent_executor(task: dict, state: dict) -> str:
+async def model_agent_executor(task: dict, state: dict, *, db=None, user=None) -> str | dict:
     """Execute a task with ALTER's existing model/tool loop."""
     prompt = (
         "Ты исполнитель задачи внутри долговременного плана ALTER. Выполни только текущую задачу, "
@@ -51,5 +52,16 @@ async def model_agent_executor(task: dict, state: dict) -> str:
         f"Текущая задача: {task.get('title', '')}\n"
         f"Ограничения: {state.get('constraints', {})}"
     )
-    response = await chat_with_tools([{"role": "user", "content": prompt}], task="planning")
+    if db is None or user is None:
+        response = await chat_with_tools([{"role": "user", "content": prompt}], task="planning")
+    else:
+        async def executor(name, arguments):
+            return await execute_agent_tool(
+                name, arguments, db=db, user=user,
+                allow_external_actions=bool(state.get("constraints", {}).get("allow_external_actions")),
+            )
+        response = await chat_with_tools(
+            [{"role": "user", "content": prompt}], task="planning",
+            tool_definitions=AGENT_TOOL_DEFINITIONS, tool_executor=executor,
+        )
     return str(getattr(response.choices[0].message, "content", "") or "").strip()

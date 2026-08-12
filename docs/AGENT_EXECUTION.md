@@ -1,0 +1,73 @@
+# Durable agent execution
+
+ALTER's agent is a persisted task graph, not a fixed weekly scenario. The same
+engine supports a short task, a diet, a study plan, a project or a multi-week
+goal.
+
+## Lifecycle
+
+`goal → tasks → dependencies → claim → tool execution → result → verify/replan`
+
+Tasks have `pending`, `in_progress`, `done` and `blocked` states, priorities,
+deadlines, dependencies, attempts and results. A blocked graph never spins;
+it waits for an explicit replan.
+
+## API
+
+All routes require the normal bearer token:
+
+```http
+POST /api/v1/agent/start
+Content-Type: application/json
+```
+
+Example:
+
+```json
+{
+  "goal": "Подготовить план питания на неделю",
+  "horizon_minutes": 10080,
+  "autonomy_enabled": true,
+  "check_interval_minutes": 60,
+  "constraints": {"budget_rub": 12000, "allow_external_actions": false},
+  "tasks": [
+    {"id": "goals", "title": "Определить калории и ограничения", "priority": 1},
+    {"id": "menu", "title": "Составить меню", "depends_on": ["goals"]},
+    {"id": "shopping", "title": "Собрать список покупок", "depends_on": ["menu"]}
+  ]
+}
+```
+
+Routes:
+
+- `GET /api/v1/agent` — current state and next ready task;
+- `POST /api/v1/agent/next` — manually claim one task;
+- `POST /api/v1/agent/run` with `{"max_steps": 1}` — execute tasks through the model/tool loop;
+- `POST /api/v1/agent/task` with `task_id`, `status=done|blocked` and `result`/`reason`;
+- `POST /api/v1/agent/replan` with a replacement `tasks` list;
+- `autonomy_enabled=true` opts into one bounded background tick per interval.
+
+Autonomy is off by default. External side effects such as creating reminders
+or Calendar events additionally require `constraints.allow_external_actions`.
+
+## Agent tools
+
+The executor can use web search, weather, memory recall, active reminders and
+Google Calendar. Search/read tools are safe by default; reminder/calendar
+creation is approval-gated by the constraint above. Vision remains a media
+input pipeline: images and sampled video frames are sent to the vision model,
+and video audio is transcribed and supplied as additional context.
+
+## Local verification
+
+No provider credits are needed for the state/executor benchmark:
+
+```powershell
+py -3 -m pytest -q
+py -3 scripts/benchmark_agent.py --output agent_benchmark_local.json --runs 1000
+py -3 -m compileall -q .
+git diff --check
+```
+
+The paid text/voice/search benchmarks remain separate and require the explicit
+`--confirm-cost` flag.

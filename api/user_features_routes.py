@@ -277,7 +277,9 @@ async def agent_run_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if (user.tech_stack or {}).get("private_mode") is True:
             raise web.HTTPConflict(text="agent persistence is disabled in private mode")
-        user.tech_stack = await run_agent_steps(user.tech_stack, model_agent_executor, max_steps=max_steps)
+        async def executor(task, state):
+            return await model_agent_executor(task, state, db=session, user=user)
+        user.tech_stack = await run_agent_steps(user.tech_stack, executor, max_steps=max_steps)
         await session.commit()
         return web.json_response({"agent": agent_view(user.tech_stack)})
 

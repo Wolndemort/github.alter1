@@ -379,14 +379,19 @@ def _agent_due(state: dict, now: datetime) -> bool:
     return due <= now
 
 
-async def process_autonomous_agent(user: User, bot: Bot | None = None, *, now: datetime | None = None) -> bool:
+async def process_autonomous_agent(user: User, bot: Bot | None = None, *, db=None, now: datetime | None = None) -> bool:
     """Run at most one opted-in agent step and schedule the next tick."""
     current = dict(user.tech_stack or {})
     state = dict(current.get("active_agent") or {})
     moment = now or datetime.now(timezone.utc)
     if not _agent_due(state, moment):
         return False
-    current = await run_agent_steps(current, model_agent_executor, max_steps=1)
+    if db is None:
+        current = await run_agent_steps(current, model_agent_executor, max_steps=1)
+    else:
+        async def executor(task, state):
+            return await model_agent_executor(task, state, db=db, user=user)
+        current = await run_agent_steps(current, executor, max_steps=1)
     state = dict(current.get("active_agent") or {})
     if state.get("status") == "active":
         interval = max(5, min(int(state.get("check_interval_minutes", 60)), 7 * 24 * 60))
@@ -416,7 +421,7 @@ async def monitor_agents(bot: Bot):
                 result = await db.execute(select(User).options(selectinload(User.web_account)).with_for_update(skip_locked=True))
                 for user in result.scalars().all():
                     try:
-                        await process_autonomous_agent(user, bot, now=now)
+                        await process_autonomous_agent(user, bot, db=db, now=now)
                     except Exception:
                         logging.exception("Autonomous agent tick failed user=%s", user.id)
                 await db.commit()
