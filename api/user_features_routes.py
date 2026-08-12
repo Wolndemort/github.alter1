@@ -16,6 +16,8 @@ from utils.metrics import latency_snapshot, snapshot as metrics_snapshot
 from utils.workflow_state import advance_workflow, start_workflow, workflow_view
 from utils.agent_engine import agent_view, block_task, claim_next_task, complete_task, replan_agent, start_agent
 from services.agent_executor import model_agent_executor, run_agent_steps
+from config import config
+from utils.config_audit import configuration_snapshot
 
 
 def _parse_datetime(value: object) -> datetime:
@@ -118,6 +120,7 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
         "tool_empty": counters.get("ai.tool.empty", 0),
         "tool_failures": counters.get("ai.tool.failure", 0) + counters.get("ai.tool.error", 0),
         "quality_warnings": sum(value for name, value in counters.items() if name == "ai.reply.quality_warning"),
+        "configuration": configuration_snapshot(config),
     })
 
 
