@@ -997,7 +997,7 @@ async def get_or_create_user(message: types.Message, db_session: AsyncSession) -
         user = User(id=message.from_user.id,
                     username=message.from_user.username,
                     first_name=message.from_user.first_name or "Пользователь",
-                    memory={}, tech_stack={})
+                    memory={}, tech_stack={"trial_started_at": datetime.now(timezone.utc).isoformat()})
         db_session.add(user)
         await db_session.flush()
     return user
@@ -1114,7 +1114,7 @@ async def accept_legal(callback: types.CallbackQuery, db_session: AsyncSession):
             id=callback.from_user.id,
             username=callback.from_user.username,
             first_name=callback.from_user.first_name or "Пользователь",
-            memory={}, tech_stack={},
+            memory={}, tech_stack={"trial_started_at": datetime.now(timezone.utc).isoformat()},
         )
         db_session.add(user)
     user.legal_accepted_at = datetime.now(timezone.utc)

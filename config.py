@@ -97,6 +97,8 @@ class Setting(BaseSettings):
     SMTP_USE_TLS: bool = True
 
     DAILY_REQUEST_LIMIT: int = 100
+    TRIAL_DAYS: int = 3
+    TRIAL_CREDITS: int = 40
     MONTHLY_CREDITS: int = 1000
     YOUTUBE_SEARCH_CREDITS: int = 1
     YOUTUBE_AUDIO_CREDITS: int = 10

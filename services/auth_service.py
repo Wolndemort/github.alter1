@@ -101,7 +101,7 @@ async def register(session: AsyncSession, email: str, password: str, legal_accep
     existing = (await session.execute(select(WebAccount).where(WebAccount.email == email))).scalar_one_or_none()
     if existing:
         raise ValueError("account already exists")
-    user = User(first_name=email.split("@", 1)[0][:64], memory={}, tech_stack={}, legal_accepted_at=datetime.now(timezone.utc) if legal_accepted else None)
+    user = User(first_name=email.split("@", 1)[0][:64], memory={}, tech_stack={"trial_started_at": datetime.now(timezone.utc).isoformat()}, legal_accepted_at=datetime.now(timezone.utc) if legal_accepted else None)
     code = generate_verification_code()
     account = WebAccount(
         id=str(uuid.uuid4()), email=email, password_hash=hash_password(password), user=user,

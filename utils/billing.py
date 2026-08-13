@@ -51,6 +51,8 @@ def credits_limit(user: User | None) -> int:
     """Return the monthly credit quota for the user's active plan."""
     if user is None:
         return int(config.PERSONAL_MONTHLY_CREDITS)
+    if has_active_trial(user):
+        return int(config.TRIAL_CREDITS)
     return int(plan_info((user.tech_stack or {}).get("subscription_plan"))["credits"])
 
 
@@ -73,7 +75,28 @@ def price(plan: object = "personal") -> Decimal:
 
 
 def has_active_subscription(user: User | None) -> bool:
-    return bool(user and user.subscription_expires_at and user.subscription_expires_at > datetime.now(timezone.utc))
+    if not user:
+        return False
+    now = datetime.now(timezone.utc)
+    if user.subscription_expires_at and user.subscription_expires_at > now:
+        return True
+    started = (user.tech_stack or {}).get("trial_started_at")
+    try:
+        trial_start = datetime.fromisoformat(str(started).replace("Z", "+00:00")) if started else None
+    except ValueError:
+        trial_start = None
+    return bool(trial_start and trial_start + timedelta(days=config.TRIAL_DAYS) > now)
+
+
+def has_active_trial(user: User | None) -> bool:
+    if not user or (user.subscription_expires_at and user.subscription_expires_at > datetime.now(timezone.utc)):
+        return False
+    started = (user.tech_stack or {}).get("trial_started_at")
+    try:
+        value = datetime.fromisoformat(str(started).replace("Z", "+00:00")) if started else None
+    except ValueError:
+        return False
+    return bool(value and value + timedelta(days=config.TRIAL_DAYS) > datetime.now(timezone.utc))
 
 
 def configured() -> bool:
