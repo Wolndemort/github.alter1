@@ -22,6 +22,7 @@ from utils.vector_memory import purge_expired
 from utils.memory_store import purge_expired_memory
 from utils.memory_quality import sanitize_summary
 from utils.push_notifications import send_push
+from utils.weather import get_weather
 from services.agent_executor import model_agent_executor, run_agent_steps
 
 
@@ -407,6 +408,50 @@ async def monitor_checkins(bot: Bot):
         except Exception:
             logging.exception("Gentle check-in monitor failed")
         await asyncio.sleep(300)
+
+
+async def monitor_daily_briefs(bot: Bot):
+    """Send one concise morning and evening brief per user in Moscow time."""
+    while True:
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                local_now = now + timedelta(hours=3)
+                marker_day = local_now.date().isoformat()
+                result = await db.execute(select(User).options(selectinload(User.web_account)).where(User.checkins_enabled.is_(True)))
+                for user in result.scalars().all():
+                    settings = dict(user.tech_stack or {})
+                    if settings.get("proactive_enabled", True) is False or is_quiet_time(user, now):
+                        continue
+                    memory = user.memory or {}
+                    loops = active_open_loops(memory)
+                    location = settings.get("current_location") if isinstance(settings.get("current_location"), dict) else {}
+                    city = str(location.get("city") or location.get("region") or "Москва").strip()
+                    marker = f"{marker_day}:{local_now.hour}"
+                    sent = dict(settings.get("daily_briefs_sent") or {})
+                    if local_now.hour == 9 and sent.get(f"morning:{marker_day}") is None:
+                        weather = await get_weather(city) or f"Погоду для {city} пока не удалось получить."
+                        focus = str(loops[0].get("title") if loops and isinstance(loops[0], dict) else (memory.get("goals_habits") or {}).get("goal") or "Выбери одну главную задачу на сегодня.")
+                        message = f"Доброе утро, {user.first_name or 'друг'}!\n\n{weather}\n\nГлавный фокус: {focus[:240]}"
+                        chat_id = telegram_chat_id(user)
+                        if chat_id is not None: await bot.send_message(chat_id, message)
+                        await send_push(user, "ALTER · Доброе утро", message)
+                        sent[f"morning:{marker_day}"] = now.isoformat()
+                    elif local_now.hour == 21 and sent.get(f"evening:{marker_day}") is None:
+                        focus = str(loops[0].get("title") if loops and isinstance(loops[0], dict) else "Незавершённых тем пока нет.")
+                        message = f"Вечерний чек-ин ALTER.\n\nЧто получилось сегодня? Если хочешь, завтра вернёмся к теме: {focus[:240]}"
+                        chat_id = telegram_chat_id(user)
+                        if chat_id is not None: await bot.send_message(chat_id, message)
+                        await send_push(user, "ALTER · Вечерний итог", message)
+                        sent[f"evening:{marker_day}"] = now.isoformat()
+                    else:
+                        continue
+                    settings["daily_briefs_sent"] = dict(list(sent.items())[-14:])
+                    user.tech_stack = settings
+                await db.commit()
+        except Exception:
+            logging.exception("Daily brief monitor failed")
+        await asyncio.sleep(60)
 
 
 def _agent_due(state: dict, now: datetime) -> bool:

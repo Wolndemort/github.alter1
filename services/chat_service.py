@@ -193,6 +193,9 @@ class ChatService:
                 key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
                 if location.get(key) not in (None, "")
             }
+            settings = dict(user.tech_stack or {})
+            settings["current_location"] = dict(memory["current_location"])
+            user.tech_stack = settings
         events = [{"title": event.title, "event_type": event.event_type,
                    "importance": event.importance, "description": event.description}
                   for event in events_result.scalars()]
@@ -355,6 +358,9 @@ class ChatService:
             memory["active_agent"] = agent
         if isinstance(location, dict):
             memory["current_location"] = {key: location[key] for key in ("city", "region", "country") if location.get(key) not in (None, "")}
+            settings = dict(user.tech_stack or {})
+            settings["current_location"] = dict(memory["current_location"])
+            user.tech_stack = settings
         events = [{"title": event.title, "event_type": event.event_type, "description": event.description} for event in events_result.scalars()]
         if events:
             memory["important_events"] = events
