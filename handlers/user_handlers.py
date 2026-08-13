@@ -1310,6 +1310,26 @@ async def cmd_checkins_off(message: types.Message, db_session: AsyncSession):
     await message.answer("Мягкие check-in выключены.", reply_markup=memory_keyboard())
 
 
+@router.message(Command("proactive_on"))
+async def cmd_proactive_on(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
+    settings = dict(user.tech_stack or {})
+    settings["proactive_enabled"] = True
+    user.tech_stack = settings
+    await db_session.commit()
+    await message.answer("ALTER снова будет сама возвращаться к важным темам, напоминаниям и check-in.", reply_markup=memory_keyboard())
+
+
+@router.message(Command("proactive_off"))
+async def cmd_proactive_off(message: types.Message, db_session: AsyncSession):
+    user = await get_or_create_user(message, db_session)
+    settings = dict(user.tech_stack or {})
+    settings["proactive_enabled"] = False
+    user.tech_stack = settings
+    await db_session.commit()
+    await message.answer("ALTER перестала писать сама. Обычный чат и ручные напоминания продолжают работать.", reply_markup=memory_keyboard())
+
+
 @router.message(Command("remind"))
 async def cmd_remind(message: types.Message, command: CommandObject, db_session: AsyncSession):
     """Create a simple one-time reminder: /remind 2026-08-04 10:00 text."""

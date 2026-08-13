@@ -131,7 +131,7 @@ Check-in:
 «Выключи check-in»
 «Как часто спрашивать, как я?»
 
-Настройки: /settings, /checkins_on, /checkins_off.
+Настройки: /settings, /proactive_on, /proactive_off, /checkins_on, /checkins_off.
 
 10. Google Calendar
 

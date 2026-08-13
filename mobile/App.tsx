@@ -367,6 +367,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [plansVisible, setPlansVisible] = useState(false);
   const [voiceReplies, setVoiceReplies] = useState(false);
   const [checkinsEnabled, setCheckinsEnabled] = useState(true);
+  const [proactiveEnabled, setProactiveEnabled] = useState(true);
   const [autoVoiceReplies, setAutoVoiceReplies] = useState(false);
   const [privateMode, setPrivateMode] = useState(false);
   const [ttsVoice, setTtsVoice] = useState("alloy");
@@ -424,6 +425,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     api.usage(token).then(setUsage).catch(() => undefined);
     api.settings(token).then(({ settings, checkins_enabled }) => {
       setCheckinsEnabled(checkins_enabled);
+      setProactiveEnabled(settings.proactive_enabled !== false);
       setVoiceReplies(settings.voice_replies === true);
       setAutoVoiceReplies(settings.voice_auto_replies === true);
       setPrivateMode(settings.private_mode === true);
@@ -888,6 +890,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const next = !checkinsEnabled; setCheckinsEnabled(next);
     try { await api.setCheckins(token, next); } catch (err) { setCheckinsEnabled(!next); setMenuError(err instanceof Error ? err.message : "Не удалось изменить check-in"); }
   };
+  const toggleProactive = async () => {
+    const next = !proactiveEnabled; setProactiveEnabled(next);
+    try { await api.updateSettings(token, { proactive_enabled: next }); }
+    catch (err) { setProactiveEnabled(!next); setMenuError(err instanceof Error ? err.message : "Не удалось изменить proactive-режим"); }
+  };
   const createVoice = async () => {
     const description = voiceDescription.trim();
     if (!description || busy) return;
@@ -1049,6 +1056,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         </View> : null}
         <Pressable style={premiumStyles.sectionHeader} onPress={() => setOpenSection((value) => value === "settings" ? null : "settings")}><Text style={premiumStyles.sectionLabel}>НАСТРОЙКИ</Text><Text style={premiumStyles.sectionChevron}>{openSection === "settings" ? "⌃" : "⌄"}</Text></Pressable>
         {openSection === "settings" ? <View style={premiumStyles.sectionBody}>
+        <Pressable style={premiumStyles.menuAction} onPress={toggleProactive}><View style={{ flex: 1 }}><Text style={premiumStyles.menuActionText}>ALTER пишет сама · {proactiveEnabled ? "включено" : "выключено"}</Text><Text style={{ color: "#777", fontSize: 12, marginTop: 3 }}>Напоминания, check-in и важные возвращения к темам</Text></View><Text style={premiumStyles.menuActionArrow}>{proactiveEnabled ? "✓" : "○"}</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={toggleCheckins}><View style={{ flex: 1 }}><Text style={premiumStyles.menuActionText}>Забота · {checkinsEnabled ? "включена" : "выключена"}</Text><Text style={{ color: "#777", fontSize: 12, marginTop: 3 }}>ALTER возвращается к важным темам и задаёт контекстный вопрос</Text></View><Text style={premiumStyles.menuActionArrow}>{checkinsEnabled ? "✓" : "○"}</Text></Pressable>
         <Pressable style={premiumStyles.menuAction} onPress={chooseLocationMode}><Text style={premiumStyles.menuActionText}>{location?.city ? `Геолокация · ${location.city}` : "Разрешить геолокацию"}</Text><Text style={premiumStyles.menuActionArrow}>⌖</Text></Pressable>
         <View style={premiumStyles.menuAction}><Pressable style={{ flex: 1 }} onPress={async () => { const next = !voiceReplies; setVoiceReplies(next); try { await api.updateSettings(token, { voice_replies: next }); } catch (err) { setVoiceReplies(!next); setMenuError(err instanceof Error ? err.message : "Не удалось сохранить настройку"); } }}><Text style={premiumStyles.menuActionText}>Голосовые ответы · {voiceReplies ? "включены" : "выключены"}</Text></Pressable><Pressable onPress={() => voiceReplies && setVoiceMenuOpen((value) => !value)} accessibilityLabel="Настроить голосовые ответы"><Text style={premiumStyles.menuActionArrow}>{voiceReplies ? (voiceMenuOpen ? "⌃" : "⌄") : "○"}</Text></Pressable></View>
