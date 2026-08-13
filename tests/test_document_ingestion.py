@@ -18,6 +18,51 @@ def test_json_document_is_pretty_printed():
     assert '"name": "Alter"' in document.text
 
 
+def test_rtf_document_is_read_and_returned_as_rtf():
+    raw = b"{\\rtf1\\ansi Status: \\u1054?\\u1086?\\u1090?}"
+    document = extract_document("status.rtf", raw)
+    assert "Status" in document.text
+    result = edit_document("status.rtf", raw, "Status => Ready")
+    assert result.filename == "status.rtf"
+    assert result.media_type == "application/rtf"
+    assert b"\\rtf1" in result.data
+
+
+def test_xlsx_document_is_read_and_edited_when_dependency_is_available():
+    openpyxl = pytest.importorskip("openpyxl")
+    source = openpyxl.Workbook()
+    source.active["A1"] = "draft status"
+    raw_buffer = __import__("io").BytesIO()
+    source.save(raw_buffer)
+    source.close()
+    result = edit_document("status.xlsx", raw_buffer.getvalue(), "draft status => ready status")
+    edited = openpyxl.load_workbook(__import__("io").BytesIO(result.data), data_only=False)
+    assert edited.active["A1"].value == "ready status"
+    edited.close()
+
+
+def test_pptx_document_is_read_and_edited_when_dependency_is_available():
+    pptx = pytest.importorskip("pptx")
+    source = pptx.Presentation()
+    slide = source.slides.add_slide(source.slide_layouts[5])
+    slide.shapes.title.text = "draft status"
+    raw_buffer = __import__("io").BytesIO()
+    source.save(raw_buffer)
+    result = edit_document("status.pptx", raw_buffer.getvalue(), "draft status => ready status")
+    assert "ready status" in extract_document("status.pptx", result.data).text
+
+
+def test_odt_document_is_read_and_edited_when_dependency_is_available():
+    odf = pytest.importorskip("odf.opendocument")
+    from odf.text import P
+    source = odf.OpenDocumentText()
+    source.text.addElement(P(text="draft status"))
+    raw_buffer = __import__("io").BytesIO()
+    source.save(raw_buffer)
+    result = edit_document("status.odt", raw_buffer.getvalue(), "draft status => ready status")
+    assert "ready status" in extract_document("status.odt", result.data).text
+
+
 def test_document_rejects_unsupported_and_oversized_input():
     with pytest.raises(ValueError, match="unsupported"):
         extract_document("malware.exe", b"x")
@@ -48,6 +93,32 @@ def test_json_document_edit_preserves_valid_json():
 def test_pdf_edit_is_rejected_instead_of_corrupting_layout():
     with pytest.raises(ValueError, match="PDF"):
         edit_document("scan.pdf", b"not a pdf", "a => b")
+
+
+def test_pdf_edit_matches_case_and_whitespace_and_returns_real_pdf():
+    fitz = pytest.importorskip("fitz")
+    source = fitz.open()
+    page = source.new_page()
+    page.insert_text((72, 72), "Status: OLD\nvalue")
+    raw = source.tobytes()
+    source.close()
+
+    result = edit_document("report.pdf", raw, "old   value => ready value", "application/pdf")
+    edited = fitz.open(stream=result.data, filetype="pdf")
+    text = "\n".join(page.get_text() for page in edited)
+    edited.close()
+    assert "ready value" in text
+    assert result.media_type == "application/pdf"
+
+
+def test_scanned_pdf_reports_ocr_requirement_without_fake_success():
+    fitz = pytest.importorskip("fitz")
+    source = fitz.open()
+    source.new_page()
+    raw = source.tobytes()
+    source.close()
+    with pytest.raises(ValueError, match="scanned PDFs require OCR"):
+        edit_document("scan.pdf", raw, "old => new", "application/pdf")
 
 
 def test_document_edit_requires_explicit_instruction():

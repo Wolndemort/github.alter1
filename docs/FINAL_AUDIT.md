@@ -1,6 +1,6 @@
 # ALTER final audit
 
-Updated: 2026-08-12
+Updated: 2026-08-13
 
 ## Product surfaces
 
@@ -8,6 +8,8 @@ Updated: 2026-08-12
 - Mobile Expo client with text, voice, media, documents, memory, reminders, check-ins, calendar, location, workflow and media jobs.
 - Telegram client with the same core session, memory, document, audio and media-job flows.
 - Durable multi-step agent with executor, workflow state and background monitors.
+- Ordinary agent plans support up to 64 tasks; production verification completed
+  a real 64-step plan in eight bounded batches with one attempt per task.
 
 ## Safety and correctness
 
@@ -41,12 +43,14 @@ These are observed production samples, not a universal guarantee; provider load 
 
 ## Verification baseline
 
-- Backend: `476 passed`.
-- Mobile: `23/23` tests.
+- Backend: `499 passed, 2 skipped`.
+- Mobile: `26/26` tests.
 - Mobile TypeScript: clean.
 - Deterministic quality benchmark: `7/7`.
 - Middleware/API targeted checks: green.
 - Public production smoke: `/health=200`, `/ready=200`, unauthenticated stream=`401`, malformed webhook=`400`.
+- Production document E2E: TXT and searchable text-layer PDF edit, natural-language
+  artifact reuse without re-upload, and authenticated artifact downloads passed.
 - Non-billing availability load check: 50 requests at concurrency 10, 0 failures, p50 `84.8 ms`, p95 `688.3 ms`.
 
 ## Remaining operational work

@@ -13,6 +13,9 @@ CAPABILITIES_REPLY = """Я умею:
 • искать актуальную информацию в интернете, включая погоду, цены, новости и рекомендации;
 • искать видео и музыку на YouTube и отправлять найденное аудио;
 • анализировать фотографии, скриншоты, короткие видео и голосовые записи;
+• читать PDF, DOCX, XLSX, PPTX, ODT, RTF, TXT, Markdown, CSV и JSON;
+• извлекать из документов таблицы, даты, суммы и профиль, а также запускать bounded-агента;
+• менять текст в поддерживаемых документах и возвращать изменённый файл с тем же расширением;
 • создавать изображения и видео с нуля, а также редактировать изображения и оживлять фото через Fal.ai;
 • создавать звуковые эффекты, очищать голос от шума, менять голос и накладывать эффект на голосовое;
 • использовать ElevenLabs Speech-to-Text, Audio Isolation, Speech-to-Speech, Voice Generation, Voices и Models;
@@ -86,20 +89,22 @@ def capabilities_reply() -> str:
     return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE + "\n\nПолный технический каталог:\n" + capability_catalog_text()
 
 
-# Canonical readable inventory for the public UI and model prompt.
-CAPABILITIES_REPLY = """Я умею:
+# Legacy readable inventory retained only for compatibility with old imports;
+# the canonical CAPABILITIES_REPLY above is the one used at runtime.
+_LEGACY_CAPABILITIES_REPLY = """Я умею:
 
 • вести текстовый и голосовой диалог, помнить факты, цели и предпочтения;
 • искать актуальную информацию в интернете и показывать источники;
 • работать с фото, скриншотами, видео, аудио и голосовыми сообщениями;
 • распознавать OCR-текст, таблицы, даты, суммы и структуру документов;
-• читать PDF, DOCX, TXT, Markdown, CSV и JSON;
+• читать PDF, DOCX, XLSX, PPTX, ODT, RTF, TXT, Markdown, CSV и JSON;
+• извлекать таблицы, даты, суммы и профиль документа, передавать bounded-контекст агенту;
 • создавать планы агента на час, день, неделю или любой заданный срок;
 • создавать напоминания, check-in, push-уведомления и события календаря;
 • создавать и редактировать изображения, генерировать видео и звуковые эффекты;
 • расшифровывать, очищать, менять голос и обрабатывать аудио;
 • создавать звуковые эффекты, например звук дождя, и накладывать их на запись;
-• возвращать изменённые TXT, Markdown, CSV, JSON и DOCX-файлы.
+• менять текст в поддерживаемых документах и возвращать изменённый файл с тем же расширением.
 
 PDF редактируется только после layout-aware обработки; сканы сначала проходят OCR.
 Dubbing сейчас не подключены, Music Generation сейчас не подключены. Music Generation и Dubbing не считаются доступными функциями.
@@ -120,6 +125,20 @@ _CAPABILITY_RU_RE = re.compile(
 def is_capabilities_request(text: str) -> bool:
     value = str(text or "").strip()
     lower = value.casefold()
+    # Keep capability routing deterministic even when the subject is inserted
+    # between the modal verb and the action ("умеет ли ALTER читать XLSX?").
+    # This covers every implemented modality and document format without
+    # classifying unrelated questions such as "может ли он приехать завтра".
+    capability_stems = (
+        "чит", "откры", "редакт", "сравн", "вернут", "распозн", "анализ", "создат", "обработ",
+        "документ", "файл", "pdf", "docx", "xlsx", "pptx", "odt", "rtf", "txt", "csv", "json",
+        "фото", "изображ", "видео", "голос", "аудио", "звук", "ocr", "агент", "памят", "поиск",
+        "календар", "напомин", "уведомл", "местополож",
+    )
+    if re.search(r"\b(?:умеет|может|можешь|умеешь)\b(?:\s+ли)?", lower) and any(stem in lower for stem in capability_stems):
+        return True
+    if re.search(r"\b(?:что|какие|расскажи)\b.*\b(?:умеет|может|функци)", lower) and any(stem in lower for stem in capability_stems):
+        return True
     if any(marker in lower for marker in ("\u043c\u043e\u0436\u0435\u0448\u044c", "\u043c\u043e\u0436\u0435\u0442 \u043b\u0438", "\u0443\u043c\u0435\u0435\u0448\u044c")) and any(stem in lower for stem in ("\u0441\u0440\u0430\u0432\u043d", "\u043d\u0430\u043b\u043e\u0436", "\u043d\u0430\u0439\u0442", "\u043f\u043e\u0441\u0442\u0440\u043e\u0438", "\u0438\u0437\u043c\u0435\u043d", "\u0432\u0435\u0440\u043d", "\u0430\u043d\u0430\u043b\u0438\u0437", "\u0441\u043e\u0437\u0434\u0430", "\u0447\u0438\u0442\u0430", "\u043f\u043e\u0441\u0442\u0440")):
         return True
     if any(marker in lower for marker in ("\u0443\u043c\u0435\u0435\u0442 \u043b\u0438", "\u043c\u043e\u0436\u043d\u043e \u043b\u0438")) and any(stem in lower for stem in ("\u0438\u0441\u043a\u0430\u0442", "\u043d\u0430\u0439\u0442", "\u0434\u043e\u0431\u0430\u0432", "\u0443\u0432\u0435\u0434\u043e\u043c\u043b", "\u0441\u043e\u0437\u0434\u0430", "\u0432\u0438\u0434\u0435\u043e")):

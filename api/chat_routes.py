@@ -4,6 +4,7 @@ import base64
 import asyncio
 import json
 import logging
+import re
 import time
 
 from aiohttp import web
@@ -36,6 +37,9 @@ from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
 from utils.generation_intent import generation_kind
 from utils.document_commands import document_edit_instruction, is_document_edit_request
+from utils.multimodal_context import attachment_context_message
+from services.artifact_store import get_artifact, latest_artifact, save_artifact
+from utils.artifact_intent import reuses_previous_artifact
 
 
 def _voice_generation_summary(generated: object) -> object:
@@ -183,18 +187,25 @@ async def document_chat_route(request: web.Request) -> web.Response:
                 artifact = edit_document(filename, data, document_edit_instruction(prompt), content_type)
             except ValueError as exc:
                 raise web.HTTPBadRequest(text=str(exc))
+            artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_edit")
             return web.json_response({
                 "reply": "Изменённый файл готов и возвращён в чат.",
                 "session_id": 0,
                 "media_base64": base64.b64encode(artifact.data).decode("ascii"),
                 "media_filename": artifact.filename,
                 "media_mime": artifact.media_type or "application/octet-stream",
+                "artifact_id": artifact_id,
             })
         agent = None
         if agent_mode:
             user.tech_stack = start_document_agent(user.tech_stack, document, prompt, horizon_minutes=agent_horizon)
             agent = agent_view(user.tech_stack)
-        context = f"\n\nDOCUMENT: {document.filename}\n<document_text>\n{document.text}\n</document_text>"
+        context_record = attachment_context_message(
+            kind="document", filename=document.filename, media_type=document.media_type,
+            operation="analysis", observation=document.text[:6000],
+            profile={"pages": document.pages, "chars": document.chars},
+        )
+        context = f"\n\n{context_record}\nDOCUMENT: {document.filename}\n<document_text>\n{document.text}\n</document_text>"
         try:
             result = await ChatService().reply(session, user_id, prompt + context)
         except ValueError as exc:
@@ -208,16 +219,29 @@ async def document_edit_route(request: web.Request) -> web.Response:
     if not request.content_type.startswith("multipart/"):
         raise web.HTTPBadRequest(text="multipart form required")
     reader = await request.multipart()
-    filename, content_type, data, instruction = "document", "", b"", ""
+    filename, content_type, data, instruction, requested_artifact_id = "document", "", b"", "", ""
     async for part in reader:
         if part.name == "instruction":
             instruction = (await part.text())[:12000]
+        elif part.name == "artifact_id":
+            requested_artifact_id = (await part.text()).strip()[:100]
         elif part.name == "file":
             filename = part.filename or filename
             content_type = part.headers.get("Content-Type", "")
             data = await part.read(decode=False)
+    if not data and (requested_artifact_id or reuses_previous_artifact(instruction)):
+        previous = await (get_artifact(user_id, requested_artifact_id) if requested_artifact_id else latest_artifact(user_id, kind="document"))
+        if not previous:
+            raise web.HTTPBadRequest(text="предыдущий артефакт не найден или срок его хранения истёк")
+        try:
+            data = base64.b64decode(previous.get("data_base64", ""), validate=True)
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest(text="предыдущий артефакт повреждён")
+        filename = str(previous.get("filename") or filename)
+        content_type = str(previous.get("media_type") or content_type)
     try:
-        artifact = edit_document(filename, data, instruction, content_type)
+        normalized_instruction = document_edit_instruction(instruction) if is_document_edit_request(instruction) else instruction
+        artifact = edit_document(filename, data, normalized_instruction, content_type)
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc))
     async with async_session() as session:
@@ -228,8 +252,10 @@ async def document_edit_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+    artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_edit")
     response = web.Response(body=artifact.data, content_type=artifact.media_type or "application/octet-stream")
     response.headers["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
+    response.headers["X-ALTER-Artifact-ID"] = artifact_id
     response.headers["X-Alter-Edit-Mode"] = "explicit-replacements"
     return response
 
@@ -452,7 +478,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
     if result.audio:
         payload.update({"audio_base64": base64.b64encode(result.audio).decode("ascii"), "audio_filename": result.audio_filename or "alter-audio.mp3", "audio_mime": "audio/mpeg"})
     if result.media_data:
-        payload.update({"media_base64": base64.b64encode(result.media_data).decode("ascii"), "media_filename": result.media_filename or "alter-generated", "media_mime": result.media_type or "application/octet-stream"})
+        payload.update({"media_base64": base64.b64encode(result.media_data).decode("ascii"), "media_filename": result.media_filename or "alter-generated", "media_mime": result.media_type or "application/octet-stream", "artifact_id": result.artifact_id})
     return web.json_response(payload)
 
 
@@ -476,6 +502,7 @@ async def media_generate_route(request: web.Request) -> web.Response:
         kind = "image"
         options = {}
         source = None
+        requested_artifact_id = ""
         while True:
             part = await reader.next()
             if part is None:
@@ -484,6 +511,8 @@ async def media_generate_route(request: web.Request) -> web.Response:
                 prompt = (await part.text()).strip()
             elif part.name == "kind":
                 kind = (await part.text()).strip().lower()
+            elif part.name == "artifact_id":
+                requested_artifact_id = (await part.text()).strip()[:100]
             elif part.name == "options":
                 try:
                     options = json.loads((await part.text()).strip() or "{}")
@@ -505,6 +534,16 @@ async def media_generate_route(request: web.Request) -> web.Response:
                         raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES, actual_size=size)
                     chunks.append(chunk)
                 source = (content_type, b"".join(chunks))
+        if source is None and (requested_artifact_id or reuses_previous_artifact(prompt)):
+            previous = await (get_artifact(user_id, requested_artifact_id) if requested_artifact_id else latest_artifact(user_id))
+            if not previous:
+                raise web.HTTPBadRequest(text="предыдущий артефакт не найден или срок его хранения истёк")
+            try:
+                previous_data = base64.b64decode(previous.get("data_base64", ""), validate=True)
+            except (ValueError, TypeError):
+                raise web.HTTPBadRequest(text="предыдущий артефакт повреждён")
+            source = (str(previous.get("media_type") or "application/octet-stream"), previous_data)
+            kind = str(previous.get("kind") or kind).lower()
         cost = (
             config.FAL_TEXT_IMAGE_CREDITS if kind == "image" and source is None else
             config.FAL_TEXT_VIDEO_CREDITS if kind == "video" and source is None else
@@ -529,9 +568,11 @@ async def media_generate_route(request: web.Request) -> web.Response:
         finally:
             await close_redis(redis)
         logging.info("media generation success user=%s kind=%s provider=%s model=%s bytes=%d elapsed_ms=%d cost=%d", user_id, kind, config.MEDIA_PROVIDER, (config.FAL_TEXT_VIDEO_MODEL if kind == "video" and source is None else config.FAL_VIDEO_MODEL if kind == "video" else config.FAL_TEXT_IMAGE_MODEL if source is None else config.FAL_IMAGE_MODEL), len(artifact.data), int((time.monotonic() - started_at) * 1000), cost)
+    artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind=kind, operation="media_generation")
     return web.json_response({
         "media_type": artifact.media_type,
         "filename": artifact.filename,
+        "artifact_id": artifact_id,
         "data_base64": base64.b64encode(artifact.data).decode("ascii"),
     })
 

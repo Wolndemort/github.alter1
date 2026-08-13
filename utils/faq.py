@@ -233,5 +233,71 @@ Telegram: /help, /new_session, /memory, /forget, /clear_memory, /remind, /media,
 """
 
 
+FAQ_LATEST_APPENDIX = """
+
+16. АКТУАЛЬНАЯ КАРТА ВОЗМОЖНОСТЕЙ ALTER
+
+Диалог и память:
+• обычный текстовый и streaming-чат, новый разговор и очистка контекста;
+• сохранение фактов, целей и предпочтений только по явной просьбе;
+• мягкие check-in, напоминания, push и общий контекст между mobile и Telegram.
+
+Документы:
+• чтение PDF, DOCX, XLSX, PPTX, ODT, RTF, TXT, Markdown, CSV и JSON;
+• извлечение текста, таблиц, дат, сумм, профиля и bounded-контекста для агента;
+• сравнение версий и экспорт изменённого файла;
+• PDF с текстовым слоем реально редактируется по координатам и возвращается как PDF;
+• сканированный PDF без текстового слоя требует OCR и отклоняется безопасно;
+• результат получает owner-scoped artifact_id и скачивается через /api/v1/artifacts/{artifact_id}.
+
+Фото и vision:
+• описание изображений, OCR, проверка таблиц и графиков;
+• структурированный визуальный аудит, confidence-проверки, объекты и геометрия;
+• создание, редактирование и преобразование изображений.
+
+Видео:
+• анализ кадров, извлечение аудио, расшифровка и события с таймкодами;
+• image-to-video, оживление изображения и создание видео с нуля;
+• можно задавать длительность, формат, стиль, движение, свет, звук и негативные элементы.
+
+Голос и аудио:
+• speech-to-text, озвучивание текста и голосовые ответы;
+• очистка записи от шума, voice change, speech-to-speech и генерация голоса;
+• sound effects, audio mix, наложение звука на голосовое и извлечение аудио из YouTube.
+
+Поиск, карты и продуктивность:
+• актуальный web-поиск с источниками, проверка фактов, YouTube и погода;
+• геокодирование, поиск организаций, маршруты и расстояния после согласия на геолокацию;
+• напоминания, Google Calendar, check-in, push и location context.
+
+Обычный durable-agent:
+• до 64 задач в одном плане, зависимости, приоритеты, дедлайны и replan;
+• claim → execution → result → verify, журнал событий и количество попыток;
+• один запуск ограничен 8 шагами, длинный план продолжается батчами;
+• внешние действия защищены отдельным allow_external_actions.
+
+Примеры запросов:
+«Проанализируй договор и выдели риски, даты и суммы»
+«Измени последний созданный документ: draft => ready»
+«Оживи эту фотографию и сделай ��лавное движение камеры»
+«Очисти голосовое от шума и наложи звук дождя»
+«Найди актуальные цены и дай ссылки на источники»
+«Поставь напоминание завтра в 10:00 позвонить клиенту»
+«Запусти план из 64 шагов и проверяй результат каждого этапа»
+
+Канонический технический каталог: GET /api/v1/capabilities.
+Полный пользовательский FAQ: GET /api/v1/faq для сайта и
+GET /api/v1/faq/text для mobile.
+"""
+
+
+FAQ_LATEST_APPENDIX = FAQ_LATEST_APPENDIX.replace("\ufffd\ufffd", "п")
+
+
+def faq_text() -> str:
+    return FAQ_TEXT + FAQ_APPENDIX + FAQ_LATEST_APPENDIX
+
+
 def faq_html() -> str:
+    return """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALTER вЂ” FAQ</title><style>html,body{margin:0;background:#050505;color:#f4f4f4;font-family:Arial,sans-serif}main{max-width:880px;margin:0 auto;padding:28px 22px 80px}pre{white-space:pre-wrap;font:14px/1.65 Arial,sans-serif;letter-spacing:.15px}h1{font-size:18px;letter-spacing:4px;font-weight:700;margin:0 0 24px}a{color:#fff}</style></head><body><main><h1>ALTER В· FAQ</h1><pre>""" + escape(faq_text()) + """</pre></main></body></html>"""
     return """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALTER — FAQ</title><style>html,body{margin:0;background:#050505;color:#f4f4f4;font-family:Arial,sans-serif}main{max-width:880px;margin:0 auto;padding:28px 22px 80px}pre{white-space:pre-wrap;font:14px/1.65 Arial,sans-serif;letter-spacing:.15px}h1{font-size:18px;letter-spacing:4px;font-weight:700;margin:0 0 24px}a{color:#fff}</style></head><body><main><h1>ALTER · FAQ</h1><pre>""" + escape(FAQ_TEXT + FAQ_APPENDIX) + """</pre></main></body></html>"""

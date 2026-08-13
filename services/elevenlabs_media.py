@@ -12,6 +12,19 @@ class ElevenLabsError(RuntimeError):
     pass
 
 
+# ``/v1/models`` is not enabled for every ElevenLabs key (some valid keys
+# return 401 there while voices and synthesis work normally).  These are the
+# model ids ALTER actually uses; exposing them keeps the optional catalog
+# screen useful without pretending that the provider lookup succeeded.
+KNOWN_ELEVENLABS_MODELS = [
+    {"model_id": "eleven_multilingual_v2", "name": "Multilingual v2", "capabilities": ["text_to_speech"]},
+    {"model_id": "eleven_turbo_v2_5", "name": "Turbo v2.5", "capabilities": ["text_to_speech"]},
+    {"model_id": "eleven_flash_v2_5", "name": "Flash v2.5", "capabilities": ["text_to_speech"]},
+    {"model_id": "eleven_multilingual_sts_v2", "name": "Multilingual STS v2", "capabilities": ["speech_to_speech"]},
+    {"model_id": "scribe_v1", "name": "Scribe", "capabilities": ["speech_to_text"]},
+]
+
+
 def _provider_detail(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -121,6 +134,9 @@ async def list_models() -> list:
     try:
         client = await pooled_client(30)
         response = await client.get("https://api.elevenlabs.io/v1/models", headers={"xi-api-key": _key()})
+        if response.status_code in {401, 403}:
+            logging.warning("ElevenLabs models catalog is unavailable for this key; using ALTER fallback")
+            return list(KNOWN_ELEVENLABS_MODELS)
         if response.status_code >= 400:
             raise ElevenLabsError("ElevenLabs models lookup failed")
         payload = response.json()

@@ -10,18 +10,18 @@ def _text(value: str) -> str:
         return value
 
 def is_voice_generation_request(text: str) -> bool:
-    value = _text(text).casefold()
-    verbs = r"(?:создай|сгенерируй|сделай|придумай|создать|сгенерировать|сделать|получи|получить|нужен|хочу|create|generate|make|get)"
-    noun = r"(?:голос|озвучку|озвучивание|диктора|персонажный\s+голос|voice)"
-    return bool(re.search(rf"\b{verbs}\b.*\b{noun}\b|\b(?:новый|свой|персонажный)\s+{noun}\b|\bнужен\s+{noun}\b", value))
+    value = re.sub(r"\s+", " ", _text(text).casefold()).strip()
+    verbs = r"(?:создай\w*|сгенерируй\w*|сделай\w*|придумай\w*|получи\w*|хочу|нужен|create|generate|make|get|design)"
+    noun = r"(?:голос\w*|озвучк\w*|озвучивани\w*|диктор\w*|персонажн\w*\s+голос\w*|voice\w*)"
+    return bool(re.search(rf"\b{verbs}\b.*\b{noun}\b|\b(?:новый|свой|персонажный|custom|new)\s+{noun}\b", value))
 
 def is_voice_change_request(text: str) -> bool:
-    value = _text(text).casefold()
-    verbs = r"(?:измени|изменить|поменяй|поменять|переделай|переделать|преобразуй|преобразовать|обработай|обработать|замени|заменить|сделай\s+другим)"
-    return bool(re.search(rf"\b{verbs}\b.*\b(?:мой|этот|свой)?\s*голос\b|\bозвучь\b.*\b(?:этим|другим|созданным)\s+голосом\b", value))
+    value = re.sub(r"\s+", " ", _text(text).casefold()).strip()
+    verbs = r"(?:измени\w*|поменяй\w*|переделай\w*|преобразуй\w*|обработай\w*|замени\w*|сделай\s+другим|change|replace|convert|transform)"
+    return bool(re.search(rf"\b{verbs}\b.*\b(?:мой|этот|свой|созданн\w*|custom|my)?\s*голос\w*\b|\b(?:озвучь|speak)\b.*\b(?:этим|другим|созданн\w*|custom)\s+голос\w*", value))
 
 def voice_description(text: str) -> str:
-    value = re.sub(r"^\s*(?:создай|сгенерируй|сделай|придумай|получи|получить|create|generate|make|get)\s+(?:мне\s+)?(?:новый\s+)?(?:голос|voice)\s*", "", _text(text), flags=re.IGNORECASE)
+    value = re.sub(r"^\s*(?:создай\w*|сгенерируй\w*|сделай\w*|придумай\w*|получи\w*|хочу|create|generate|make|get|design)\s+(?:мне\s+)?(?:новый\s+|свой\s+|custom\s+|new\s+)?(?:голос\w*|voice)\s*[:,-]?\s*", "", _text(text), flags=re.IGNORECASE)
     return value.strip(" .,!?:;")
 
 def requested_voice_id(text: str, saved_voice_id: str | None, default_voice_id: str | None) -> str | None:

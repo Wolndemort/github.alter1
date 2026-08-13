@@ -130,3 +130,15 @@ controlled unavailable result when a provider limit is exhausted.
 \n+Полный canonical inventory хранится в `utils/capability_catalog.py` и
 используется capability-ответом ALTER, поэтому UI, документация и модель могут
 сверяться с одним техническим источником.
+## Current verified document and agent behavior
+
+ALTER accepts plans with up to 64 tasks. The execution endpoint limits one
+request to 8 steps, so larger plans continue in bounded batches. Production
+verification completed a real 64-step ordinary-agent plan with one attempt per
+task and external actions disabled.
+
+Document editing returns TXT, Markdown, CSV, JSON, DOCX and searchable
+text-layer PDF files. PDF replacements are applied at text coordinates and the
+result is returned as a valid PDF. Scanned PDFs without a text layer require
+OCR and are rejected safely. Successful edits expose an owner-scoped
+`artifact_id` and can be downloaded from `/api/v1/artifacts/{artifact_id}`.

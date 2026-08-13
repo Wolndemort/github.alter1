@@ -4,7 +4,7 @@ export type MeResponse = {
   name: string;
   subscription_expires_at: string | null;
 };
-export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string; media_job_id?: string };
+export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string; media_job_id?: string; artifact_id?: string };
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
@@ -16,6 +16,7 @@ export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; d
 export type MyDayItem = { kind: string; title: string; detail: string; at: string | null; priority: string; loop_index?: number };
 export type MyDayResponse = { date: string; focus: MyDayItem[]; next_step: { title: string; prompt: string }; counts: { reminders: number; open_loops: number; goals: number }; memory_permanent: boolean };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
+export type CapabilityResponse = { version: string; categories: Record<string, string[]>; text: string; reply: string };
 export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
@@ -83,6 +84,14 @@ export class AlterApi {
       throw new ApiError(response.status, readableErrorBody(message, response.status));
     }
     return response.json() as Promise<T>;
+  }
+
+  private async requestText(path: string, token?: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return response.text();
   }
 
   register(email: string, password: string) {
@@ -184,6 +193,9 @@ export class AlterApi {
   }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
+  async downloadArtifact(token: string, artifactId: string) {
+    return this.requestBlob(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`, {}, token);
+  }
 
   async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio", mimeType?: string, filename?: string) {
     const mime = mimeType || (mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a");
@@ -220,6 +232,12 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return { blob: await response.blob(), filename: response.headers?.get("Content-Disposition") || filename };
   }
+  async editArtifact(token: string, artifactId: string, instruction: string) {
+    const form = new FormData(); form.append("artifact_id", artifactId); form.append("instruction", instruction);
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/document/edit`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
+    return { blob: await response.blob(), filename: response.headers?.get("Content-Disposition") || "alter-edited-document" };
+  }
   async compareDocuments(token: string, beforeUri: string, beforeName: string, afterUri: string, afterName: string) {
     const form = new FormData(); form.append("before", { uri: beforeUri, type: "application/octet-stream", name: beforeName } as unknown as Blob); form.append("after", { uri: afterUri, type: "application/octet-stream", name: afterName } as unknown as Blob);
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/document/compare`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
@@ -233,11 +251,12 @@ export class AlterApi {
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.blob();
   }
-  async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video", options: Record<string, unknown> = {}) {
+  async generateMedia(token: string, message: string, uri: string | null, kind: "image" | "video", options: Record<string, unknown> = {}, artifactId?: string) {
     const form = new FormData();
     form.append("message", message);
     form.append("kind", kind);
     form.append("options", JSON.stringify(options));
+    if (artifactId) form.append("artifact_id", artifactId);
     if (uri) {
       form.append("file", { uri, type: kind === "image" ? "image/jpeg" : "video/mp4", name: `alter-source.${kind === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
     }
@@ -245,7 +264,7 @@ export class AlterApi {
       method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
     });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
-    return response.json() as Promise<{ media_type: string; filename: string; data_base64: string }>;
+    return response.json() as Promise<{ media_type: string; filename: string; data_base64: string; artifact_id?: string }>;
   }
   mediaCapabilities(token: string) {
     return this.request<{ provider: string; models: Record<string, { id: string | null; mode: string; requires_source: boolean; options: Record<string, unknown> }> }>("/api/v1/media/capabilities", {}, token);
@@ -258,6 +277,8 @@ export class AlterApi {
   mediaHistory(token: string) { return this.request<{ items: MediaJob[] }>("/api/v1/media/history", {}, token); }
 
   account(token: string) { return this.request<AccountResponse>("/api/v1/account", {}, token); }
+  capabilities(token: string) { return this.request<CapabilityResponse>("/api/v1/capabilities", {}, token); }
+  faq(token: string) { return this.requestText("/api/v1/faq/text", token); }
   acceptLegal(token: string) { return this.request<{ ok: boolean; legal_accepted: boolean }>("/api/v1/legal/accept", { method: "POST" }, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   confirmMemory(token: string, category: string, key: string) { return this.request<{ ok: boolean }>(`/api/v1/memory/${encodeURIComponent(category)}/${encodeURIComponent(key)}/confirm`, { method: "POST" }, token); }

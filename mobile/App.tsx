@@ -345,6 +345,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [actionLogVisible, setActionLogVisible] = useState(false);
   const [actionLog, setActionLog] = useState<ActionItem[]>([]);
   const [faqVisible, setFaqVisible] = useState(false);
+  const [faqText, setFaqText] = useState(FAQ_TEXT);
   const [legalVisible, setLegalVisible] = useState(false);
   const [legalChecked, setLegalChecked] = useState(false);
   const [legalBusy, setLegalBusy] = useState(false);
@@ -857,7 +858,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { await api.updateLoop(token, loopIndex, "done"); setMyDayData(await api.myDay(token)); }
     catch (err) { Alert.alert("Не удалось обновить день", userFacingError(err)); }
   };
-  const openFaq = () => { setFaqVisible(true); setMenuVisible(false); };
+  const openFaq = async () => {
+    setFaqVisible(true); setMenuVisible(false);
+    try { setFaqText(await api.faq(token)); } catch (err) {
+      // Keep the bundled FAQ available during an offline/server upgrade.
+      console.warn("ALTER capability inventory unavailable", err);
+    }
+  };
   const openScenarios = async () => { setMenuVisible(false); setScenariosVisible(true); try { setScenarios((await api.scenarios(token)).items); } catch (err) { setScenarios([]); Alert.alert("Сценарии недоступны", userFacingError(err)); } };
   const openActionLog = async () => { setMenuVisible(false); setActionLogVisible(true); try { setActionLog((await api.actionLog(token)).items as ActionItem[]); } catch (err) { setActionLog([]); Alert.alert("История действий недоступна", userFacingError(err)); } };
   const createQuickReminder = async () => {
@@ -908,7 +915,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.oasis.opendocument.text", "application/rtf", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
       console.info("ALTER picker file: result", { canceled: result.canceled, assets: result.assets?.length || 0 });
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
@@ -1105,7 +1112,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     </SafeAreaView>
   </Modal>
   <Modal visible={faqVisible} animationType="slide" onRequestClose={() => setFaqVisible(false)}>
-    <SafeAreaView style={styles.faqScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>FAQ</Text><Pressable style={premiumStyles.menuAction} onPress={() => setFaqVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><ScrollView contentContainerStyle={styles.faqContent}><Text style={styles.faqText}>{FAQ_TEXT}</Text></ScrollView></SafeAreaView>
+    <SafeAreaView style={styles.faqScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>FAQ</Text><Pressable style={premiumStyles.menuAction} onPress={() => setFaqVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><ScrollView contentContainerStyle={styles.faqContent}><Text style={styles.faqText}>{faqText}</Text></ScrollView></SafeAreaView>
   </Modal>
   <StatusBar style="light" /></SafeAreaView>;
 }

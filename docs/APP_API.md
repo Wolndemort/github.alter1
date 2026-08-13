@@ -9,6 +9,13 @@ GET /api/v1/faq
 It returns the same black-and-white FAQ linked from the mobile menu and
 Telegram `/faq` command. It does not require a bearer token.
 
+```text
+GET /api/v1/faq/text
+```
+
+This is the same canonical FAQ as UTF-8 plain text for first-party clients
+such as mobile. It is public and does not require a bearer token.
+
 The mobile application is a parallel client. Telegram polling and `handlers/`
 remain separate; shared behavior lives in `services/`, HTTP adapters in `api/`,
 and the future React Native client in `mobile/`.
@@ -185,7 +192,8 @@ Image options include `aspect_ratio`, `seed`, `guidance_scale`, `sync_mode`,
 They are sent to `POST /api/v1/chat/document` with `agent=true`; the response
 contains the analysis and an active document agent. TXT/MD/CSV/JSON/DOCX edits
 are returned by `POST /api/v1/chat/document/edit`; PDF is readable/comparable
-but layout-aware editing remains intentionally disabled.
+and text-layer PDFs are edited with coordinate-aware replacements; scanned PDFs
+without a text layer are rejected until OCR is provided.
 \n+Telegram документный pipeline принимает PDF, DOCX, TXT, Markdown, CSV и JSON
 как вложение с caption, извлекает bounded-текст и профиль документа и отвечает
 по содержимому. Лимит — 25 MB.

@@ -11,6 +11,12 @@ describe("AlterApi", () => {
     expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/legal/accept", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token" }) }));
   });
 
+  it("loads the canonical plain-text FAQ", async () => {
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, text: async () => "ALTER FAQ" });
+    await expect(new AlterApi("https://alter.example").faq("token")).resolves.toBe("ALTER FAQ");
+    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/faq/text", { headers: { Authorization: "Bearer token" } });
+  });
+
   it("sends bearer token and JSON chat payload", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "ok", session_id: 3 }) });
     const result = await new AlterApi("https://alter.example/").sendMessage("token", "hello");

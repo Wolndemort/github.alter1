@@ -26,6 +26,8 @@ from api.youtube_routes import setup_youtube_routes
 from api.elevenlabs_routes import setup_elevenlabs_routes
 from api.calendar_routes import setup_calendar_routes
 from api.faq_routes import setup_faq_routes
+from api.capabilities_routes import setup_capabilities_routes
+from api.artifact_routes import setup_artifact_routes
 from utils.sentry_setup import init_sentry
 from utils.http_pool import close as close_http_pool
 from utils.idempotency import acquire as acquire_idempotency, release as release_idempotency
@@ -122,6 +124,8 @@ async def main():
     setup_elevenlabs_routes(web_app)
     setup_calendar_routes(web_app)
     setup_faq_routes(web_app)
+    setup_capabilities_routes(web_app)
+    setup_artifact_routes(web_app)
     web_runner = web.AppRunner(web_app)
     await web_runner.setup()
     web_site = web.TCPSite(web_runner, config.PAYMENT_WEBHOOK_HOST, config.PAYMENT_WEBHOOK_PORT)

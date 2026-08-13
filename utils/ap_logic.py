@@ -313,8 +313,15 @@ def _response_token_budget(messages, requested: int | None, task: str | None) ->
     if requested:
         return requested
     text = _request_text(messages)
-    if task not in {"reasoning", "planning"} and len(text) < 240:
+    long_reply_markers = (
+        "список", "списки", "перечисли", "перечислить", "подробно", "полный",
+        "все пункты", "что ты умеешь", "что умеет", "помнишь", "память",
+        "faq", "capabilities", "list", "all items", "in detail",
+    )
+    if task not in {"reasoning", "planning"} and len(text) < 240 and not any(marker in text for marker in long_reply_markers):
         return min(config.MAX_OUTPUT_TOKENS, 320)
+    if len(text) >= 240 or any(marker in text for marker in long_reply_markers):
+        return max(config.MAX_OUTPUT_TOKENS, config.LONG_REPLY_MAX_OUTPUT_TOKENS)
     return config.MAX_OUTPUT_TOKENS
 
 
@@ -801,7 +808,7 @@ async def generate_reply(messages, memory=None, search_results=None):
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         latest_request = _latest_user_message(messages)
-        if len(raw_reply) > 3000 or has_internal_leak(raw_reply):
+        if len(raw_reply) > 9000 or has_internal_leak(raw_reply):
             logging.warning("Rejecting oversized model reply as possible reasoning leak: chars=%d", len(raw_reply))
             response.choices[0].message.content = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — я отвечу коротко и по делу."
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
@@ -809,7 +816,7 @@ async def generate_reply(messages, memory=None, search_results=None):
             reply = await _deep_review_reply(messages, reply, search_results)
         reply = sanitize_public_reply(reply)
         reply = _append_source_links(reply, tool_trace())
-        if len(reply) > 3000 or has_internal_leak(reply) or has_language_mismatch(reply, latest_request):
+        if len(reply) > 9000 or has_internal_leak(reply) or has_language_mismatch(reply, latest_request):
             logging.warning("Rejecting final reply as possible reasoning leak: chars=%d", len(reply))
             reply = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — отвечу коротко и по делу."
         quality = assess_reply(reply, has_sources=bool(search_results))

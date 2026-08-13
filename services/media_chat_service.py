@@ -22,6 +22,8 @@ from services.voice_commands import is_voice_change_request, is_voice_generation
 from utils.feedback_memory import feedback_context
 from utils.quality import sanitize_public_reply
 from utils.intent import should_recall_context
+from utils.multimodal_context import attachment_context_message
+from services.artifact_store import save_artifact
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,7 @@ class MediaChatResult:
     media_data: bytes | None = None
     media_filename: str | None = None
     media_type: str | None = None
+    artifact_id: str | None = None
 
 
 def validate_media(content_type: str, data: bytes) -> str:
@@ -60,6 +63,18 @@ async def _active_session(db: AsyncSession, user_id: int) -> Session:
     return session
 
 
+def _record_attachment_context(session: Session, *, kind: str, filename: str, media_type: str,
+                               operation: str, transcript: str = "", observation: str = "",
+                               profile: dict | None = None, artifact_filename: str = "",
+                               artifact_media_type: str = "", artifact_id: str = "") -> None:
+    _append(session, "assistant", attachment_context_message(
+        kind=kind, filename=filename, media_type=media_type, operation=operation,
+        transcript=transcript, observation=observation, profile=profile,
+        artifact_filename=artifact_filename, artifact_media_type=artifact_media_type,
+        artifact_id=artifact_id,
+    ))
+
+
 async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, data: bytes, filename: str = "audio.m4a") -> MediaChatResult:
     kind = validate_media(content_type, data)
     user = await db.get(User, user_id)
@@ -80,8 +95,12 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
                 raise ValueError(str(exc)) from exc
             _append(session, "user", prompt)
             _append(session, "assistant", "Изменил голос записи.")
+            artifact_id = await save_artifact(user_id, transformed, "alter-voice.mp3", "audio/mpeg", kind=kind, operation="voice_change")
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="voice_change", artifact_filename="alter-voice.mp3",
+                                       artifact_media_type="audio/mpeg", artifact_id=artifact_id)
             await db.commit()
-            return MediaChatResult(reply="Изменил голос записи.", session_id=session.id, audio=transformed, audio_filename="alter-voice.mp3")
+            return MediaChatResult(reply="Изменил голос записи.", session_id=session.id, audio=transformed, audio_filename="alter-voice.mp3", artifact_id=artifact_id)
         # A mobile voice command is inside the uploaded audio, not in the
         # multipart text field. Transcribe it before routing audio actions;
         # otherwise ALTER treats "наложи дождь..." as ordinary chat and only
@@ -95,11 +114,15 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         action_result = await process_audio_action(prompt, data, filename)
         if action_result:
             answer, audio = action_result
+            artifact_id = await save_artifact(user_id, audio, "alter-audio.mp3", "audio/mpeg", kind=kind, operation="audio_action")
             _append(session, "user", prompt)
             _append(session, "assistant", answer)
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="audio_action", transcript=transcript or prompt,
+                                       artifact_filename="alter-audio.mp3", artifact_media_type="audio/mpeg", artifact_id=artifact_id)
             await remember(db, user_id, prompt, source="user_message")
             await db.commit()
-            return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript, audio=audio, audio_filename="alter-audio.mp3")
+            return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript, audio=audio, audio_filename="alter-audio.mp3", artifact_id=artifact_id)
         if transcript is None:
             transcript = await transcribe_voice(data)
         if not transcript:
@@ -122,31 +145,46 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             preview = next((item for item in previews if isinstance(item, dict)), None) if isinstance(previews, list) else None
             encoded = preview.get("audio_base_64") or preview.get("audio_base64") if preview else None
             reply = "Голос создан в ALTER. Вот его пробное звучание." if voice_id else "Голос сгенерирован. Вот пробное звучание."
+            preview_data = base64.b64decode(encoded) if encoded else b""
+            artifact_id = await save_artifact(user_id, preview_data, "alter-voice-preview.mp3", "audio/mpeg", kind=kind, operation="voice_generation") if preview_data else ""
             _append(session, "user", prompt)
             _append(session, "assistant", reply)
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="voice_generation", transcript=transcript,
+                                       artifact_filename="alter-voice-preview.mp3", artifact_media_type="audio/mpeg", artifact_id=artifact_id)
             await db.commit()
-            return MediaChatResult(reply=reply, session_id=session.id, transcript=transcript, audio=base64.b64decode(encoded) if encoded else None, audio_filename="alter-voice-preview.mp3")
+            return MediaChatResult(reply=reply, session_id=session.id, transcript=transcript, audio=preview_data or None, audio_filename="alter-voice-preview.mp3", artifact_id=artifact_id or None)
         if generation_kind(prompt) == "image":
             artifact = await generate_image(prompt)
+            artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="image", operation="image_generation")
             _append(session, "user", prompt)
             _append(session, "assistant", "Создал изображение.")
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="image_generation", transcript=transcript,
+                                       artifact_filename=artifact.filename, artifact_media_type=artifact.media_type, artifact_id=artifact_id)
             await remember(db, user_id, prompt, source="user_message")
             await db.commit()
             return MediaChatResult(
                 reply="Создал изображение.", session_id=session.id, transcript=transcript,
-                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type,
+                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type, artifact_id=artifact_id,
             )
         if generation_kind(prompt) == "video":
             artifact = await generate_video(prompt)
+            artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="video", operation="video_generation")
             _append(session, "user", prompt)
             _append(session, "assistant", "Создал видео.")
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="video_generation", transcript=transcript,
+                                       artifact_filename=artifact.filename, artifact_media_type=artifact.media_type, artifact_id=artifact_id)
             await remember(db, user_id, prompt, source="user_message")
             await db.commit()
             return MediaChatResult(
                 reply="Создал видео.", session_id=session.id, transcript=transcript,
-                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type,
+                media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type, artifact_id=artifact_id,
             )
         from services.chat_service import ChatService
+        _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                   operation="transcription", transcript=transcript)
         result = await ChatService().reply(db, user_id, prompt)
         return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)
     transcript = None
@@ -178,7 +216,11 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     try:
         visual = await extract_visual_context(prompt, media)
         if visual:
-            _append(session, "user", "Контекст предыдущего вложения: " + str(visual)[:6000])
+            _record_attachment_context(
+                session, kind=kind, filename=filename, media_type=content_type,
+                operation="analysis", transcript=transcript or "", observation=str(visual),
+                profile={"video": quality} if kind == "video" else {},
+            )
     except Exception:
         pass
     _append(session, "assistant", answer)

@@ -47,6 +47,10 @@ Routes:
 - `POST /api/v1/agent/replan` with a replacement `tasks` list;
 - `autonomy_enabled=true` opts into one bounded background tick per interval.
 
+An agent plan accepts up to 64 tasks. A single run request is bounded to 8
+steps for safety; a 64-step plan continues through successive run requests or
+scheduler ticks. Every task records its status, attempt count and result.
+
 Autonomy is off by default. External side effects such as creating reminders
 or Calendar events additionally require `constraints.allow_external_actions`.
 
@@ -85,7 +89,13 @@ The paid text/voice/search benchmarks remain separate and require the explicit
 `POST /api/v1/chat/document/edit` accepts multipart `file` and `instruction`.
 Instructions use auditable replacements, one per line: `old text => new text`.
 The endpoint returns the edited TXT, Markdown, CSV, JSON, or DOCX as a download.
-PDF editing is intentionally rejected until layout-aware/OCR export is enabled.
+Searchable text-layer PDFs are edited with coordinate-aware replacements and
+returned as binary downloads while preserving the surrounding page layout.
+Scanned PDFs without a text layer are rejected safely and require OCR first.
+
+Successful document edits are stored as short-lived owner-scoped artifacts.
+The response includes `X-ALTER-Artifact-ID`, which can be downloaded with
+`GET /api/v1/artifacts/{artifact_id}` using the same bearer token.
 
 For image scans, the optional local OCR adapter uses Pillow and Tesseract. If
 the native Tesseract binary is absent, the request remains safe and should use

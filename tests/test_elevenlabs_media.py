@@ -149,6 +149,22 @@ async def test_lookup_wraps_non_json_provider_response(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_models_401_uses_safe_local_catalog(monkeypatch):
+    class UnauthorizedResponse(Response):
+        status_code = 401
+
+    class UnauthorizedClient(Client):
+        async def get(self, url, **kwargs):
+            self.calls.append(("get", url, kwargs))
+            return UnauthorizedResponse()
+
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", UnauthorizedClient)
+    models = await elevenlabs_media.list_models()
+    assert any(item["model_id"] == "scribe_v1" for item in models)
+
+
+@pytest.mark.asyncio
 async def test_transcription_and_speech_to_speech_wrap_provider_transport_errors(monkeypatch):
     class BrokenClient(Client):
         async def post(self, url, **kwargs):

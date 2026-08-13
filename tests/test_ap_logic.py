@@ -56,3 +56,20 @@ def test_generate_reply_includes_memory_and_avoids_repetition_instruction(monkey
 def test_tool_definitions_are_present():
     names = {item["function"]["name"] for item in ap_logic.TOOL_DEFINITIONS}
     assert {"web_search", "get_weather", "youtube_search"} <= names
+
+
+def test_long_list_requests_get_a_larger_output_budget(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "MAX_OUTPUT_TOKENS", 600)
+    monkeypatch.setattr(ap_logic.config, "LONG_REPLY_MAX_OUTPUT_TOKENS", 1200)
+    assert ap_logic._response_token_budget([{"role": "user", "content": "show a full list of all items"}], None, None) == 1200
+    assert ap_logic._response_token_budget([{"role": "user", "content": "hi"}], None, None) == 320
+
+
+def test_valid_long_reply_is_not_replaced_by_short_fallback(monkeypatch):
+    long_reply = "Пункт списка. " * 300
+
+    async def create(**kwargs):
+        return fake_response(long_reply)
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    assert run(ap_logic.generate_reply([], {"identity": {"name": "Adam"}})) == long_reply.strip()

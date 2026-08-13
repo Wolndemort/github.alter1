@@ -10,14 +10,14 @@ from services.elevenlabs_media import isolate_audio, sound_effect
 
 
 def detect_audio_action(text: str) -> str | None:
-    value = (text or "").casefold()
-    if any(word in value for word in ("наложи", "добавь", "смешай", "подложи", "фоновой звук")) and any(
-        word in value for word in ("голос", "голосовое", "аудио", "запись")
+    value = re.sub(r"\s+", " ", (text or "").casefold()).strip()
+    if any(word in value for word in ("наложи", "добавь", "смешай", "подложи", "фоновой звук", "mix", "overlay", "add background")) and any(
+        word in value for word in ("голос", "голосовое", "аудио", "запись", "voice", "audio", "recording")
     ):
         return "mix"
-    if any(word in value for word in ("почисти", "очисти", "убери шум", "убрать шум", "изоляц", "отдели голос")):
+    if any(word in value for word in ("почисти", "очисти", "убери шум", "убрать шум", "изоляц", "отдели голос", "очистить запись", "clean", "remove noise", "isolate voice", "denoise")):
         return "isolate"
-    if any(word in value for word in ("создай звук", "сгенерируй звук", "сделай звук", "звуковой эффект", "саунд эффект")):
+    if any(word in value for word in ("создай звук", "сгенерируй звук", "сделай звук", "звуковой эффект", "саунд эффект", "create sound", "generate sound", "sound effect", "sfx")):
         return "effect"
     return None
 
@@ -25,7 +25,7 @@ def detect_audio_action(text: str) -> str | None:
 def effect_prompt(text: str) -> str:
     value = re.sub(r"[,.!?;:]+", " ", text or "")
     value = re.sub(
-        r"\b(?:наложи|добавь|смешай|подложи|создай|сгенерируй|сделай|звук|звуковой|эффект|саунд|на|к|мо[её]|мое|моём|голосовое|голос|аудио|запись|из|под|фон)\b",
+        r"\b(?:наложи|добавь|смешай|подложи|создай|сгенерируй|сделай|звук|звуковой|эффект|саунд|на|к|мо[её]|мое|моём|голосовое|голос|аудио|запись|из|под|фон|create|generate|sound|effect|voice|audio|recording|on|to|my|background|mix|overlay)\b",
         " ", value, flags=re.IGNORECASE,
     )
     value = re.sub(r"\s+", " ", value).strip(" .")
