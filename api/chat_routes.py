@@ -34,6 +34,7 @@ from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
 from services.document_ingestion import edit_document, extract_document, start_document_agent
 from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
+from utils.generation_intent import generation_kind
 
 
 def _voice_generation_summary(generated: object) -> object:
@@ -253,6 +254,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
     payload = await _json(request)
     text = str(payload.get("message") or "").strip()
     route = classify_request(text)
+    generation = generation_kind(text)
     if not text or detect_audio_action(text) == "effect":
         raise web.HTTPConflict(text="stream unavailable for this request")
     async with async_session() as session:
@@ -265,11 +267,14 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         logging.info("stream access user_id=%s account_present=%s owner_access=%s", user_id, bool(account), owner_access)
         if not owner_access and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
+        charged_cost = 0
         if not owner_access:
             redis = create_redis()
             try:
-                if not await charge_user_id_credits(redis, user_id, 1, async_session):
+                cost = config.FAL_TEXT_VIDEO_CREDITS if generation == "video" else config.FAL_TEXT_IMAGE_CREDITS if generation == "image" else 1
+                if not await charge_user_id_credits(redis, user_id, cost, async_session):
                     raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+                charged_cost = cost
             finally:
                 await close_redis(redis)
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -295,6 +300,12 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 done_payload = {"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated), **_voice_preview_audio(generated)}
                 await response.write(("data: " + json.dumps(done_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
+            if generation in {"image", "video"}:
+                await response.write(("data: " + json.dumps({"type": "status", "status": "generating_media", "kind": generation}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                artifact = await (generate_video(text) if generation == "video" else generate_image(text))
+                media_payload = {"type": "done", "reply": "Изображение создано в ALTER." if generation == "image" else "Видео создано в ALTER.", "media_base64": base64.b64encode(artifact.data).decode("ascii"), "media_filename": artifact.filename, "media_mime": artifact.media_type}
+                await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
@@ -312,6 +323,15 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         except ElevenLabsError as exc:
             logging.info("Voice generation was rejected user_id=%s reason=%s", user_id, str(exc)[:240])
             await response.write(("data: " + json.dumps({"type": "done", "reply": str(exc), "voice_id": None}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+        except MediaGenerationError as exc:
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
+            logging.warning("Streaming media generation failed user_id=%s kind=%s error=%s", user_id, generation, str(exc)[:240])
+            await response.write(("data: " + json.dumps({"type": "done", "reply": "Не удалось создать медиафайл: " + str(exc)[:240]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
         except Exception:
             logging.exception("Streaming chat failed")
             await response.write(("data: " + json.dumps({"type": "error", "message": "stream failed"}) + "\n\n").encode("utf-8"))

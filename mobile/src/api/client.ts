@@ -127,6 +127,7 @@ export class AlterApi {
     let full = "";
     let completedReply = "";
     let completedAudio: Pick<ChatResponse, "audio_base64" | "audio_filename" | "audio_mime"> = {};
+    let completedMedia: Pick<ChatResponse, "media_base64" | "media_filename" | "media_mime"> = {};
     let completed = false;
     const consume = (raw: string) => {
       const events = raw.split(/\r?\n\r?\n/);
@@ -139,6 +140,7 @@ export class AlterApi {
           completed = true;
           if (typeof payload.reply === "string") completedReply = payload.reply;
           if (typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
+          if (typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
         }
         if (payload.type === "status" && typeof payload.status === "string") onStatus?.(payload.status);
         if (payload.type === "delta" && typeof payload.text === "string") { full += payload.text; onDelta(full); }
@@ -168,10 +170,10 @@ export class AlterApi {
     } catch (error) {
       // The server can finish successfully while mobile closes the socket
       // during the final SSE chunk. Keep the answer already received.
-      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio };
+      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia };
       throw error;
     }
-    return { reply: full || completedReply, session_id: 0, ...completedAudio };
+    return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia };
   }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
