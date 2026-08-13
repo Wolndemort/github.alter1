@@ -449,6 +449,16 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     AsyncStorage.getItem(key).then((draft) => { if (draft) setMessage((current) => current || draft); }).catch(() => undefined);
   }, [token]);
   useEffect(() => {
+    const key = `alter_location_${token}`;
+    AsyncStorage.getItem(key).then((raw) => {
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw) as LocationContext;
+        if (typeof saved.latitude === "number" && typeof saved.longitude === "number") setLocation(saved);
+      } catch { /* ignore a corrupt local location snapshot */ }
+    }).catch(() => undefined);
+  }, [token]);
+  useEffect(() => {
     const key = `alter_draft_${token}`;
     if (message.trim()) AsyncStorage.setItem(key, message).catch(() => undefined);
     else AsyncStorage.removeItem(key).catch(() => undefined);
@@ -717,7 +727,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const place = await Location.reverseGeocodeAsync({ latitude: position.coords.latitude, longitude: position.coords.longitude });
       const first = place[0];
-      setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, city: first?.city || first?.district || undefined, region: first?.region || undefined, country: first?.country || undefined });
+      const nextLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude, city: first?.city || first?.district || undefined, region: first?.region || undefined, country: first?.country || undefined };
+      setLocation(nextLocation);
+      await AsyncStorage.setItem(`alter_location_${token}`, JSON.stringify(nextLocation));
     } catch { setMenuError("Не удалось определить местоположение."); }
   };
   const acceptPermissionOffer = async () => {
