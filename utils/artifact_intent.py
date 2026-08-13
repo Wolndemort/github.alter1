@@ -11,6 +11,6 @@ def reuses_previous_artifact(text: str) -> bool:
     except (UnicodeEncodeError, UnicodeDecodeError):
         pass
     value = value.casefold()
-    has_reference = bool(re.search(r"\b(?:последн\w*|предыдущ\w*|созданн\w*|полученн\w*|результат\w*|last|previous|created|generated|that result)\b", value)) or any(marker in value for marker in ("РїРѕСЃР»", "РїСЂРµРґ", "РіРµРЅРµСЂ"))
-    has_edit = bool(re.search(r"\b(?:измени\w*|редактир\w*|передел\w*|преобраз\w*|замени\w*|добав\w*|убер\w*|edit|change|transform|replace|stylize|add|remove)\b", value)) or any(marker in value for marker in ("Рё", "РїРµСЂРµРґ", "Р·Р°РјРµРЅ"))
+    has_reference = bool(re.search(r"\b(?:последн\w*|предыдущ\w*|созданн\w*|полученн\w*|результат\w*|last|previous|created|generated|that result)\b", value))
+    has_edit = bool(re.search(r"\b(?:измени\w*|редактир\w*|передел\w*|преобраз\w*|замени\w*|добав\w*|убер\w*|edit|change|transform|replace|stylize|add|remove)\b", value))
     return has_reference and has_edit
