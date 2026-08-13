@@ -292,7 +292,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     user.tech_stack = settings
                     await session.commit()
                 reply = "Голос создан и сохранён." if voice_id else "Сервис создал голос, но не вернул его идентификатор."
-                await response.write(("data: " + json.dumps({"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated)}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                done_payload = {"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated), **_voice_preview_audio(generated)}
+                await response.write(("data: " + json.dumps(done_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:
