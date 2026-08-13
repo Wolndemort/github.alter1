@@ -197,15 +197,24 @@ def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
         used += len(system["content"])
     if latest_user_item and latest_user_item is not system_item:
         latest_user = dict(latest_user_item)
-        latest_user["content"] = _head_tail(str(latest_user.get("content", "")), max_chars // 3)
+        if isinstance(latest_user.get("content"), list):
+            latest_user["content"] = [dict(part) if isinstance(part, dict) else part for part in latest_user["content"]]
+            used += sum(len(str(part.get("text", ""))) for part in latest_user["content"] if isinstance(part, dict))
+        else:
+            latest_user["content"] = _head_tail(str(latest_user.get("content", "")), max_chars // 3)
+            used += len(latest_user["content"])
         selected[id(latest_user_item)] = latest_user
-        used += len(latest_user["content"])
     for item in reversed(items):
         if item is system_item or item is latest_user_item:
             continue
         if not isinstance(item, dict):
             continue
-        content = str(item.get("content", ""))
+        raw_content = item.get("content", "")
+        if isinstance(raw_content, list):
+            selected[id(item)] = dict(item)
+            used += sum(len(str(part.get("text", ""))) for part in raw_content if isinstance(part, dict))
+            continue
+        content = str(raw_content)
         remaining = max_chars - used
         if remaining <= 0:
             break
