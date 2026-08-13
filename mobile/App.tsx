@@ -402,6 +402,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const pickerInFlight = React.useRef(false);
   const stickToBottom = React.useRef(true);
   const activeRequestController = React.useRef<AbortController | null>(null);
+  const shownMediaJobs = React.useRef(new Set<string>());
   const drawerX = React.useRef(new Animated.Value(-420)).current;
   const logoPulse = React.useRef(new Animated.Value(0.72)).current;
   const idleShade = React.useRef(new Animated.Value(0)).current;
@@ -799,6 +800,19 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const timer = setInterval(() => { api.mediaHistory(token).then(({ items }) => { setMediaJobs(items); setMediaJobsError(""); }).catch((err) => setMediaJobsError(userFacingError(err))); }, 2500);
     return () => clearInterval(timer);
   }, [mediaJobsVisible, mediaJobs, token]);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      api.mediaHistory(token).then(({ items }) => {
+        setMediaJobs(items);
+        items.filter((job) => job.status === "completed" && job.data_base64 && !shownMediaJobs.current.has(job.id)).forEach((job) => {
+          shownMediaJobs.current.add(job.id);
+          setItems((old) => old.some((item) => item.id === `media-job-${job.id}`) ? old : [...old, { id: `media-job-${job.id}`, role: "assistant", text: `${job.kind === "video" ? "Видео" : "Изображение"} готово — результат сохранён в медиа-задачах.`, mediaUri: `data:${job.media_type || (job.kind === "video" ? "video/mp4" : "image/png")};base64,${job.data_base64}`, mediaMime: job.media_type || (job.kind === "video" ? "video/mp4" : "image/png"), mediaFilename: job.filename || `alter-${job.kind}-${job.id}` }]);
+          autoScrollAfterUpdate.current = true;
+        });
+      }).catch(() => undefined);
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [token]);
   const forgetMemoryCategory = (category: string, title: string) => Alert.alert("Забыть категорию?", `Удалить из памяти «${title}»?`, [
     { text: "Отмена", style: "cancel" },
     { text: "Забыть", style: "destructive", onPress: async () => {
