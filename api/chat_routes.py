@@ -35,6 +35,7 @@ from services.document_ingestion import edit_document, extract_document, start_d
 from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
 from utils.generation_intent import generation_kind
+from utils.document_commands import document_edit_instruction, is_document_edit_request
 
 
 def _voice_generation_summary(generated: object) -> object:
@@ -176,10 +177,10 @@ async def document_chat_route(request: web.Request) -> web.Response:
                     raise web.HTTPTooManyRequests(text="monthly AI limit reached")
             finally:
                 await close_redis(redis)
-        edit_request = "=>" in prompt or bool(re.match(r"^\s*(?:/edit|измени|замени|редактируй|исправь|переформатируй|убери|добавь)\b", prompt, re.IGNORECASE))
+        edit_request = is_document_edit_request(prompt)
         if edit_request:
             try:
-                artifact = edit_document(filename, data, prompt, content_type)
+                artifact = edit_document(filename, data, document_edit_instruction(prompt), content_type)
             except ValueError as exc:
                 raise web.HTTPBadRequest(text=str(exc))
             return web.json_response({

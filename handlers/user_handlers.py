@@ -51,6 +51,7 @@ from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
 from services.document_ingestion import edit_document, extract_document, document_profile
+from utils.document_commands import document_edit_instruction as shared_document_edit_instruction, is_document_edit_request as shared_document_edit_requested
 from services.media_jobs import cancel_job, get_job, history as media_history, submit_job
 import logging
 
@@ -703,8 +704,8 @@ async def handle_document(message: types.Message, db_session: AsyncSession):
         raw_data = buffer.getvalue()
         # Explicit Telegram export flow: `/edit <instruction>` returns the
         # edited file instead of only describing the requested changes.
-        if document_edit_requested(prompt):
-            instruction = document_edit_instruction(prompt)
+        if shared_document_edit_requested(prompt):
+            instruction = shared_document_edit_instruction(prompt)
             if not instruction:
                 await message.answer("После /edit напиши, что изменить в документе.")
                 return
