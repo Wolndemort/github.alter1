@@ -29,6 +29,11 @@ export class ApiError extends Error {
 }
 
 function readableErrorBody(_body: string, status: number): string {
+  try {
+    const payload = JSON.parse(_body);
+    const detail = typeof payload?.detail === "string" ? payload.detail : typeof payload?.message === "string" ? payload.message : typeof payload?.error === "string" ? payload.error : "";
+    if (detail) return detail;
+  } catch { /* Fall back to stable client copy for non-JSON errors. */ }
   const messages: Record<number, string> = {
     400: "Проверь запрос и попробуй ещё раз.", 401: "Сессия закончилась. Войди в ALTER снова.",
     402: "Для этого действия нужна активная подписка.", 404: "Запрошенные данные не найдены.",

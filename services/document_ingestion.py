@@ -47,6 +47,15 @@ def _clean(text: str) -> str:
     return value.strip()[:MAX_DOCUMENT_CHARS]
 
 
+def _replace_document_text(text: str, old: str, new: str) -> tuple[str, int]:
+    """Replace a phrase ignoring case and arbitrary whitespace/newlines."""
+    parts = [re.escape(part) for part in old.split() if part]
+    if not parts:
+        return text, 0
+    pattern = re.compile(r"\s+".join(parts), flags=re.IGNORECASE)
+    return pattern.subn(lambda _: new, text)
+
+
 def _extension(filename: str) -> str:
     return Path(filename or "document").suffix.casefold()
 
@@ -164,11 +173,10 @@ def edit_document(filename: str, data: bytes, instruction: str, media_type: str 
         return edit_pdf_document(filename, data, replacements, media_type)
     document = extract_document(filename, data, media_type)
     text = document.text
-    missing = [old for old, _ in replacements if old not in text]
-    if missing:
-        raise ValueError("не нашёл в документе текст для замены: " + ", ".join(repr(item[:80]) for item in missing))
     for old, new in replacements:
-        text = text.replace(old, new)
+        text, count = _replace_document_text(text, old, new)
+        if count == 0:
+            raise ValueError("не нашёл в документе текст для замены: " + repr(old[:80]))
     if extension == ".json":
         try:
             output = json.dumps(json.loads(text), ensure_ascii=False, indent=2).encode("utf-8")
