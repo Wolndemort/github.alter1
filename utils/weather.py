@@ -8,7 +8,7 @@ def parse_weather_city(text: str) -> str:
     value = re.sub(r"^/weather(?:@\w+)?\s*", "", (text or "").strip(), flags=re.IGNORECASE)
     value = re.sub(r"^(?:да|ну|пожалуйста)[,\s]+", "", value, flags=re.IGNORECASE)
     value = re.sub(r"\b(какая|покажи|узнай|скажи|мне|пожалуйста|будет|сейчас|завтра|сегодня|погода|температура|прогноз|дождь|снег|в|во|для|на)\b", " ", value, flags=re.IGNORECASE)
-    return re.sub(r"\s+", " ", value).strip(" ,.!?") or "Москва"
+    return re.sub(r"\s+", " ", value).strip(" ,.!?")
 
 
 def is_weather_request(text: str) -> bool:
@@ -26,7 +26,8 @@ async def get_weather(city: str) -> str | None:
                 # wttr.in returns valid JSON with a text/plain content type.
                 data = await response.json(content_type=None)
         current = data["current_condition"][0]
-        desc = current.get("lang_ru", current.get("weatherDesc"))[0]["value"]
+        localized = current.get("lang_ru") or current.get("weatherDesc") or [{"value": ""}]
+        desc = localized[0].get("value", "") if isinstance(localized[0], dict) else str(localized[0])
         return f"🌤️ Погода в {city}: {desc}. Температура {current['temp_C']}°C, ощущается как {current['FeelsLikeC']}°C, влажность {current['humidity']}%."
     except Exception:
         return None
