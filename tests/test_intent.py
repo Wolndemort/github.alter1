@@ -12,6 +12,17 @@ def test_explicit_current_question_triggers_web_search():
     assert should_search_web("Подскажи актуальную цену iPhone")
 
 
+def test_search_synonyms_trigger_web_search():
+    for request in (
+        "Поищи в интернете отзывы о BMW",
+        "Поискать актуальную цену iPhone",
+        "Погугли новости про SpaceX",
+        "Проведи поиск лучших наушников",
+        "Глянь в интернете, кто сегодня выступает",
+    ):
+        assert should_search_web(request), request
+
+
 def test_youtube_link_request_is_detected():
     assert is_youtube_request("скинь ссылку на ютуб про BMW")
 

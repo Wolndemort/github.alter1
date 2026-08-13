@@ -22,6 +22,13 @@ def test_current_web_request_uses_search_route():
     assert not route.streamable
 
 
+def test_search_synonym_uses_search_route():
+    route = classify_request("Поищи в интернете отзывы о новом телефоне")
+    assert route.kind == "web"
+    assert route.initial_status == "searching"
+    assert not route.streamable
+
+
 def test_person_question_is_not_forced_into_web_tools():
     route = classify_request("Знает ли ALTER Кинана Джеймса?")
     assert route.kind == "chat"
