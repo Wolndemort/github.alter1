@@ -11,7 +11,7 @@ from data.models import Session, User
 from services.chat_service import _append, validate_message
 from utils.media import video_audio, video_duration, video_preview
 from services.media_quality import video_context
-from utils.media_logic import generate_media_reply
+from utils.media_logic import generate_media_reply, extract_visual_context
 from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
 from services.media_generation import generate_image, generate_video
@@ -153,6 +153,12 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if recalled:
             memory["related_previous_context"] = recalled
     answer = sanitize_public_reply(await generate_media_reply(analysis_prompt, media, memory=memory, conversation_context=session.raw_messages[:-1]))
+    try:
+        visual = await extract_visual_context(prompt, media)
+        if visual:
+            _append(session, "user", "Контекст предыдущего вложения: " + str(visual)[:6000])
+    except Exception:
+        pass
     _append(session, "assistant", answer)
     await remember(db, user_id, prompt, source="user_message")
     await db.commit()

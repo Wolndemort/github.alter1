@@ -32,7 +32,7 @@ async def generate_media_reply(
                 "\nЭто продолжение одного диалога. Учитывай контекст и не начинай разговор заново. "
                 f"Память пользователя: {memory or {}}"
             )
-        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT + "\n\n" + MEMORY_POLICY_PROMPT + "\n\n" + PUBLIC_RESPONSE_POLICY + context_note}]
+        messages = [{"role": "system", "content": MEDIA_SYSTEM_PROMPT + "\n\n" + MEMORY_POLICY_PROMPT + "\n\n" + PUBLIC_RESPONSE_POLICY + context_note + "\n\nМатериал уже передан как бинарное вложение. Не обсуждай base64, кодировку, URL или формат передачи; анализируй содержимое. Если оно действительно нечитаемо, назови конкретную причину."}]
         for turn in (conversation_context or [])[-12:]:
             if turn.get("role") in {"user", "assistant"} and turn.get("content"):
                 messages.append({"role": turn["role"], "content": str(turn["content"])})

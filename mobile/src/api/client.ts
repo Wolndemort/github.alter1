@@ -170,11 +170,11 @@ export class AlterApi {
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
 
-  async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio") {
-    const mime = mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a";
+  async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio", mimeType?: string, filename?: string) {
+    const mime = mimeType || (mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a");
     const form = new FormData();
     form.append("message", message);
-    form.append("file", { uri, type: mime, name: `alter.${mediaType === "audio" ? "m4a" : mediaType === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
+      form.append("file", { uri, type: mime, name: filename || `alter.${mediaType === "audio" ? "m4a" : mediaType === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90_000);
     let response: Response;

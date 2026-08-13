@@ -25,7 +25,7 @@ from services.media_jobs import cancel_job, get_job, history, submit_job
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices, speech_to_speech
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.audio_actions import detect_audio_action, process_audio_action
-from utils.capabilities import is_capabilities_request
+from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.reminders import is_reminder_request
 from utils.request_routing import classify_request
 from utils.metrics import increment
@@ -59,6 +59,11 @@ async def chat_route(request: web.Request) -> web.Response:
             finally:
                 await close_redis(redis)
         message_text = str(payload.get("message") or "").strip()
+        # Keep capability inventory deterministic across Telegram and mobile;
+        # do not send this question through a generic model that may answer
+        # with a vague "tell me what to do" prompt.
+        if is_capabilities_request(message_text):
+            return web.json_response({"reply": capabilities_reply(), "session_id": 0})
         if is_voice_generation_request(message_text):
             description = voice_description(message_text)
             if not description:
