@@ -21,6 +21,6 @@ def generation_kind(text: str) -> str | None:
     value = _text(text).casefold().replace("ё", "е")
     if re.search(rf"\b(?:{_CREATE}|{_EDIT})\b.*\b{_VIDEO_WORDS}\b|\bоживи\b", value):
         return "video"
-    if re.search(rf"\b(?:{_CREATE}|{_EDIT})\b.*\b{_IMAGE_WORDS}\b|\b(?:убери|добавь|замени)\b", value):
+    if re.search(rf"\b(?:{_CREATE}|{_EDIT})\b.*\b{_IMAGE_WORDS}\b|\bнарисуй\b|\b(?:убери|добавь|замени)\b", value):
         return "image"
     return None
