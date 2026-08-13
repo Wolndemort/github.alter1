@@ -258,6 +258,25 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         await response.prepare(request)
         try:
+            # Mobile uses the streaming endpoint for the composer. Handle
+            # explicit Voice Design requests here as well; otherwise the
+            # generic planner answers "I'm doing it" without calling
+            # ElevenLabs at all.
+            if is_voice_generation_request(text):
+                description = voice_description(text)
+                if not description:
+                    raise web.HTTPBadRequest(text="voice description required")
+                await response.write(("data: " + json.dumps({"type": "status", "status": "generating_voice"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                generated = await design_voice(description)
+                voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip()
+                if voice_id:
+                    settings = dict(user.tech_stack or {})
+                    settings["generated_voice_id"] = voice_id
+                    user.tech_stack = settings
+                    await session.commit()
+                reply = "Голос создан и сохранён." if voice_id else "Сервис создал голос, но не вернул его идентификатор."
+                await response.write(("data: " + json.dumps({"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": generated}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
