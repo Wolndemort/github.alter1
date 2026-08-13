@@ -14,10 +14,11 @@ def test_merge_records_provenance_and_replacement_history():
     assert second["_meta"]["identity"]["city"]["history"][0]["value"] == "Москва"
 
 
-def test_all_memory_is_permanent_until_user_changes_or_deletes_it():
+def test_transient_memory_expires_but_stable_identity_remains():
     memory = merge_memory_facts({}, {"psycho_vibe": {"current_mood": "устал"}, "identity": {"city": "Москва"}}, now=NOW)
     retained = purge_expired_memory(memory, now=NOW + timedelta(days=3650))
-    assert retained["psycho_vibe"]["current_mood"] == "устал"
+    assert "psycho_vibe" not in retained
+    assert retained["identity"]["city"] == "Москва"
     assert retained["identity"]["city"] == "Москва"
 
 

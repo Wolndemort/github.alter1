@@ -1,6 +1,7 @@
 import hashlib
 import logging
-from sqlalchemy import select
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from data.models import MemoryChunk
 from utils.ap_logic import client
@@ -41,7 +42,7 @@ async def remember(db: AsyncSession, user_id: int, text: str, source="conversati
             source=source[:32],
             category=(categories or [None])[0],
             importance=1.0 if source in {"explicit_memory", "important_event"} else 0.5,
-            expires_at=None,
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=365 if source == "explicit_memory" else 180)),
         ))
     except Exception:
         increment("memory.vector.save_failure")
@@ -79,5 +80,15 @@ async def recall(
 
 
 async def purge_expired(db: AsyncSession, limit: int = 1000) -> int:
-    # Compatibility shim: ALTER's memory is permanent by product design.
-    return 0
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(MemoryChunk.id).where(
+            MemoryChunk.expires_at.is_not(None), MemoryChunk.expires_at <= now
+        ).limit(max(1, min(int(limit), 5000)))
+    )
+    ids = list(result.scalars().all())
+    if not ids:
+        return 0
+    await db.execute(delete(MemoryChunk).where(MemoryChunk.id.in_(ids)))
+    await db.commit()
+    return len(ids)

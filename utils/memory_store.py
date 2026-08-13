@@ -2,9 +2,16 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 META_KEY = "_meta"
+ALLOWED_CATEGORIES = {
+    "identity", "health_sport", "food_drinks", "skills_career", "education",
+    "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family",
+    "social", "projects", "worldview", "politics", "preferences", "style_clothing",
+    "music", "films_series", "games", "travel", "books", "technology", "finance",
+    "important_events", "open_loops", "response_feedback",
+}
 
 
 def _now(value: datetime | None = None) -> datetime:
@@ -12,12 +19,10 @@ def _now(value: datetime | None = None) -> datetime:
 
 
 def _expires(category: str, key: str, value: str, now: datetime) -> str | None:
-    # ALTER memory is permanent; facts change only when the user corrects or
-    # explicitly deletes them.
-    return None
-    # Temporary states must not live forever; stable identity and preferences do.
+    # Stable identity/preferences remain until correction; transient state gets
+    # a bounded lifetime so stale mood and events cannot steer future answers.
     if key == "current_mood" or category == "important_events":
-        return (now + timedelta(days=30)).isoformat()
+        return (now + timedelta(days=30 if key == "current_mood" else 180)).isoformat()
     if category == "health_sport" and any(word in value.casefold() for word in ("болит", "температур", "кашел", "самочувств", "бессон")):
         return (now + timedelta(days=30)).isoformat()
     if category == "goals_habits" and key in {"goal", "focus"}:
@@ -32,7 +37,7 @@ def merge_memory_facts(current: dict | None, incoming: dict | None, *, now: date
     metadata = result.get(META_KEY) if isinstance(result.get(META_KEY), dict) else {}
     result[META_KEY] = metadata
     for category, fields in (incoming or {}).items():
-        if category == META_KEY or not isinstance(fields, dict):
+        if category == META_KEY or category not in ALLOWED_CATEGORIES or not isinstance(fields, dict):
             continue
         target = result.setdefault(category, {})
         # Older memory records may contain a list at category level (notably
@@ -70,5 +75,30 @@ def merge_memory_facts(current: dict | None, incoming: dict | None, *, now: date
 
 
 def purge_expired_memory(memory: dict | None, *, now: datetime | None = None) -> dict:
-    # Compatibility shim: permanent memory is never silently purged.
-    return deepcopy(memory) if isinstance(memory, dict) else {}
+    result = deepcopy(memory) if isinstance(memory, dict) else {}
+    metadata = result.get(META_KEY) if isinstance(result.get(META_KEY), dict) else {}
+    current = _now(now)
+    for category, fields in list(metadata.items()):
+        if not isinstance(fields, dict) or not isinstance(result.get(category), dict):
+            continue
+        for key, entry in list(fields.items()):
+            if not isinstance(entry, dict) or not entry.get("expires_at"):
+                continue
+            try:
+                expires = datetime.fromisoformat(str(entry["expires_at"]).replace("Z", "+00:00"))
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if expires <= current:
+                result[category].pop(key, None)
+                fields.pop(key, None)
+        if not fields:
+            metadata.pop(category, None)
+        if not result.get(category):
+            result.pop(category, None)
+    if metadata:
+        result[META_KEY] = metadata
+    else:
+        result.pop(META_KEY, None)
+    return result

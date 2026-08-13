@@ -21,7 +21,7 @@ from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, extract_reminder_text
-from utils.intent import conversation_mode, explicit_memory_fact, should_recall_context
+from utils.intent import conversation_mode, do_not_remember, explicit_memory_fact, should_recall_context
 from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from utils.action_log import append_action
@@ -152,8 +152,9 @@ class ChatService:
             await db.commit()
             return ChatResult(reply=reply, session_id=session.id or 0)
 
-        new_facts = extract_user_facts(text)
-        explicit_fact = explicit_memory_fact(text)
+        ephemeral_request = do_not_remember(text)
+        new_facts = {} if ephemeral_request else extract_user_facts(text)
+        explicit_fact = None if ephemeral_request else explicit_memory_fact(text)
         if explicit_fact:
             new_facts = dict(new_facts)
             preferences = dict(new_facts.get("preferences") or {})
@@ -203,7 +204,11 @@ class ChatService:
         if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
+                # Vector recall is a hint from older conversations, never an
+                # authoritative fact. Current explicit memory and the latest
+                # user message must win over it when they disagree.
                 memory["related_previous_context"] = recalled
+                memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
 
         parsed_reminder = parse_reminder(text)
         if parsed_reminder:
@@ -247,7 +252,8 @@ class ChatService:
         reply = sanitize_public_reply(reply)
         if not private_mode:
             _append(session, "assistant", reply)
-            await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
+            if not ephemeral_request:
+                await remember(db, user_id, text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
             trace = tool_trace()
             append_action(user, "chat", "ok", route=conversation_mode(text), count=len(trace))
             for item in trace:
@@ -321,7 +327,8 @@ class ChatService:
             for index in range(0, len(reply), 96):
                 yield reply[index:index + 96]
             return
-        new_facts = extract_user_facts(text)
+        ephemeral_request = do_not_remember(text)
+        new_facts = {} if ephemeral_request else extract_user_facts(text)
         if new_facts and not private_mode:
             user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
@@ -358,6 +365,7 @@ class ChatService:
             recalled = await recall(db, user_id, text)
             if recalled:
                 memory["related_previous_context"] = recalled
+                memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
         system = _stream_system_prompt(text, memory, use_tools=use_tools)
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
@@ -370,7 +378,8 @@ class ChatService:
         reply = "".join(reply_parts)
         if not private_mode:
             _append(session, "assistant", reply)
-            await remember(db, user_id, text, source="user_message", categories=list(new_facts))
+            if not ephemeral_request:
+                await remember(db, user_id, text, source="user_message", categories=list(new_facts))
             trace = tool_trace()
             append_action(user, "chat", "ok", route=conversation_mode(text), count=len(trace))
             for item in trace:

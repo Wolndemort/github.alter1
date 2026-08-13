@@ -80,3 +80,14 @@ def conversation_mode(text: str) -> str:
 def explicit_memory_fact(text):
     match = re.search(r"(?:\u0437\u0430\u043f\u043e\u043c\u043d\u0438|\u0437\u0430\u043f\u0438\u0448\u0438|\u0441\u043e\u0445\u0440\u0430\u043d\u0438)\s*(?:[,!:;-]\s*)?(?:\u0447\u0442\u043e\s+)?(.+)", text or "", re.I)
     return match.group(1).strip(" .,!\\n") if match else None
+
+
+def do_not_remember(text: str) -> bool:
+    """Respect an explicit request not to persist the current message."""
+    value = (text or "").casefold()
+    return bool(re.search(
+        r"(?:не\s+(?:запоминай|запомни|сохраняй|сохрани)\b|"
+        r"не\s+надо\s+(?:это\s+)?(?:запоминать|сохранять)|"
+        r"не\s+сохраняй\s+это\b|"
+        r"это\s+не\s+для\s+памяти)", value
+    ))

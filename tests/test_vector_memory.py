@@ -71,7 +71,7 @@ def test_remember_adds_embedded_chunk(monkeypatch):
     assert added[0].user_id == 42
     assert added[0].embedding == [0.2] * 1536
     assert len(added[0].content_hash) == 64
-    assert added[0].expires_at is None
+    assert added[0].expires_at is not None
 
 
 def test_recall_returns_empty_when_embedding_provider_fails(monkeypatch):
@@ -126,7 +126,7 @@ def test_remember_skips_duplicate_content(monkeypatch):
     run(vector_memory.remember(DB(), 1, "A sufficiently long memory fragment"))
 
 
-def test_purge_expired_never_deletes_permanent_memory():
+def test_purge_expired_deletes_bounded_expired_memory():
     class Result:
         rowcount = 2
         def scalars(self): return self
@@ -136,8 +136,8 @@ def test_purge_expired_never_deletes_permanent_memory():
         async def execute(self, statement): self.calls += 1; return Result()
         async def commit(self): self.committed = True
     db = DB()
-    assert run(vector_memory.purge_expired(db, limit=2)) == 0
-    assert db.calls == 0 and not db.committed
+    assert run(vector_memory.purge_expired(db, limit=2)) == 2
+    assert db.calls == 2 and db.committed
 
 
 def test_purge_expired_returns_zero_without_rows():
