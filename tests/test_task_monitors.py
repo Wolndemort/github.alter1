@@ -18,6 +18,17 @@ class Result:
     def scalar_one_or_none(self): return self.value
 
 
+def test_trial_onboarding_is_idempotent_and_staged():
+    started = datetime.now(timezone.utc) - timedelta(hours=2)
+    user = User(id=7, first_name="Adam", memory={}, tech_stack={"trial_started_at": started.isoformat()})
+    first = tasks.trial_onboarding_stage(user, started + timedelta(hours=2))
+    assert first and first[0] == 0
+    user.tech_stack["trial_onboarding_sent"] = {"0": started.isoformat()}
+    assert tasks.trial_onboarding_stage(user, started + timedelta(hours=2)) is None
+    second = tasks.trial_onboarding_stage(user, started + timedelta(days=1, hours=1))
+    assert second and second[0] == 1
+
+
 class Context:
     def __init__(self, db): self.db = db
     async def __aenter__(self): return self.db

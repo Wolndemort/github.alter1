@@ -17,7 +17,7 @@ from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.memory_store import merge_memory_facts
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
-from utils.billing import charge_recurring_payment, create_payment, has_active_subscription
+from utils.billing import charge_recurring_payment, create_payment, has_active_subscription, has_active_trial
 from utils.vector_memory import purge_expired
 from utils.memory_store import purge_expired_memory
 from utils.memory_quality import sanitize_summary
@@ -51,6 +51,29 @@ def proactive_allowed(user: User, now: datetime, session: Session | None, interv
     if user.last_checkin_at and user.last_checkin_at > now - timedelta(hours=interval_hours):
         return False
     return not (session and session.updated_at and session.updated_at > now - timedelta(minutes=30))
+
+
+def trial_onboarding_stage(user: User, now: datetime) -> tuple[int, str] | None:
+    """Return one idempotent onboarding stage for a new trial user."""
+    if not has_active_trial(user) or not (user.tech_stack or {}).get("proactive_enabled", True):
+        return None
+    started = (user.tech_stack or {}).get("trial_started_at")
+    try:
+        began = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=timezone.utc)
+    day = max(0, min(2, int((now - began).total_seconds() // 86400)))
+    messages = (
+        f"Привет, {user.first_name or 'друг'}! Я ALTER. Давай быстро настроим меня под тебя: расскажи, чем ты сейчас занимаешься и какую одну задачу хочешь закрыть первой.",
+        "Я помню контекст нашего знакомства. Могу помочь с планом, поиском, файлами, голосом и напоминаниями. Что сейчас было бы для тебя самым полезным?",
+        "Твой пробный доступ скоро закончится. За эти дни ALTER может сохранить твои предпочтения, планы и рабочий контекст — после trial это продолжится по подписке без потери памяти.",
+    )
+    sent = (user.tech_stack or {}).get("trial_onboarding_sent") or {}
+    if str(day) in sent:
+        return None
+    return day, messages[day]
 
 
 def extract_health_followup(messages: list, now: datetime | None = None) -> dict | None:
@@ -318,6 +341,25 @@ async def monitor_checkins(bot: Bot):
                     ).with_for_update(skip_locked=True)
                 )
                 for user in result.scalars().all():
+                    onboarding = trial_onboarding_stage(user, now)
+                    if onboarding and not is_quiet_time(user, now):
+                        session_result = await db.execute(select(Session).where(
+                            Session.user_id == user.id,
+                        ).order_by(Session.updated_at.desc()).limit(1))
+                        session = session_result.scalar_one_or_none()
+                        if proactive_allowed(user, now, session, 20):
+                            _, message = onboarding
+                            chat_id = telegram_chat_id(user)
+                            if chat_id is not None:
+                                await bot.send_message(chat_id, message)
+                            await send_push(user, "ALTER · Пробный доступ", message)
+                            settings = dict(user.tech_stack or {})
+                            sent = dict(settings.get("trial_onboarding_sent") or {})
+                            sent[str(onboarding[0])] = now.isoformat()
+                            settings["trial_onboarding_sent"] = sent
+                            user.tech_stack = settings
+                            user.last_checkin_at = now
+                            continue
                     memory = user.memory or {}
                     if not any(memory.get(key) for key in (
                         "psycho_vibe", "health_sport", "important_events",
