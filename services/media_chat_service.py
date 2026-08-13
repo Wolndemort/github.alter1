@@ -1,6 +1,7 @@
 """Media chat use case shared by the mobile HTTP adapter."""
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -16,8 +17,8 @@ from utils.voice import transcribe_voice
 from utils.generation_intent import generation_kind
 from services.media_generation import generate_image, generate_video
 from utils.vector_memory import recall, remember
-from services.elevenlabs_media import ElevenLabsError, speech_to_speech
-from services.voice_commands import is_voice_change_request, requested_voice_id
+from services.elevenlabs_media import ElevenLabsError, design_voice, speech_to_speech
+from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.feedback_memory import feedback_context
 from utils.quality import sanitize_public_reply
 from utils.intent import should_recall_context
@@ -104,6 +105,27 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not transcript:
             raise ValueError("voice message could not be transcribed")
         prompt = transcript
+        if is_voice_generation_request(prompt):
+            description = voice_description(prompt)
+            if not description:
+                raise ValueError("voice description required")
+            try:
+                generated = await design_voice(description)
+            except ElevenLabsError as exc:
+                raise ValueError(str(exc)) from exc
+            voice_id = str(generated.get("voice_id") or generated.get("id") or "").strip()
+            if voice_id:
+                settings = dict(user.tech_stack or {})
+                settings["generated_voice_id"] = voice_id
+                user.tech_stack = settings
+            previews = generated.get("previews") if isinstance(generated, dict) else None
+            preview = next((item for item in previews if isinstance(item, dict)), None) if isinstance(previews, list) else None
+            encoded = preview.get("audio_base_64") or preview.get("audio_base64") if preview else None
+            reply = "Голос создан в ALTER. Вот его пробное звучание." if voice_id else "Голос сгенерирован. Вот пробное звучание."
+            _append(session, "user", prompt)
+            _append(session, "assistant", reply)
+            await db.commit()
+            return MediaChatResult(reply=reply, session_id=session.id, transcript=transcript, audio=base64.b64decode(encoded) if encoded else None, audio_filename="alter-voice-preview.mp3")
         if generation_kind(prompt) == "image":
             artifact = await generate_image(prompt)
             _append(session, "user", prompt)
