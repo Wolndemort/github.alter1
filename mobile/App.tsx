@@ -396,6 +396,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const listRef = React.useRef<FlatList<ChatItem>>(null);
   const activeVoiceSound = React.useRef<AudioPlayer | null>(null);
   const voicePlaybackSerial = React.useRef(0);
+  const mediaActionInFlight = React.useRef(false);
   const autoScrollAfterUpdate = React.useRef(false);
   const initialHistoryScroll = React.useRef(false);
   const pickerInFlight = React.useRef(false);
@@ -597,6 +598,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const filename = result.filename.replace(/^attachment;\s*filename\*?=[^;]+/i, "").replace(/[\"']/g, "") || `alter-edited-${current.filename || "document"}`;
       const uri = `${FileSystem.documentDirectory}${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       await FileSystem.writeAsStringAsync(uri, comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, { encoding: FileSystem.EncodingType.Base64 });
+      setItems((old) => [...old, { id: `${Date.now()}document`, role: "assistant", text: "Готово — изменённый файл подготовлен. Его можно скачать из чата.", mediaUri: uri, mediaMime: current.mimeType || "application/octet-stream", mediaFilename: filename }]);
       await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
       setDocumentEditVisible(false); setDocumentInstruction("");
     } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось отредактировать документ"); }
@@ -638,14 +640,15 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось подготовить изображение к редактированию"); }
   };
   const editMediaNow = async (item: ChatItem) => {
-    if (!item.mediaUri || !item.mediaMime?.startsWith("image/") || busy) return;
+    if (!item.mediaUri || !item.mediaMime?.startsWith("image/") || busy || mediaActionInFlight.current) return;
+    mediaActionInFlight.current = true;
     setBusy(true); setActivity("analyzing");
     try {
       const result = await api.generateMedia(token, "", item.mediaUri, "image");
       setItems((old) => [...old, { id: `${Date.now()}g`, role: "assistant", text: "Готово — создал заметно изменённый вариант изображения.", mediaUri: `data:${result.media_type};base64,${result.data_base64}`, mediaMime: result.media_type, mediaFilename: result.filename }]);
       autoScrollAfterUpdate.current = true;
     } catch (err) { setItems((old) => [...old, { id: `${Date.now()}e`, role: "assistant", text: userFacingError(err) }]); }
-    finally { setBusy(false); setActivity(""); }
+    finally { mediaActionInFlight.current = false; setBusy(false); setActivity(""); }
   };
   const send = async (presetText?: string) => {
     const text = (presetText ?? message).trim(); if ((!text && !attachment) || busy) return;
@@ -663,7 +666,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
           console.warn("ALTER media upload", { type: currentAttachment.type, bytes: info.exists && !info.isDirectory ? info.size ?? null : null });
         } catch (error) { console.warn("ALTER media metadata unavailable", { type: currentAttachment.type, error: String(error) }); }
       }
-      const result = currentAttachment?.type === "document" ? await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentAttachment.uri, currentAttachment.filename || "alter-document", currentAttachment.mimeType) : currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
+       const voiceGenerationRequest = /\b(?:создай|сгенерируй|сделай)\b.*\bголос\b/i.test(text);
+       const result = currentAttachment?.type === "document" ? await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentAttachment.uri, currentAttachment.filename || "alter-document", currentAttachment.mimeType) : currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type) : voiceGenerationRequest ? await api.sendMessage(token, text, location, controller.signal) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
       if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId);
     }
     catch (err) { console.warn("ALTER request failed", { type: currentAttachment?.type ?? "text", status: (err as { status?: number })?.status ?? null, name: (err as { name?: string })?.name ?? null, message: err instanceof Error ? err.message : String(err) }); if ((err as { name?: string })?.name === "AbortError") setItems((old) => old.filter((item) => item.id !== pendingId)); else { if (text) setMessage((current) => current || text); setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: userFacingError(err) } : item)); } }
