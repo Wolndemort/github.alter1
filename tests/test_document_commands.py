@@ -10,3 +10,4 @@ def test_document_edit_commands_normalize_common_russian_forms():
 
 def test_explicit_replacement_syntax_is_preserved():
     assert document_edit_instruction("/edit старый => новый") == "старый => новый"
+    assert document_edit_instruction("ALTER: замени старый на новый") == "старый => новый"

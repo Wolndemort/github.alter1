@@ -13,12 +13,13 @@ def _text(value: str) -> str:
 
 
 def is_document_edit_request(prompt: str) -> bool:
-    value = " ".join(_text(prompt).casefold().split())
+    value = re.sub(r"^\s*alter\s*[:,-]?\s*", "", _text(prompt), flags=re.IGNORECASE)
+    value = " ".join(value.casefold().split())
     return bool("=>" in value or re.match(r"^(?:/edit|измени(?:ть)?|поменяй(?:ть)?|замени(?:ть)?|исправь(?:ть)?|редактируй(?:ть)?|убери|удали|добавь)\b", value))
 
 
 def document_edit_instruction(prompt: str) -> str:
-    value = _text(prompt).strip()
+    value = re.sub(r"^\s*alter\s*[:,-]?\s*", "", _text(prompt), flags=re.IGNORECASE).strip()
     if "=>" in value:
         return value[5:].strip() if value.casefold().startswith("/edit") else value
     value = re.sub(r"^\s*(?:/edit|измени(?:ть)?|поменяй(?:ть)?|замени(?:ть)?|исправь(?:ть)?|редактируй(?:ть)?)\s*", "", value, flags=re.IGNORECASE)
