@@ -164,6 +164,9 @@ def edit_document(filename: str, data: bytes, instruction: str, media_type: str 
         return edit_pdf_document(filename, data, replacements, media_type)
     document = extract_document(filename, data, media_type)
     text = document.text
+    missing = [old for old, _ in replacements if old not in text]
+    if missing:
+        raise ValueError("не нашёл в документе текст для замены: " + ", ".join(repr(item[:80]) for item in missing))
     for old, new in replacements:
         text = text.replace(old, new)
     if extension == ".json":
