@@ -176,6 +176,19 @@ async def document_chat_route(request: web.Request) -> web.Response:
                     raise web.HTTPTooManyRequests(text="monthly AI limit reached")
             finally:
                 await close_redis(redis)
+        edit_request = "=>" in prompt or bool(re.match(r"^\s*(?:/edit|измени|замени|редактируй|исправь|переформатируй|убери|добавь)\b", prompt, re.IGNORECASE))
+        if edit_request:
+            try:
+                artifact = edit_document(filename, data, prompt, content_type)
+            except ValueError as exc:
+                raise web.HTTPBadRequest(text=str(exc))
+            return web.json_response({
+                "reply": "Изменённый файл готов и возвращён в чат.",
+                "session_id": 0,
+                "media_base64": base64.b64encode(artifact.data).decode("ascii"),
+                "media_filename": artifact.filename,
+                "media_mime": artifact.media_type or "application/octet-stream",
+            })
         agent = None
         if agent_mode:
             user.tech_stack = start_document_agent(user.tech_stack, document, prompt, horizon_minutes=agent_horizon)
