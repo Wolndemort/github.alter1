@@ -44,13 +44,26 @@ async def run_agent_steps(settings: dict, executor: TaskExecutor, max_steps: int
 
 async def model_agent_executor(task: dict, state: dict, *, db=None, user=None) -> str | dict:
     """Execute a task with ALTER's existing model/tool loop."""
+    completed = [
+        {"id": item.get("id"), "title": item.get("title"), "result": item.get("result", "")}
+        for item in (state.get("tasks") or [])
+        if isinstance(item, dict) and item.get("status") in {"done", "skipped"}
+    ]
+    dependencies = [
+        {"id": item.get("id"), "title": item.get("title"), "status": item.get("status"), "result": item.get("result", "")}
+        for item in (state.get("tasks") or [])
+        if isinstance(item, dict) and item.get("id") in set(task.get("depends_on") or [])
+    ]
     prompt = (
         "Ты исполнитель задачи внутри долговременного плана ALTER. Выполни только текущую задачу, "
         "используй доступные инструменты, если они нужны, не выдумывай результат. Верни короткий "
         "итог и конкретный результат для следующего шага.\n\n"
         f"Цель: {state.get('goal', '')}\n"
         f"Текущая задача: {task.get('title', '')}\n"
-        f"Ограничения: {state.get('constraints', {})}"
+        f"Зависимости: {dependencies}\n"
+        f"Ранее полученные результаты: {completed}\n"
+        f"Ограничения: {state.get('constraints', {})}\n"
+        "Проверь, что у шага есть достоверное основание. Не выдумывай успех. Если данных не хватает, верни неуспех с причиной."
     )
     if db is None or user is None:
         response = await chat_with_tools([{"role": "user", "content": prompt}], task="planning")
