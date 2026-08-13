@@ -302,6 +302,11 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 return response
             if generation in {"image", "video"}:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating_media", "kind": generation}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                if generation == "video":
+                    job_id = await submit_job(user_id, "video", text, None, {})
+                    media_payload = {"type": "done", "reply": "Видео поставлено в очередь FAL. Результат появится в разделе медиа-задач.", "media_job_id": job_id}
+                    await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                    return response
                 artifact = await (generate_video(text) if generation == "video" else generate_image(text))
                 media_payload = {"type": "done", "reply": "Изображение создано в ALTER." if generation == "image" else "Видео создано в ALTER.", "media_base64": base64.b64encode(artifact.data).decode("ascii"), "media_filename": artifact.filename, "media_mime": artifact.media_type}
                 await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))

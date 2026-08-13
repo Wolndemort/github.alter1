@@ -4,7 +4,7 @@ export type MeResponse = {
   name: string;
   subscription_expires_at: string | null;
 };
-export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string };
+export type ChatResponse = { reply: string; session_id: number; transcript?: string | null; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string; media_job_id?: string };
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
@@ -128,6 +128,7 @@ export class AlterApi {
     let completedReply = "";
     let completedAudio: Pick<ChatResponse, "audio_base64" | "audio_filename" | "audio_mime"> = {};
     let completedMedia: Pick<ChatResponse, "media_base64" | "media_filename" | "media_mime"> = {};
+    let completedJobId: string | undefined;
     let completed = false;
     const consume = (raw: string) => {
       const events = raw.split(/\r?\n\r?\n/);
@@ -141,6 +142,7 @@ export class AlterApi {
           if (typeof payload.reply === "string") completedReply = payload.reply;
           if (typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
           if (typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
+          if (typeof payload.media_job_id === "string") completedJobId = payload.media_job_id;
         }
         if (payload.type === "status" && typeof payload.status === "string") onStatus?.(payload.status);
         if (payload.type === "delta" && typeof payload.text === "string") { full += payload.text; onDelta(full); }
@@ -170,10 +172,10 @@ export class AlterApi {
     } catch (error) {
       // The server can finish successfully while mobile closes the socket
       // during the final SSE chunk. Keep the answer already received.
-      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia };
+      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId };
       throw error;
     }
-    return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia };
+    return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId };
   }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }
