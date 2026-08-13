@@ -222,7 +222,7 @@ async def _yandex(session, query: str, limit: int) -> list[dict]:
         async with session.post(
             "https://searchapi.api.cloud.yandex.net/v2/web/search",
             headers={"Authorization": f"Api-Key {config.YANDEX_SEARCH_API_KEY.get_secret_value()}"},
-            json={"query": {"searchType": "SEARCH_TYPE_RU", "queryText": query}, "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE"}, "groupSpec": {"groupMode": "GROUP_MODE_FLAT"}, "maxPassages": 2, "region": "225", "l10n": "LOCALIZATION_RU"},
+            json={"folderId": config.YANDEX_SEARCH_FOLDER_ID, "query": {"searchType": "SEARCH_TYPE_RU", "queryText": query}, "sortSpec": {"sortMode": "SORT_MODE_BY_RELEVANCE"}, "groupSpec": {"groupMode": "GROUP_MODE_FLAT"}, "maxPassages": 2, "region": "225", "l10n": "LOCALIZATION_RU"},
         ) as response:
             if response.status != 200:
                 increment("search.web.yandex.failure", status=response.status)

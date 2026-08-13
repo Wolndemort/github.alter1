@@ -52,6 +52,7 @@ class Setting(BaseSettings):
     GOOGLE_CSE_ID: str | None = None
     SERPER_API_KEY: SecretStr | None = None
     YANDEX_SEARCH_API_KEY: SecretStr | None = None
+    YANDEX_SEARCH_FOLDER_ID: str | None = "b1g884grnt4jatd7bbeo"
     YANDEX_MAPS_GEOCODER_API_KEY: SecretStr | None = None
     YANDEX_MAPS_ORG_API_KEY: SecretStr | None = None
     YANDEX_MAPS_ROUTE_API_KEY: SecretStr | None = None
