@@ -304,16 +304,16 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                 def add_provider(name: str, operation_factory) -> None:
                     task = asyncio.create_task(_run_provider(name, operation_factory))
                     tasks[task] = name
+                if config.YANDEX_SEARCH_API_KEY:
+                    add_provider("yandex", lambda: _yandex(session, query, limit))
+                if config.SERPER_API_KEY:
+                    add_provider("serper", lambda: _serper(session, query, limit))
                 if config.TAVILY_API_KEY:
                     add_provider("tavily", lambda: _tavily(session, query, limit))
                 if config.FIRECRAWL_API_KEY:
                     add_provider("firecrawl", lambda: _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
                 if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
                     add_provider("google", lambda: _google_cse(session, query, limit))
-                if config.SERPER_API_KEY:
-                    add_provider("serper", lambda: _serper(session, query, limit))
-                if config.YANDEX_SEARCH_API_KEY:
-                    add_provider("yandex", lambda: _yandex(session, query, limit))
                 if config.TWOGIS_API_KEY:
                     add_provider("2gis", lambda: _twogis(session, query, limit))
                 provider_results: dict[str, list[dict]] = {}
@@ -336,10 +336,12 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     task.cancel()
                 if pending:
                     await asyncio.gather(*pending, return_exceptions=True)
-                merged = _annotate_results(_rank_results(_normalize([
-                    item for provider in provider_results
-                    for item in provider_results[provider]
-                ], limit), limit))
+                provider_order = ("yandex", "serper", "tavily", "firecrawl", "google", "2gis")
+                ordered_items = [
+                    item for provider in provider_order
+                    for item in provider_results.get(provider, [])
+                ]
+                merged = _annotate_results(_rank_results(_normalize(ordered_items, limit), limit))
                 if merged:
                     increment("search.web.success", results=len(merged), providers=len(tasks))
                 else:
