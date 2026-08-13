@@ -186,6 +186,19 @@ async def design_voice(description: str) -> dict:
             logging.info("ElevenLabs voice persist response keys=%s", sorted(created_payload.keys())[:20] if isinstance(created_payload, dict) else type(created_payload).__name__)
             if not isinstance(created_payload, dict):
                 raise ElevenLabsError("ElevenLabs returned an invalid created voice response")
+            # Some Voice Design responses confirm creation without including
+            # the id. Resolve it from the authenticated voice list so the
+            # account can immediately use the new voice without opening
+            # ElevenLabs.
+            if not (created_payload.get("voice_id") or created_payload.get("id")):
+                voices_response = await client.get("https://api.elevenlabs.io/v2/voices", headers={"xi-api-key": _key()})
+                if voices_response.status_code < 400:
+                    voices_payload = voices_response.json()
+                    voices = voices_payload.get("voices", []) if isinstance(voices_payload, dict) else []
+                    matches = [item for item in voices if isinstance(item, dict) and item.get("name") == "ALTER voice" and (item.get("voice_id") or item.get("id"))]
+                    if matches:
+                        latest = sorted(matches, key=lambda item: int(item.get("created_at_unix") or 0), reverse=True)[0]
+                        created_payload = {**created_payload, "voice_id": latest.get("voice_id") or latest.get("id")}
             return {**payload, **created_payload}
         return payload
     except ElevenLabsError:

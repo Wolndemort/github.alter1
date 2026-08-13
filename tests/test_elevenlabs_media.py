@@ -99,6 +99,29 @@ async def test_design_voice_wraps_provider_timeout(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_design_voice_resolves_id_when_persist_response_omits_it(monkeypatch):
+    class VoiceResponse(Response):
+        def __init__(self, payload): self.payload = payload
+        def json(self): return self.payload
+
+    class VoiceClient(Client):
+        async def post(self, url, **kwargs):
+            self.calls.append(("post", url, kwargs))
+            if url.endswith("/design"):
+                return VoiceResponse({"previews": [{"generated_voice_id": "preview-456"}]})
+            return VoiceResponse({"name": "ALTER voice"})
+        async def get(self, url, **kwargs):
+            self.calls.append(("get", url, kwargs))
+            return VoiceResponse({"voices": [{"name": "ALTER voice", "voice_id": "voice-456", "created_at_unix": 10}]})
+
+    Client.calls = []
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", VoiceClient)
+    result = await elevenlabs_media.design_voice("calm low narrator for a podcast")
+    assert result["voice_id"] == "voice-456"
+
+
+@pytest.mark.asyncio
 async def test_design_voice_rejects_provider_minimum_description_locally():
     with pytest.raises(elevenlabs_media.ElevenLabsError, match="20"):
         await elevenlabs_media.design_voice("спокойный голос")
