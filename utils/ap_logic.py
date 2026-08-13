@@ -496,16 +496,19 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
     started_at = time.perf_counter()
     first_token_recorded = False
     for model in route:
+        emitted = False
         try:
             async with asyncio.timeout(config.AI_STREAM_MODEL_TIMEOUT_SECONDS):
+                output_budget = _response_token_budget(messages, max_tokens, task)
+                if model == config.OPENROUTER_MODEL:
+                    output_budget = max(output_budget, config.LUNA_MAX_OUTPUT_TOKENS)
                 stream = await client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    max_tokens=_response_token_budget(messages, max_tokens, task),
+                    max_tokens=output_budget,
                     stream=True,
                     **({"extra_body": {"reasoning": {"exclude": True}}} if config.OPENROUTER_EXCLUDE_REASONING else {}),
                 )
-                emitted = False
                 finish_reason = None
                 async for chunk in stream:
                     choices = getattr(chunk, "choices", None) or []
@@ -521,8 +524,10 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
                             increment("ai.reply.first_token", duration_ms=duration_ms, model=model)
                         yield text
             if finish_reason == "length":
-                logging.warning("Streaming model reached output limit: model=%s; trying fallback", model)
-                raise RuntimeError("Streaming model reached output limit")
+                # Never append a second model after a partial answer. The
+                # client would otherwise display a stitched, incoherent reply.
+                logging.warning("Streaming model reached output limit: model=%s; keeping partial reply", model)
+                return
             if emitted:
                 duration_ms = int((time.perf_counter() - started_at) * 1000)
                 observe("ai.reply.completed", duration_ms, model=model)
@@ -531,6 +536,12 @@ async def stream_text_reply(messages, max_tokens=None, task=None):
             raise RuntimeError("Streaming model returned an empty response")
         except Exception as error:
             last_error = error
+            # A fallback is allowed only when the primary model failed before
+            # producing user-visible text. Otherwise fallback output would be
+            # concatenated with the already emitted answer.
+            if emitted:
+                logging.warning("Streaming model failed after emitting text: model=%s; keeping partial reply", model)
+                return
             status_code = _provider_status_code(error)
             increment("ai.model.failure", model=model, status=status_code or "exception")
             if status_code in _COOLDOWN_STATUS_CODES:

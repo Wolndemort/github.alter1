@@ -108,6 +108,9 @@ class Setting(BaseSettings):
     HTTP_RATE_WINDOW_SECONDS: int = 60
     MAX_OUTPUT_TOKENS: int = 600
     LONG_REPLY_MAX_OUTPUT_TOKENS: int = 1200
+    # Luna is the paid primary model. Keep enough room for a complete answer
+    # so a normal long reply is not mistaken for a provider failure.
+    LUNA_MAX_OUTPUT_TOKENS: int = 4096
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
     MAX_MEDIA_OUTPUT_TOKENS: int = 300
     MEDIA_MAX_BYTES: int = 20 * 1024 * 1024
