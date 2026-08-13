@@ -25,6 +25,7 @@ from utils.intent import should_recall_context
 from utils.multimodal_context import attachment_context_message
 from services.artifact_store import latest_artifact, save_artifact
 from utils.document_commands import is_document_save_request
+import re
 
 
 @dataclass(frozen=True)
@@ -203,6 +204,26 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
                                    operation="transcription", transcript=transcript)
         result = await ChatService().reply(db, user_id, prompt)
         return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)
+    # Image edit/animation requests must use the source image.  Otherwise the
+    # mobile multipart route falls through to vision chat and only describes it.
+    if kind == "image" and prompt.strip():
+        value = prompt.casefold().replace("ё", "е")
+        animate = bool(re.search(r"(?:ожив|анимац|движени|сделай\s+видео|сделай\s+ролик|преврати\s+в\s+видео)", value))
+        edit = bool(re.search(r"(?:измени|изменить|поменяй|поменять|замени|убери|добавь|сделай|улучш|перерис|обработай|edit|change|remove|add)", value))
+        if animate or edit:
+            artifact = await (generate_video(prompt, (content_type or "image/jpeg", data)) if animate else generate_image(prompt, (content_type or "image/jpeg", data)))
+            operation = "image_animation" if animate else "image_edit"
+            reply_text = "Оживил изображение." if animate else "Изменил изображение по твоему описанию."
+            artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="video" if animate else "image", operation=operation)
+            _append(session, "user", prompt)
+            _append(session, "assistant", reply_text)
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation=operation, artifact_filename=artifact.filename,
+                                       artifact_media_type=artifact.media_type, artifact_id=artifact_id)
+            await remember(db, user_id, prompt, source="user_message")
+            await db.commit()
+            return MediaChatResult(reply=reply_text, session_id=session.id, media_data=artifact.data,
+                                   media_filename=artifact.filename, media_type=artifact.media_type, artifact_id=artifact_id)
     transcript = None
     analysis_prompt = prompt
     media = [("image/jpeg" if kind == "image" else "video/mp4", data)]
