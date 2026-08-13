@@ -606,6 +606,7 @@ async def chat_with_tools(messages, max_tokens=None, task=None, tool_definitions
     _start_tool_trace()
     working = list(messages)
     max_rounds = max(1, min(config.TOOL_MAX_ROUNDS, 12))
+    executed_calls: set[str] = set()
     for _ in range(max_rounds):
         response = await chat_with_fallback(
             working,
@@ -632,6 +633,13 @@ async def chat_with_tools(messages, max_tokens=None, task=None, tool_definitions
                 arguments = json.loads(function.arguments or "{}")
             except (TypeError, ValueError):
                 arguments = {}
+            call_key = json.dumps(
+                {"name": function.name, "arguments": arguments},
+                ensure_ascii=False, sort_keys=True,
+            )
+            if call_key in executed_calls:
+                return call, "empty", "Этот инструмент уже вызывался с теми же параметрами и не дал нового результата. Измени запрос или ответь честно, что данных недостаточно."
+            executed_calls.add(call_key)
             try:
                 result = await asyncio.wait_for(
                     (tool_executor or execute_tool)(function.name, arguments),
