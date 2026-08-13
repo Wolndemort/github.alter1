@@ -207,7 +207,14 @@ async def voice_generation_route(request: web.Request) -> web.Response:
                     user.tech_stack = settings
                     flag_modified(user, "tech_stack")
                     await session.commit()
-        return web.json_response({**generated, "voice_id": voice_id or None} if isinstance(generated, dict) else generated)
+        if isinstance(generated, dict):
+            previews = generated.get("previews")
+            compact = {key: value for key, value in generated.items() if key not in {"previews", "audio_base64", "preview_url"}}
+            if isinstance(previews, list) and previews:
+                compact["previews"] = previews[:1]
+            compact["voice_id"] = voice_id or None
+            return web.json_response(compact)
+        return web.json_response(generated)
     except (ElevenLabsError, TypeError, ValueError) as exc:
         raise web.HTTPBadGateway(text=str(exc))
 
