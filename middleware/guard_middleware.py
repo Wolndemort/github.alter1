@@ -47,7 +47,21 @@ class GuardMiddleware(BaseMiddleware):
         user = getattr(event, "from_user", None)
         if user is not None:
             try:
-                data["billing_allowed"] = await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
+                # Resolve owner identity before touching Redis. Owners must not
+                # consume daily quota, including through a linked Telegram account.
+                db_session = data.get("db_session")
+                linked_user = await resolve_telegram_user(db_session, user.id) if db_session is not None else None
+                linked_email = getattr(data.get("db_user"), "email", None) or getattr(linked_user, "email", None)
+                if db_session is not None and hasattr(db_session, "execute"):
+                    from sqlalchemy import select
+                    from data.models import WebAccount
+                    account = (await db_session.execute(
+                        select(WebAccount).where(WebAccount.telegram_user_id == user.id)
+                    )).scalar_one_or_none()
+                    linked_email = linked_email or getattr(account, "email", None)
+                owner_access = has_owner_access(user.id, linked_email)
+                data["owner_access"] = owner_access
+                data["billing_allowed"] = True if owner_access else await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
             except RedisError:
                 logging.exception("Redis billing check failed; blocking request")
                 data["billing_allowed"] = False
@@ -56,8 +70,8 @@ class GuardMiddleware(BaseMiddleware):
             except RedisError:
                 logging.exception("Redis spam check failed; blocking request")
                 data["spam_allowed"] = False
-            db_user = await resolve_telegram_user(data["db_session"], user.id) if data.get("db_session") is not None else None
-            owner_access = has_owner_access(user.id, getattr(data.get("db_user"), "email", None)) or has_owner_access(user.id, getattr(db_user, "email", None))
+            db_user = linked_user if user is not None else None
+            owner_access = data.get("owner_access", has_owner_access(user.id, getattr(db_user, "email", None)))
             if data.get("db_session") is not None and not owner_access and not _billing_exempt(event):
                 answer = getattr(event, "answer", None)
                 if not data["spam_allowed"]:

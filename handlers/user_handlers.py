@@ -638,6 +638,24 @@ def media_generation_requested(prompt: str) -> bool:
     return first_word in command_words
 
 
+def document_edit_requested(prompt: str) -> bool:
+    """Recognise natural-language document edits, not only ``/edit``."""
+    value = " ".join((prompt or "").casefold().split())
+    return bool(re.match(
+        r"^(?:/edit\b|измени(?:ть)?\b|переделай(?:ть)?\b|отредактируй(?:ть)?\b|"
+        r"замени(?:ть)?\b|исправь(?:ть)?\b|переформатируй(?:ть)?\b|"
+        r"сделай\s+(?:в\s+)?(?:файл|документ)|убери\b|добавь\b)",
+        value,
+    ))
+
+
+def document_edit_instruction(prompt: str) -> str:
+    value = (prompt or "").strip()
+    if value.casefold().startswith("/edit"):
+        return value[5:].strip()
+    return value
+
+
 @router.message(lambda message: message.audio is not None)
 async def handle_audio_file(message: types.Message, db_session: AsyncSession):
     """Process Telegram audio files with the same actions as voice messages."""
@@ -685,8 +703,8 @@ async def handle_document(message: types.Message, db_session: AsyncSession):
         raw_data = buffer.getvalue()
         # Explicit Telegram export flow: `/edit <instruction>` returns the
         # edited file instead of only describing the requested changes.
-        if prompt.strip().casefold().startswith("/edit "):
-            instruction = prompt.strip()[6:].strip()
+        if document_edit_requested(prompt):
+            instruction = document_edit_instruction(prompt)
             if not instruction:
                 await message.answer("После /edit напиши, что изменить в документе.")
                 return

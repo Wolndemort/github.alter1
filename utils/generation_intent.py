@@ -1,24 +1,26 @@
-"""Natural-language routing for real Fal.ai generation requests."""
+"""Natural-language routing for image/video generation and editing."""
 from __future__ import annotations
 
 import re
 
+_IMAGE_WORDS = r"(?:фото|фотографию|изображение|картинку|картинку|портрет|иллюстрацию)"
+_VIDEO_WORDS = r"(?:видео|ролик|клип|анимацию)"
+_CREATE = r"(?:создай|сгенерируй|сделай|нарисуй|создать|сгенерировать|сделать)"
+_EDIT = r"(?:измени|изменить|переделай|переделать|отредактируй|редактируй|убери|добавь|замени|преобразуй|стилизуй|оживи)"
 
-_IMAGE_PATTERNS = (
-    r"\bсоздай\b.*\b(?:фото|фотографи|изображени|картин)",
-    r"\bсгенерируй\b.*\b(?:фото|фотографи|изображени|картин)",
-    r"\bнарисуй\b", r"\bсделай\b.*\b(?:фото|фотографи|изображени|картин)",
-)
-_VIDEO_PATTERNS = (
-    r"\bсоздай\b.*\b(?:видео|ролик)", r"\bсгенерируй\b.*\b(?:видео|ролик)",
-    r"\bоживи\b", r"\bсделай\b.*\b(?:видео|ролик)",
-)
+
+def _text(value: str) -> str:
+    value = value or ""
+    try:
+        return value.encode("latin1").decode("utf-8") if "Р" in value else value
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
 
 
 def generation_kind(text: str) -> str | None:
-    value = (text or "").casefold().replace("ё", "е")
-    if any(re.search(pattern, value) for pattern in _VIDEO_PATTERNS):
+    value = _text(text).casefold().replace("ё", "е")
+    if re.search(rf"\b(?:{_CREATE}|{_EDIT})\b.*\b{_VIDEO_WORDS}\b|\bоживи\b", value):
         return "video"
-    if any(re.search(pattern, value) for pattern in _IMAGE_PATTERNS):
+    if re.search(rf"\b(?:{_CREATE}|{_EDIT})\b.*\b{_IMAGE_WORDS}\b|\b(?:убери|добавь|замени)\b", value):
         return "image"
     return None
