@@ -23,7 +23,8 @@ from utils.feedback_memory import feedback_context
 from utils.quality import sanitize_public_reply
 from utils.intent import should_recall_context
 from utils.multimodal_context import attachment_context_message
-from services.artifact_store import save_artifact
+from services.artifact_store import latest_artifact, save_artifact
+from utils.document_commands import is_document_save_request
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,21 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not transcript:
             raise ValueError("voice message could not be transcribed")
         prompt = transcript
+        if is_document_save_request(prompt):
+            artifact = await latest_artifact(user_id, kind="document")
+            artifact_data = b""
+            if artifact:
+                try:
+                    artifact_data = base64.b64decode(artifact.get("data_base64", ""), validate=True)
+                except (ValueError, TypeError):
+                    artifact_data = b""
+            if artifact_data:
+                reply = "Файл подготовлен. Его можно скачать из чата."
+                _append(session, "user", prompt)
+                _append(session, "assistant", reply)
+                await db.commit()
+                return MediaChatResult(reply=reply, session_id=session.id, transcript=transcript, media_data=artifact_data, media_filename=artifact.get("filename"), media_type=artifact.get("media_type"), artifact_id=artifact.get("id"))
+            return MediaChatResult(reply="У меня нет подготовленного файла для сохранения. Сначала прикрепи документ и выбери «Изменить и сохранить».", session_id=session.id, transcript=transcript)
         if is_voice_generation_request(prompt):
             description = voice_description(prompt)
             if not description:

@@ -36,7 +36,7 @@ from services.document_ingestion import edit_document, extract_document, start_d
 from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
 from utils.generation_intent import generation_kind
-from utils.document_commands import document_edit_instruction, is_document_edit_request
+from utils.document_commands import document_edit_instruction, is_document_edit_request, is_document_save_request
 from utils.multimodal_context import attachment_context_message
 from services.artifact_store import get_artifact, latest_artifact, save_artifact
 from utils.artifact_intent import reuses_previous_artifact
@@ -196,6 +196,10 @@ async def document_chat_route(request: web.Request) -> web.Response:
                 "media_mime": artifact.media_type or "application/octet-stream",
                 "artifact_id": artifact_id,
             })
+        source_artifact_id = await save_artifact(
+            user_id, data, document.filename, document.media_type,
+            kind="document", operation="document_source",
+        )
         agent = None
         if agent_mode:
             user.tech_stack = start_document_agent(user.tech_stack, document, prompt, horizon_minutes=agent_horizon)
@@ -210,7 +214,7 @@ async def document_chat_route(request: web.Request) -> web.Response:
             result = await ChatService().reply(session, user_id, prompt + context)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
-    return web.json_response({"reply": result.reply, "session_id": result.session_id, "agent": agent, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
+    return web.json_response({"reply": result.reply, "session_id": result.session_id, "agent": agent, "artifact_id": source_artifact_id, "document": {"filename": document.filename, "media_type": document.media_type, "chars": document.chars, "pages": document.pages}})
 
 
 async def document_edit_route(request: web.Request) -> web.Response:
@@ -320,6 +324,22 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         await response.prepare(request)
         try:
+            if is_document_save_request(text):
+                artifact = await latest_artifact(user_id, kind="document")
+                artifact_data = b""
+                if artifact:
+                    try:
+                        artifact_data = base64.b64decode(artifact.get("data_base64", ""), validate=True)
+                    except (ValueError, TypeError):
+                        artifact_data = b""
+                if artifact_data:
+                    payload = {"type": "done", "reply": "Файл подготовлен. Нажми «Скачать файл», чтобы сохранить его на устройство.", "media_base64": base64.b64encode(artifact_data).decode("ascii"), "media_filename": artifact.get("filename") or "alter-document", "media_mime": artifact.get("media_type") or "application/octet-stream", "artifact_id": artifact.get("id")}
+                else:
+                    payload = {"type": "delta", "text": "У меня нет подготовленного файла для сохранения. Сначала прикрепи документ и выбери «Изменить и сохранить»."}
+                await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                if payload["type"] == "delta":
+                    await response.write(b'data: {"type":"done"}\n\n')
+                return response
             # Mobile uses the streaming endpoint for the composer. Handle
             # explicit Voice Design requests here as well; otherwise the
             # generic planner answers "I'm doing it" without calling

@@ -114,3 +114,18 @@ def is_document_edit_request(prompt: str) -> bool:
         "=>" in value
         or re.match(rf"^(?:{_EDIT_VERBS}|{_REMOVE_VERBS}|{_ADD_VERBS})\b", value, flags=re.I)
     )
+
+
+def is_document_save_request(prompt: str) -> bool:
+    """Recognize an explicit request to return the latest document artifact."""
+    value = _text(prompt).strip().casefold()
+    value = re.sub(r"[!?.,;:]+$", "", value)
+    return bool(re.fullmatch(
+        r"(?:сохрани(?:ть)?(?:\s+(?:файл|документ|его|это))?|"
+        r"скачай(?:\s+(?:файл|документ|его|это))?|"
+        r"выгрузи(?:\s+(?:файл|документ|его|это))?|"
+        r"save(?:\s+(?:the\s+)?(?:file|document|it))?|"
+        r"download(?:\s+(?:the\s+)?(?:file|document|it))?)",
+        value,
+        flags=re.I,
+    ))
