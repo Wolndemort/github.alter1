@@ -5,7 +5,7 @@ import re
 
 
 def _clean(value: str, limit: int = 160) -> str:
-    return re.sub(r"\s+", " ", value).strip(" .,!?:;—-\n\t")[:limit]
+    return re.sub(r"\s+", " ", value).strip(" .,!?:;—-\n\t").removeprefix("в ").removeprefix("на ")[:limit]
 
 
 def _match(text: str, pattern: str) -> str | None:
@@ -45,6 +45,17 @@ def extract_user_facts(text: str) -> dict:
         ("projects", "current", r"\b(?:я работаю над|мой проект|мы делаем проект)\s+(?P<value>[^.!?\n]{2,140})"),
         ("preferences", "vehicle", r"\b(?:у меня|моя|мой)\s+(?:машина|авто|тачка)\s*(?:это|[-:])?\s*(?P<value>[^.!?\n]{2,120})"),
         ("health_sport", "sport", r"\b(?:я занимаюсь|тренируюсь|хожу на)\s+(?P<value>[^.!?\n]{2,100})"),
+        ("health_sport", "health", r"\b(?:у меня|я страдаю от|мне поставили)\s+(?P<value>(?:аллергия|астма|диабет|мигрень|бессонница|давление)[^.!?\n]{0,100})"),
+        ("family", "family", r"\b(?:у меня есть|в моей семье)\s+(?P<value>[^.!?\n]{2,120})"),
+        ("social", "friends", r"\b(?:мои друзья|у меня есть друзья|мой друг|моя подруга)\s*(?P<value>[^.!?\n]{0,120})"),
+        ("social", "colleagues", r"\b(?:мои коллеги|я работаю с коллегами|у меня на работе)\s*(?P<value>[^.!?\n]{0,120})"),
+        ("skills_career", "skills", r"\b(?:я умею|мои навыки|у меня есть навык|я владею)\s+(?P<value>[^.!?\n]{2,140})"),
+        ("travel", "places", r"\b(?:я был в|я ездил в|я путешествовал по|моя любимая страна|хочу поехать в)\s+(?P<value>[^.!?\n]{2,120})"),
+        ("books", "likes", r"\b(?:я читаю|моя любимая книга|мне нравятся книги)\s+(?P<value>[^.!?\n]{2,120})"),
+        ("technology", "devices", r"\b(?:у меня есть|я пользуюсь|мой телефон|мой ноутбук|мой компьютер)\s+(?P<value>(?:айфон|iphone|android|телефон|ноутбук|компьютер|macbook|playstation|xbox)[^.!?\n]{0,100})"),
+        ("worldview", "religion", r"\b(?:я|моя религия|я исповедую)\s+(?P<value>(?:верующий|атеист|православн\w*|мусульман\w*|христиан\w*|ислам|буддизм)[^.!?\n]{0,80})"),
+        ("worldview", "values", r"\b(?:для меня важно|мои ценности|я ценю)\s+(?P<value>[^.!?\n]{2,140})"),
+        ("finance", "situation", r"\b(?:моя финансовая ситуация|я зарабатываю|мой доход|я коплю на|мои финансовые цели)\s+(?P<value>[^.!?\n]{2,140})"),
         ("food_drinks", "likes", r"\b(?:я люблю есть|моя любимая еда|я пью)\s+(?P<value>[^.!?\n]{2,120})"),
     )
     for category, key, pattern in patterns:
