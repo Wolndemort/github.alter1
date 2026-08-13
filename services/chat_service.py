@@ -12,7 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import _append_source_links, clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
-from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT
+from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT, RELIABILITY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
 from utils.memory_store import merge_memory_facts
@@ -92,12 +92,12 @@ def _stream_system_prompt(text: str, memory: dict, *, use_tools: bool = False) -
         parts = (
             ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
             CAPABILITIES_PROMPT, CHAT_BEHAVIOR_PROMPT, TOOL_POLICY_PROMPT,
-            MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY,
+            MEMORY_POLICY_PROMPT, REASONING_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, RELIABILITY_PROMPT,
         )
     else:
         parts = (
             ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
-            CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY,
+            CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, RELIABILITY_PROMPT,
         )
     return "\n\n".join((*parts, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
 
@@ -275,6 +275,17 @@ class ChatService:
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
+        # Capability inventory is deterministic. Do not route this short,
+        # well-defined question through a generic streaming model that may
+        # answer with a vague "tell me what to do" prompt.
+        if is_capabilities_request(text):
+            reply = capabilities_reply()
+            _append(session, "assistant", reply)
+            if not private_mode:
+                await db.commit()
+            for index in range(0, len(reply), 96):
+                yield reply[index:index + 96]
+            return
         pending_reminder = dict(user.pending_reminder or {})
         if pending_reminder and looks_like_time_answer(text):
             remind_at = parse_time_answer(text)
