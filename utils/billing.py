@@ -99,6 +99,11 @@ def has_active_trial(user: User | None) -> bool:
     return bool(value and value + timedelta(days=config.TRIAL_DAYS) > datetime.now(timezone.utc))
 
 
+def has_paid_subscription(user: User | None) -> bool:
+    """Return only a real paid subscription, excluding the introductory trial."""
+    return bool(user and user.subscription_expires_at and user.subscription_expires_at > datetime.now(timezone.utc))
+
+
 def configured() -> bool:
     return bool(config.YUKASSA_SHOP_ID and config.YUKASSA_SECRET_KEY)
 

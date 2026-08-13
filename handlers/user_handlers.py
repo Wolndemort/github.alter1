@@ -38,7 +38,7 @@ from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
-from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, is_owner, price, plan_info, credits_limit, normalize_plan, effective_plan
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, has_active_trial, has_paid_subscription, is_owner, price, plan_info, credits_limit, normalize_plan, effective_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from services import google_calendar
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices
@@ -212,7 +212,7 @@ async def button_cabinet(message: types.Message, db_session: AsyncSession):
     user = await get_telegram_user(message.from_user.id, db_session)
     if is_owner(message.from_user.id):
         status = "Владелец ALTER — доступ открыт без подписки."
-    elif has_active_subscription(user):
+    elif has_paid_subscription(user):
         expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
         status = f"Подписка активна до {expires}."
     else:
@@ -1012,7 +1012,7 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
     if is_owner(message.from_user.id):
         await message.answer("Для владельца ALTER подписка не нужна.")
         return
-    if has_active_subscription(await get_telegram_user(message.from_user.id, db_session)):
+    if has_paid_subscription(await get_telegram_user(message.from_user.id, db_session)):
         await message.answer("У тебя уже есть активная подписка. Проверить срок можно через /status.")
         return
     if not billing_configured():
@@ -1061,7 +1061,7 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
     user = await get_telegram_user(message.from_user.id, db_session)
     if is_owner(message.from_user.id):
         await message.answer("Ты владелец ALTER — доступ без подписки.")
-    elif user and not has_active_subscription(user):
+    elif user and not has_paid_subscription(user):
         pending_payments = (await db_session.execute(
             select(Payment).where(Payment.user_id == user.id, Payment.status == "pending")
             .order_by(Payment.created_at.desc())
@@ -1072,12 +1072,12 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
                     break
             except Exception:
                 logging.exception("Failed to refresh pending YooKassa payment")
-        if has_active_subscription(user):
+        if has_paid_subscription(user):
             expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
             await message.answer(f"Оплата подтверждена, подписка активна до {expires}.")
         else:
             await message.answer("Платёж ещё не подтверждён. Если уже оплатил, подожди минуту и повтори /status.")
-    elif has_active_subscription(user):
+    elif has_paid_subscription(user):
         expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
         await message.answer(f"Подписка активна до {expires}.")
     else:
