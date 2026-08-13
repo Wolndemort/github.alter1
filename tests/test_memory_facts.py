@@ -36,7 +36,7 @@ def test_extracts_social_travel_skills_projects_books_food_and_technology():
     assert facts["projects"]["current"] == "ALTER"
     assert facts["travel"]["places"] == "Грузии"
     assert facts["books"]["likes"] == "Дюну"
-    assert facts["food_drinks"]["likes"] == "мясо"
+    assert facts["food_drinks"]["avoids"] == "мясо"
     assert facts["technology"]["devices"] == "Android"
 
 

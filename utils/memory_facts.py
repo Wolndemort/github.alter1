@@ -94,6 +94,18 @@ def extract_user_facts(text: str) -> dict:
         elif re.search(r"хобби|увлечен", lower): category, key = "interests_hobbies", "hobbies"
         _add(result, category, key, preference)
 
+    avoidance = _match(value, r"\b(?:я не люблю|я не ем|я не пью|мне не нравится|я избегаю|не переношу)\s+(?P<value>[^.!?\n]{2,140})")
+    if avoidance:
+        lower = avoidance.casefold()
+        category, key = "preferences", "dislikes"
+        if re.search(r"еда|ем|пью|мяс|молок|аллерг|продукт", lower):
+            category, key = "food_drinks", "avoids"
+        elif re.search(r"одежд|стиль|цвет", lower):
+            category, key = "style_clothing", "avoids"
+        _add(result, category, key, avoidance)
+        if category == "food_drinks":
+            result.get("food_drinks", {}).pop("likes", None)
+
     mood = _match(value, r"\b(?:я чувствую себя|моё настроение|мое настроение)\s+(?P<value>[^.!?\n]{2,100})")
     if mood:
         _add(result, "psycho_vibe", "current_mood", mood)
