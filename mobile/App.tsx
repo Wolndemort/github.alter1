@@ -780,11 +780,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     catch (err) { setMediaJobsError(userFacingError(err)); }
   };
   const downloadMediaJob = async (job: MediaJob) => {
-    if (!job.data_base64 || !FileSystem.documentDirectory) return;
+    if (!FileSystem.documentDirectory) return;
     try {
-      const filename = (job.filename || `alter-${job.kind}-${job.id}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const fullJob = job.data_base64 ? job : await api.mediaJob(token, job.id);
+      if (!fullJob.data_base64) throw new Error("Результат медиа-задачи ещё не готов");
+      const filename = (fullJob.filename || `alter-${fullJob.kind}-${fullJob.id}`).replace(/[^a-zA-Z0-9._-]/g, "_");
       const uri = `${FileSystem.documentDirectory}${filename}`;
-      await FileSystem.writeAsStringAsync(uri, job.data_base64, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(uri, fullJob.data_base64, { encoding: FileSystem.EncodingType.Base64 });
       await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
     } catch (err) { setMenuError(userFacingError(err)); }
   };
@@ -804,10 +806,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const timer = setInterval(() => {
       api.mediaHistory(token).then(({ items }) => {
         setMediaJobs(items);
-        items.filter((job) => job.status === "completed" && job.data_base64 && !shownMediaJobs.current.has(job.id)).forEach((job) => {
-          shownMediaJobs.current.add(job.id);
-          setItems((old) => old.some((item) => item.id === `media-job-${job.id}`) ? old : [...old, { id: `media-job-${job.id}`, role: "assistant", text: `${job.kind === "video" ? "Видео" : "Изображение"} готово — результат сохранён в медиа-задачах.`, mediaUri: `data:${job.media_type || (job.kind === "video" ? "video/mp4" : "image/png")};base64,${job.data_base64}`, mediaMime: job.media_type || (job.kind === "video" ? "video/mp4" : "image/png"), mediaFilename: job.filename || `alter-${job.kind}-${job.id}` }]);
-          autoScrollAfterUpdate.current = true;
+        items.filter((job) => job.status === "completed" && !shownMediaJobs.current.has(job.id)).forEach((job) => {
+          api.mediaJob(token, job.id).then((fullJob) => {
+            if (!fullJob.data_base64) return;
+            shownMediaJobs.current.add(job.id);
+            setItems((old) => old.some((item) => item.id === `media-job-${job.id}`) ? old : [...old, { id: `media-job-${job.id}`, role: "assistant", text: `${fullJob.kind === "video" ? "Видео" : "Изображение"} готово — результат сохранён в медиа-задачах.`, mediaUri: `data:${fullJob.media_type || (fullJob.kind === "video" ? "video/mp4" : "image/png")};base64,${fullJob.data_base64}`, mediaMime: fullJob.media_type || (fullJob.kind === "video" ? "video/mp4" : "image/png"), mediaFilename: fullJob.filename || `alter-${fullJob.kind}-${fullJob.id}` }]);
+            autoScrollAfterUpdate.current = true;
+          }).catch(() => undefined);
         });
       }).catch(() => undefined);
     }, 2500);
@@ -1083,7 +1088,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Медиа-задачи</Text><Pressable style={premiumStyles.menuAction} onPress={() => setMediaJobsVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View>
       <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}><TextInput value={mediaJobPrompt} onChangeText={setMediaJobPrompt} placeholder="Что создать? Например: кинематографичное видео города" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><View style={{ flexDirection: "row", gap: 8 }}><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("image")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "image" ? "✓ " : ""}Изображение</Text></Pressable><Pressable style={[premiumStyles.menuAction, { flex: 1 }]} onPress={() => setMediaJobKind("video")}><Text style={premiumStyles.menuActionText}>{mediaJobKind === "video" ? "✓ " : ""}Видео</Text></Pressable></View><Pressable style={[permissionStyles.primary, { opacity: mediaJobPrompt.trim() && !mediaJobsLoading ? 1 : 0.45, marginTop: 8 }]} onPress={createMediaJob} disabled={!mediaJobPrompt.trim() || mediaJobsLoading}><Text style={permissionStyles.primaryText}>Запустить задачу</Text></Pressable></View>
       {mediaJobsError ? <Pressable style={styles.inlineError} onPress={() => setMediaJobsError("")} accessibilityLabel="Закрыть ошибку медиа-задач"><Text style={styles.inlineErrorText}>{mediaJobsError}</Text><Text style={styles.inlineErrorClose}>×</Text></Pressable> : null}
-      {mediaJobsLoading ? <ActivityIndicator color="#fff" /> : mediaJobs.length === 0 ? <Text style={styles.emptyMemory}>Здесь появятся задачи генерации изображений и видео.</Text> : <ScrollView contentContainerStyle={styles.memoryList}>{mediaJobs.map((job) => <View key={job.id} style={styles.memoryRow}><Text style={styles.memoryKey}>{job.kind === "video" ? "Видео" : "Изображение"} · {job.status}</Text><Text style={styles.memoryValue}>{Math.round(job.progress || 0)}%</Text><View style={{ height: 4, backgroundColor: "#333", borderRadius: 4, marginVertical: 8 }}><View style={{ height: 4, width: `${Math.max(0, Math.min(100, job.progress || 0))}%`, backgroundColor: "#b8a6ff", borderRadius: 4 }} /></View>{job.error ? <Text style={styles.error}>{job.error}</Text> : null}{job.status === "completed" && job.data_base64 ? <Pressable style={premiumStyles.menuAction} onPress={() => downloadMediaJob(job)}><Text style={premiumStyles.menuActionText}>Скачать результат</Text><Text style={premiumStyles.menuActionArrow}>↓</Text></Pressable> : null}{job.status === "queued" || job.status === "running" ? <Pressable style={premiumStyles.menuAction} onPress={() => cancelMediaJob(job.id)}><Text style={premiumStyles.menuActionText}>Отменить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable> : null}</View>)}</ScrollView>}
+      {mediaJobsLoading ? <ActivityIndicator color="#fff" /> : mediaJobs.length === 0 ? <Text style={styles.emptyMemory}>Здесь появятся задачи генерации изображений и видео.</Text> : <ScrollView contentContainerStyle={styles.memoryList}>{mediaJobs.map((job) => <View key={job.id} style={styles.memoryRow}><Text style={styles.memoryKey}>{job.kind === "video" ? "Видео" : "Изображение"} · {job.status}</Text><Text style={styles.memoryValue}>{Math.round(job.progress || 0)}%</Text><View style={{ height: 4, backgroundColor: "#333", borderRadius: 4, marginVertical: 8 }}><View style={{ height: 4, width: `${Math.max(0, Math.min(100, job.progress || 0))}%`, backgroundColor: "#b8a6ff", borderRadius: 4 }} /></View>{job.error ? <Text style={styles.error}>{job.error}</Text> : null}{job.status === "completed" ? <Pressable style={premiumStyles.menuAction} onPress={() => downloadMediaJob(job)}><Text style={premiumStyles.menuActionText}>Скачать результат</Text><Text style={premiumStyles.menuActionArrow}>↓</Text></Pressable> : null}{job.status === "queued" || job.status === "running" ? <Pressable style={premiumStyles.menuAction} onPress={() => cancelMediaJob(job.id)}><Text style={premiumStyles.menuActionText}>Отменить</Text><Text style={premiumStyles.menuActionArrow}>×</Text></Pressable> : null}</View>)}</ScrollView>}
     </SafeAreaView>
   </Modal>
   <Modal visible={feedbackFor !== null} transparent animationType="fade" onRequestClose={() => setFeedbackFor(null)}>
