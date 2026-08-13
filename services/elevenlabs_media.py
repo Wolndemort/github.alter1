@@ -154,6 +154,8 @@ async def design_voice(description: str) -> dict:
         logging.info("ElevenLabs voice design response status=%s", response.status_code)
         if response.status_code >= 400:
             logging.warning("ElevenLabs voice design rejected status=%s detail=%s", response.status_code, _provider_detail(response))
+            if response.status_code == 403 and "blocked_generation" in _provider_detail(response):
+                raise ElevenLabsError("Я не могу копировать голос конкретного человека. Опиши желаемые характеристики без имени: например, низкий, спокойный мужской голос с кавказским акцентом.")
             raise ElevenLabsError("ElevenLabs voice generation failed")
         payload = response.json()
         logging.info("ElevenLabs voice design response keys=%s", sorted(payload.keys())[:20] if isinstance(payload, dict) else type(payload).__name__)

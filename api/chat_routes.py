@@ -291,6 +291,9 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
             increment("ai.reply.cancelled")
             logging.info("Streaming chat cancelled by client user_id=%s", user_id)
             raise
+        except ElevenLabsError as exc:
+            logging.info("Voice generation was rejected user_id=%s reason=%s", user_id, str(exc)[:240])
+            await response.write(("data: " + json.dumps({"type": "done", "reply": str(exc), "voice_id": None}, ensure_ascii=False) + "\n\n").encode("utf-8"))
         except Exception:
             logging.exception("Streaming chat failed")
             await response.write(("data: " + json.dumps({"type": "error", "message": "stream failed"}) + "\n\n").encode("utf-8"))
