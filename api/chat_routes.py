@@ -36,6 +36,13 @@ from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
 
 
+def _voice_generation_summary(generated: object) -> object:
+    """Keep chat/SSE responses small; preview audio belongs to media APIs."""
+    if not isinstance(generated, dict):
+        return generated
+    return {key: value for key, value in generated.items() if key not in {"previews", "audio_base64", "preview_url"}}
+
+
 async def chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
@@ -78,7 +85,7 @@ async def chat_route(request: web.Request) -> web.Response:
                 settings["generated_voice_id"] = voice_id
                 user.tech_stack = settings
                 await session.commit()
-            return web.json_response({"reply": "Голос создан и сохранён. Теперь прикрепи голосовое и напиши: «измени мой голос на созданный»." if voice_id else "Сервис создал голос, но не вернул его идентификатор.", "session_id": 0, "voice_id": voice_id or None, "voice_generation": generated})
+            return web.json_response({"reply": "Голос создан и сохранён. Теперь прикрепи голосовое и попроси изменить его." if voice_id else "Сервис создал голос, но не вернул его идентификатор.", "session_id": 0, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated)})
         if message_text.casefold().startswith(("покажи доступные голоса", "покажи голоса", "какие есть голоса")):
             try:
                 voices = await list_voices()
@@ -275,7 +282,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     user.tech_stack = settings
                     await session.commit()
                 reply = "Голос создан и сохранён." if voice_id else "Сервис создал голос, но не вернул его идентификатор."
-                await response.write(("data: " + json.dumps({"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": generated}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                await response.write(("data: " + json.dumps({"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated)}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:
