@@ -862,15 +862,18 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     finally { setBusy(false); }
   };
   const pickMediaLibrary = async () => {
+    console.info("ALTER picker media: start", { busy: mediaPickerBusy, inFlight: pickerInFlight.current });
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.info("ALTER picker media: permission", permission);
       if (!permission.granted) {
         Alert.alert("Нужен доступ к фото", "Разреши ALTER доступ к медиатеке в настройках iPhone, чтобы выбрать изображение или видео.", [{ text: "Не сейчас", style: "cancel" }, { text: "Открыть настройки", onPress: () => { void Linking.openSettings(); } }]);
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
+      console.info("ALTER picker media: result", { canceled: result.canceled, assets: result.assets?.length || 0 });
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         setAttachment({ uri: asset.uri, type: asset.type === "video" ? "video" : "image" });
@@ -878,10 +881,12 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) { console.error("ALTER media library picker failed", err); setMenuError(`Не удалось открыть медиатеку: ${err instanceof Error ? err.message : String(err)}`); } finally { pickerInFlight.current = false; setMediaPickerBusy(false); }
   };
   const pickFile = async () => {
+    console.info("ALTER picker file: start", { busy: mediaPickerBusy, inFlight: pickerInFlight.current });
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "video/*", "audio/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/csv", "application/json"], copyToCacheDirectory: true });
+      console.info("ALTER picker file: result", { canceled: result.canceled, assets: result.assets?.length || 0 });
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         const mime = asset.mimeType || "";
@@ -891,27 +896,31 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) { console.error("ALTER document picker failed", err); setMenuError(`Не удалось открыть файлы: ${err instanceof Error ? err.message : String(err)}`); } finally { pickerInFlight.current = false; setMediaPickerBusy(false); }
   };
   const runNativePickerAfterDismiss = (picker: () => Promise<void>) => {
+    console.info("ALTER picker: action", { inFlight: pickerInFlight.current });
     if (pickerInFlight.current) return;
     pickerInFlight.current = true;
     setMediaPickerVisible(false);
-    const watchdog = setTimeout(() => { pickerInFlight.current = false; setMediaPickerBusy(false); }, 20_000);
+    const watchdog = setTimeout(() => { pickerInFlight.current = false; setMediaPickerBusy(false); }, 30_000);
     let launched = false;
-    const launch = () => { if (launched) return; launched = true; void picker(); };
-    const fallback = setTimeout(launch, 700);
-    InteractionManager.runAfterInteractions(() => { clearTimeout(fallback); setTimeout(launch, 120); });
-    setTimeout(() => clearTimeout(watchdog), 20_500);
+    const launch = () => { if (launched) return; launched = true; console.info("ALTER picker: launch"); void picker(); };
+    const fallback = setTimeout(launch, 1_200);
+    InteractionManager.runAfterInteractions(() => { clearTimeout(fallback); setTimeout(launch, 1_000); });
+    setTimeout(() => clearTimeout(watchdog), 30_500);
   };
   const pickMedia = () => { setMediaPickerBusy(pickerInFlight.current); setMediaPickerVisible(true); };
   const takePhoto = async () => {
+    console.info("ALTER picker camera: start", { busy: mediaPickerBusy, inFlight: pickerInFlight.current });
     if (mediaPickerBusy) return;
     setMediaPickerBusy(true); setMenuError("");
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
+      console.info("ALTER picker camera: permission", permission);
       if (!permission.granted) {
         Alert.alert("Нужен доступ к камере", "Разреши ALTER доступ к камере в настройках iPhone.", [{ text: "Не сейчас", style: "cancel" }, { text: "Открыть настройки", onPress: () => { void Linking.openSettings(); } }]);
         return;
       }
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+      console.info("ALTER picker camera: result", { canceled: result.canceled, assets: result.assets?.length || 0 });
       if (!result.canceled && result.assets[0]) setAttachment({ uri: result.assets[0].uri, type: "image" });
     } catch (err) { console.error("ALTER camera picker failed", err); setMenuError(`Не удалось открыть камеру: ${err instanceof Error ? err.message : String(err)}`); } finally { pickerInFlight.current = false; setMediaPickerBusy(false); }
   };
