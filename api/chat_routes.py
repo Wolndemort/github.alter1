@@ -43,6 +43,16 @@ def _voice_generation_summary(generated: object) -> object:
     return {key: value for key, value in generated.items() if key not in {"previews", "audio_base64", "preview_url"}}
 
 
+def _voice_preview_audio(generated: object) -> dict:
+    if not isinstance(generated, dict) or not isinstance(generated.get("previews"), list):
+        return {}
+    preview = next((item for item in generated["previews"] if isinstance(item, dict)), None)
+    if not preview:
+        return {}
+    audio = preview.get("audio_base_64") or preview.get("audio_base64")
+    return {"audio_base64": audio, "audio_filename": "alter-voice-preview.mp3", "audio_mime": "audio/mpeg"} if audio else {}
+
+
 async def chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
@@ -85,7 +95,7 @@ async def chat_route(request: web.Request) -> web.Response:
                 settings["generated_voice_id"] = voice_id
                 user.tech_stack = settings
                 await session.commit()
-            return web.json_response({"reply": "Голос создан и сохранён. Теперь прикрепи голосовое и попроси изменить его." if voice_id else "Сервис создал голос, но не вернул его идентификатор.", "session_id": 0, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated)})
+            return web.json_response({"reply": "Голос создан в ALTER. Вот его пробное звучание." if voice_id else "Голос сгенерирован. Вот пробное звучание; сервис не вернул идентификатор для сохранения.", "session_id": 0, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated), **_voice_preview_audio(generated)})
         if message_text.casefold().startswith(("покажи доступные голоса", "покажи голоса", "какие есть голоса")):
             try:
                 voices = await list_voices()
