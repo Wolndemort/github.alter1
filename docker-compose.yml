@@ -86,7 +86,9 @@ services:
     logging: *default-logging
 
   alter-nginx:
-    image: nginx:alpine
+    build:
+      context: ./web
+      dockerfile: Dockerfile
     container_name: alter_nginx
     restart: always
     networks:
