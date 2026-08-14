@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import httpx
 
@@ -11,7 +12,16 @@ async def send_push(user, title: str, body: str) -> bool:
     token = str((user.tech_stack or {}).get("expo_push_token") or "").strip()
     if not token:
         return False
-    payload = {"to": token, "title": title[:80], "body": body[:400], "sound": "default"}
+    payload = {
+        "to": token,
+        "title": title[:80],
+        "body": body[:400],
+        "sound": "default",
+        "channelId": "alter",
+        # The mobile client uses this payload to keep a tapped push visible in
+        # the chat instead of silently dropping it into the currently open UI.
+        "data": {"route": "notifications", "notification_id": str(uuid.uuid4())},
+    }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post("https://exp.host/--/api/v2/push/send", json=payload)

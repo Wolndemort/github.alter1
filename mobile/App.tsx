@@ -57,6 +57,10 @@ export function getExpiredChatIds(items: ChatItem[], now: number, timeoutMs = 60
   return items.filter((item) => item.createdAt !== undefined && item.createdAt <= cutoff && !keep.has(item.id)).map((item) => item.id);
 }
 
+function memorySignature(value: MemoryResponse | null): string {
+  return JSON.stringify((value?.sections || []).map((section) => ({ category: section.category, items: section.items })));
+}
+
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -65,6 +69,14 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 async function registerPushNotifications(token: string) {
   if (Platform.OS === "web") return;
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("alter", {
+      name: "ALTER",
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: "default",
+      vibrationPattern: [0, 250, 150, 250],
+    });
+  }
   let status = await Notifications.getPermissionsAsync();
   if (!status.granted) status = await Notifications.requestPermissionsAsync();
   if (!status.granted) return;
@@ -437,6 +449,34 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     return () => subscription.remove();
   }, [token]);
   useEffect(() => {
+    let handledId = "";
+    const addPushToChat = async (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const notification = response.notification;
+      const content = notification.request.content;
+      const responseId = notification.request.identifier;
+      if (responseId === handledId) return;
+      handledId = responseId;
+      const title = String(content.title || "ALTER").trim();
+      const body = String(content.body || "").trim();
+      if (!body) return;
+      const id = `push-${notification.request.identifier}`;
+      const item = { id, role: "assistant", text: `${title}\n${body}`, createdAt: Date.now() } as ChatItem;
+      setItems((current) => current.some((entry) => entry.id === id) ? current : [...current, item]);
+      autoScrollAfterUpdate.current = true;
+      const key = `alter_push_inbox_${token}`;
+      try {
+        const raw = await AsyncStorage.getItem(key);
+        const inbox = raw ? JSON.parse(raw) : [];
+        const next = Array.isArray(inbox) ? [...inbox.filter((entry) => entry?.id !== id), item].slice(-50) : [item];
+        await AsyncStorage.setItem(key, JSON.stringify(next));
+      } catch { /* Push remains visible in the current chat even if local storage is unavailable. */ }
+    };
+    Notifications.getLastNotificationResponseAsync().then(addPushToChat).catch(() => undefined);
+    const subscription = Notifications.addNotificationResponseReceivedListener(addPushToChat);
+    return () => subscription.remove();
+  }, [token]);
+  useEffect(() => {
     api.history(token).then((result) => {
       const historyItems = result.messages.filter((item) => item.role === "user" || item.role === "assistant").map((item, index) => ({ id: `history-${index}`, role: item.role, text: item.content }));
       // History arrives after the first render. Mark one initial scroll so the
@@ -469,15 +509,6 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     if (items.length > 0) api.memory(token).then(setMemoryData).catch(() => undefined);
   }, [token, items.length]);
   useEffect(() => { api.workflow(token).then(({ workflow }) => setWorkflowData(workflow)).catch(() => undefined); }, [token]);
-  useEffect(() => {
-    const latestUser = [...items].reverse().find((item) => item.role === "user");
-    if (latestUser && /запомни|помни|не забывай/i.test(latestUser.text)) {
-      setMemoryNotice(true);
-      const timer = setTimeout(() => setMemoryNotice(false), 5000);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [items]);
   useEffect(() => {
     const timer = setInterval(() => {
         const cutoff = Date.now();
@@ -690,7 +721,19 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         } catch (error) { console.warn("ALTER media metadata unavailable", { type: currentAttachment.type, error: String(error) }); }
       }
        const result = currentAttachment?.type === "document" ? await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentAttachment.uri, currentAttachment.filename || "alter-document", currentAttachment.mimeType) : currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type, currentAttachment.mimeType, currentAttachment.filename) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
-      if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; const documentArtifactId = currentAttachment?.type === "document" && result.artifact_id ? result.artifact_id : undefined; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia, documentArtifactId }]); if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId);
+      if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; const documentArtifactId = currentAttachment?.type === "document" && result.artifact_id ? result.artifact_id : undefined; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia, documentArtifactId }]);
+      // The API decides what is durable. Compare the actual memory projection,
+      // so the acknowledgement also appears for inferred important facts.
+      try {
+        const previousMemory = memorySignature(memoryData);
+        const nextMemory = await api.memory(token);
+        setMemoryData(nextMemory);
+        if (previousMemory !== memorySignature(nextMemory)) {
+          setMemoryNotice(true);
+          setTimeout(() => setMemoryNotice(false), 6000);
+        }
+      } catch { /* Chat success must not depend on the optional memory refresh. */ }
+      if (result.audio_base64) await playAudioBase64(result.audio_base64, result.audio_filename?.endsWith(".wav") ? "wav" : "mp3", answerId); else if (voiceReplies && autoVoiceReplies) playVoiceReply(result.reply, answerId);
     }
     catch (err) { console.warn("ALTER request failed", { type: currentAttachment?.type ?? "text", status: (err as { status?: number })?.status ?? null, name: (err as { name?: string })?.name ?? null, message: err instanceof Error ? err.message : String(err) }); if ((err as { name?: string })?.name === "AbortError") setItems((old) => old.filter((item) => item.id !== pendingId)); else { if (text) setMessage((current) => current || text); setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: userFacingError(err) } : item)); } }
     finally { if (activeRequestController.current === controller) activeRequestController.current = null; setBusy(false); setActivity(""); }
@@ -1019,7 +1062,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     {!busy && items.some((item) => item.role === "user") ? <Pressable style={styles.editLastButton} onPress={() => { const last = [...items].reverse().find((item) => item.role === "user"); if (last) { setMessage(last.text); resetIdle(); } }} accessibilityLabel="Редактировать последнее сообщение"><Text style={styles.editLastText}>Изменить последнее сообщение</Text></Pressable> : null}
     {!message ? <View pointerEvents="none" style={mediaStyles.inputMask}><View style={mediaStyles.inputGlow} /></View> : null}
    </KeyboardAvoidingView>
-  <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={styles.message}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
+  <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}><Pressable style={historyStyles.backdrop} onPress={() => setHistoryVisible(false)}><Pressable style={historyStyles.panel} onPress={(event) => event.stopPropagation()}><Pressable onPress={() => setHistoryVisible(false)} accessibilityLabel="Закрыть историю"><Text style={historyStyles.panelClose}>‹</Text></Pressable><Text style={historyStyles.title}>История</Text><FlatList data={archivedItems} keyExtractor={(item) => item.id} renderItem={({ item }) => <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.aiBubble]}><Text style={[styles.message, item.role === "user" ? styles.userMessage : null]}>{item.text}</Text></View>} ListEmptyComponent={<Text style={historyStyles.empty}>Здесь появятся старые сообщения</Text>} /></Pressable></Pressable></Modal>
   <Modal visible={legalVisible} transparent animationType="fade" onRequestClose={() => undefined}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ALTER · ДО НАЧАЛА РАБОТЫ</Text><Text style={permissionStyles.title}>Документы и согласие</Text><Text style={permissionStyles.body}>Перед началом работы ознакомься с политикой конфиденциальности, публичной офертой и согласием на обработку данных. Без подтверждения ALTER не запрашивает push и геолокацию и не запускает рабочий чат.</Text><View style={{ gap: 8, marginBottom: 18 }}><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/privacy.html")}><Text style={linkStyles.link}>Политика конфиденциальности →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/consent.html")}><Text style={linkStyles.link}>Согласие на обработку данных →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/offer.html")}><Text style={linkStyles.link}>Публичная оферта →</Text></Pressable><Pressable onPress={() => safeOpenUrl("https://alterai.ru/legal/refund.html")}><Text style={linkStyles.link}>Оплата и возврат →</Text></Pressable></View><Pressable style={authStyles.legalRow} onPress={() => setLegalChecked((value) => !value)}><Text style={authStyles.check}>{legalChecked ? "✓" : "○"}</Text><Text style={authStyles.legalText}>Я ознакомился с документами и согласен на обработку данных</Text></Pressable><Pressable style={[permissionStyles.primary, { opacity: legalChecked && !legalBusy ? 1 : 0.45, marginTop: 18 }]} onPress={acceptLegal} disabled={!legalChecked || legalBusy}><Text style={permissionStyles.primaryText}>{legalBusy ? "Сохраняем…" : "Принять и продолжить"}</Text></Pressable></View></View>
   </Modal>
