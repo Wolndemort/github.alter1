@@ -2,7 +2,7 @@
 
 ## Current verified status
 
-The full audit is documented in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md). Current checks: backend `499 passed, 2 skipped`, mobile `26/26`, TypeScript clean, quality benchmark `7/7`. Production verification also covers 64-step ordinary-agent execution and TXT/searchable-PDF artifact roundtrips.
+The full audit is documented in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md). Current checks: backend `520 passed, 2 skipped`, mobile `27/27`, web `7 passed`, TypeScript clean, quality benchmark `7/7`. Production verification also covers 64-step ordinary-agent execution and TXT/searchable-PDF artifact roundtrips.
 
 Payment and quota rules, refunds, idempotency and unit economics are documented in [docs/QUOTAS_AND_UNIT_ECONOMICS.md](docs/QUOTAS_AND_UNIT_ECONOMICS.md).
 

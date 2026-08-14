@@ -103,7 +103,7 @@ Remove-Item Env:AUTH_TOKEN
 
 Observed result: text `45/45`, p50 `1814 ms`, p95 `2444 ms`; voice `30/30`, p50 `443 ms`, p95 `1649 ms`. These are observed samples, not an SLA.
 
-The current local regression baseline is backend `476 passed`, mobile `23/23`, TypeScript clean, and deterministic quality benchmark `7/7`. See `FINAL_AUDIT.md` and `QUOTAS_AND_UNIT_ECONOMICS.md` for the complete audit and payment rules.
+The current local regression baseline is backend `520 passed, 2 skipped`, mobile `27/27`, web `7 passed`, TypeScript clean, and deterministic quality benchmark `7/7`. See `FINAL_AUDIT.md` and `QUOTAS_AND_UNIT_ECONOMICS.md` for the complete audit and payment rules.
 
 ### What p50 and p95 mean
 
