@@ -10,13 +10,14 @@
 - 249 backend-тестов, тарифные тесты Personal/Ego и webhook YooKassa.
 - Квоты: Personal 1000, Ego 5000 кредитов в месяц; Telegram и mobile используют общий Redis-счётчик.
 - PostgreSQL backup, облачное хранение и restore drill предусмотрены скриптами проекта.
+- Целевые RPO/RTO: RPO до 24 часов (ежедневный backup, off-site копия проверяется monitor), RTO до 60 минут (пересоздание compose и восстановление на отдельную БД/том).
 
 ## Перед продажами
 
 1. Выполнить реальный тестовый платёж Personal и Ego в YooKassa.
 2. Проверить `payment.succeeded`, `payment.canceled` и повторный webhook.
-3. Проверить один restore drill на сервере.
-4. Убедиться, что cron backup и monitor уже существуют на VPS.
+3. Restore drill всегда запускается только с `DRILL_DB`, отличной от `alter_project_db`.
+4. Убедиться, что cron backup и monitor уже существуют на VPS; monitor проверяет локальный и off-site backup.
 5. Проверить mobile Expo Go; для push и публикации нужен Development Build и отдельный Apple Developer Program.
 
 ## Полезные команды

@@ -16,4 +16,10 @@ def test_windows_backup_uses_custom_dump_and_restore_verification():
     source = (Path(__file__).parents[1] / "scripts" / "backup-db.ps1").read_text(encoding="utf-8")
     assert "format=custom" in source
     assert "pg_restore --list" in source
+
+
+def test_restore_drill_refuses_production_database_and_validates_identifier():
+    source = (Path(__file__).parents[1] / "scripts" / "restore-drill.sh").read_text(encoding="utf-8")
+    assert "Refusing to run restore drill" in source
+    assert "DRILL_DB" in source and "POSTGRES_DB" in source
     assert "alter-$stamp.dump" in source

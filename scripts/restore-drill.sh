@@ -5,8 +5,17 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_FILE="${1:?Usage: restore-drill.sh /path/to/alter-YYYYMMDD-HHMMSS.dump}"
 DRILL_DB="${DRILL_DB:-alter_restore_drill}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
+POSTGRES_DB="${POSTGRES_DB:-alter_project_db}"
 
 [[ -s "$BACKUP_FILE" ]] || { echo "Backup is missing or empty" >&2; exit 1; }
+[[ "$DRILL_DB" != "$POSTGRES_DB" && "$DRILL_DB" != "alter_project_db" ]] || {
+  echo "Refusing to run restore drill against production database: $DRILL_DB" >&2
+  exit 1
+}
+[[ "$DRILL_DB" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
+  echo "DRILL_DB must be a simple PostgreSQL identifier" >&2
+  exit 1
+}
 cd "$PROJECT_DIR"
 
 cleanup() {
