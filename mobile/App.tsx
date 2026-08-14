@@ -781,16 +781,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { const result = await api.calendarConnect(token); await safeOpenUrl(result.authorization_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Google Calendar пока не настроен на сервере"); }
   };
-  const buySubscription = async (plan: "personal" | "ego") => {
-    setMenuError("");
-    try { const result = await api.createPayment(token, plan); await safeOpenUrl(result.payment_url); }
-    catch (err) { setMenuError(err instanceof Error ? err.message : "Оплата пока недоступна"); }
-  };
-  const buyCreditPack = async (pack: string) => {
-    setMenuError("");
-    try { const result = await api.createCreditPackPayment(token, pack); await safeOpenUrl(result.payment_url); }
-    catch (err) { setMenuError(err instanceof Error ? err.message : "Покупка кредитов пока недоступна"); }
-  };
+  const openWebBilling = async () => { setPlansVisible(false); setMenuVisible(false); await safeOpenUrl("https://alterai.ru/?billing=1"); };
+  const buySubscription = async (_plan: "personal" | "ego") => { await openWebBilling(); };
+  const buyCreditPack = async (_pack: string) => { await openWebBilling(); };
   const requestLocation = async (background: boolean) => {
     setMenuError("");
     const foreground = await Location.requestForegroundPermissionsAsync();

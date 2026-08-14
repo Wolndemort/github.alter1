@@ -1016,45 +1016,14 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
     if has_paid_subscription(await get_telegram_user(message.from_user.id, db_session)):
         await message.answer("У тебя уже есть активная подписка. Проверить срок можно через /status.")
         return
-    if not billing_configured():
-        await message.answer("Оплата пока настраивается. Попробуй немного позже.")
-        return
-    try:
-        me = await message.bot.get_me()
-        user = await get_or_create_user(message, db_session)
-        personal_card = await create_payment(db_session, user, me.username or "", "bank_card", "personal")
-        personal_sbp = await create_payment(db_session, user, me.username or "", "sbp", "personal")
-        ego_card = await create_payment(db_session, user, me.username or "", "bank_card", "ego")
-        ego_sbp = await create_payment(db_session, user, me.username or "", "sbp", "ego")
-        await message.answer(
-            "Выбери тариф ALTER:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=f"ALTER Personal · {price('personal')} ₽ · карта", url=personal_card)],
-                [InlineKeyboardButton(text="Personal · СБП", url=personal_sbp)],
-                [InlineKeyboardButton(text=f"ALTER Ego · {price('ego')} ₽ · карта", url=ego_card)],
-                [InlineKeyboardButton(text="Ego · СБП", url=ego_sbp)],
-            ]),
-        )
-        return
-    except Exception:
-        logging.exception("Failed to create plan payments")
-        await message.answer("Не удалось открыть тарифы. Попробуй ещё раз позже.")
-        return
-    try:
-        me = await message.bot.get_me()
-        user = await get_or_create_user(message, db_session)
-        card_url = await create_payment(db_session, user, me.username or "", "bank_card")
-        sbp_url = await create_payment(db_session, user, me.username or "", "sbp")
-        await message.answer(
-            f"Подписка ALTER на {config.SUBSCRIPTION_DAYS} дней — {price()} ₽.\n\nНажми кнопку для оплаты:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💳 Оплатить картой", url=card_url)],
-                [InlineKeyboardButton(text="💠 Оплатить через СБП", url=sbp_url)],
-            ]),
-        )
-    except Exception:
-        logging.exception("Failed to create YooKassa payment")
-        await message.answer("Не удалось создать оплату. Попробуй ещё раз позже.")
+    await message.answer(
+        "Оплату подписки ALTER безопаснее и удобнее провести на официальном сайте. "
+        "Там доступны Personal, Ego, срок до 30 дней и все способы оплаты.\n\n"
+        "После оплаты доступ автоматически синхронизируется с Telegram и mobile.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть оплату на alterai.ru", url="https://alterai.ru/?billing=1")],
+        ]),
+    )
 
 
 @router.message(Command("buy_credits"))
@@ -1062,20 +1031,13 @@ async def cmd_buy_credits(message: types.Message, db_session: AsyncSession):
     if is_owner(message.from_user.id):
         await message.answer("У владельца ALTER полный доступ без ограничений.")
         return
-    if not billing_configured():
-        await message.answer("Оплата пока настраивается. Попробуй позже.")
-        return
-    try:
-        me = await message.bot.get_me()
-        user = await get_or_create_user(message, db_session)
-        rows = []
-        for pack_id, pack in CREDIT_PACKS.items():
-            card_url = await create_credit_payment(db_session, user, me.username or "", "bank_card", pack_id)
-            rows.append([InlineKeyboardButton(text=f"{pack['name']} · {pack['price']} ₽", url=card_url)])
-        await message.answer("Докупить AI-кредиты. Пакеты суммируются, не сгорают и не продлевают подписку:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-    except Exception:
-        logging.exception("Failed to create credit pack payments")
-        await message.answer("Не удалось открыть пакеты кредитов. Попробуй ещё раз позже.")
+    await message.answer(
+        "AI-кредиты докупаются на официальном сайте ALTER. "
+        "Пакеты суммируются с остатком, не сгорают и не продлевают срок подписки.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть пакеты на alterai.ru", url="https://alterai.ru/?billing=1")],
+        ]),
+    )
 
 
 @router.message(Command("status"))
