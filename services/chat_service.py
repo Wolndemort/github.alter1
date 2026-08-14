@@ -223,6 +223,9 @@ class ChatService:
         active_reminders = [{"text": getattr(item, "text", ""), "remind_at": getattr(getattr(item, "remind_at", None), "isoformat", lambda: "")()} for item in reminders_result.scalars() if getattr(item, "text", None)]
         if active_reminders:
             memory["active_reminders"] = active_reminders
+        # Persist the user turn before any embedding/provider call so the
+        # database transaction does not stay open while recall is running.
+        await db.commit()
         if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
@@ -259,6 +262,10 @@ class ChatService:
                             remind_at=followup_at, follow_up_at=followup_at + timedelta(hours=2),
                             text="Как ты себя чувствуешь после разговора о здоровье?"))
 
+        # Calendar, weather and model providers are external work. Release
+        # the transaction before awaiting them; otherwise a slow reply can
+        # block session/notification inserts for every other request.
+        await db.commit()
         calendar_reply = await handle_calendar_request(text, user) if reply is None else None
         if reply is not None:
             pass
@@ -397,6 +404,9 @@ class ChatService:
         active_reminders = [{"text": getattr(item, "text", ""), "remind_at": getattr(getattr(item, "remind_at", None), "isoformat", lambda: "")()} for item in reminders_result.scalars() if getattr(item, "text", None)]
         if active_reminders:
             memory["active_reminders"] = active_reminders
+        # Persist the user turn before any embedding/provider call so the
+        # database transaction does not stay open while recall is running.
+        await db.commit()
         if should_recall_context(text):
             recalled = await recall(db, user_id, text)
             if recalled:
