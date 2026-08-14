@@ -9,6 +9,7 @@ export type MemorySection = { category: string; title: string; items: { label: s
 export type MemoryAudit = { category: string; key: string; confirmed: boolean; first_seen?: string; last_seen?: string; replacements: number };
 export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; description?: string; audit?: MemoryAudit[] };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
+export type AlterNotification = { id: string; title: string; body: string; kind: string; route: string; data?: Record<string, unknown>; read: boolean; created_at: string | null };
 export type CreditPack = { id: string; name: string; price: string; credits: number };
 export type Subscription = { active: boolean; trial_active?: boolean; trial_days?: number; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; credit_packs?: CreditPack[]; credit_balance?: number; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Agent = { status?: string; goal?: string; horizon_minutes?: number; tasks?: { id: string; title: string; status: string; depends_on?: string[]; result?: string }[]; current_task?: string; completed_steps?: number; total_steps?: number } | null;

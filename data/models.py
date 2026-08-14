@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 from typing import List, Optional
 from sqlalchemy import BigInteger, String, Float, func, ForeignKey, DateTime, Sequence
 from sqlalchemy.dialects.postgresql import JSONB
@@ -113,6 +114,22 @@ class Reminder(Base):
     follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     follow_up_sent: Mapped[bool] = mapped_column(default=False, server_default='false', index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Notification(Base):
+    """Durable cross-client notification inbox for one ALTER account."""
+
+    __tablename__ = 'notifications'
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    title: Mapped[str] = mapped_column(String(80))
+    body: Mapped[str] = mapped_column(String(500))
+    kind: Mapped[str] = mapped_column(String(32), server_default='general')
+    route: Mapped[str] = mapped_column(String(64), server_default='notifications')
+    data: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}')
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class MemoryChunk(Base):

@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
+import json
 import pytest
 from aiohttp import web
 from api import user_features_routes as routes
-from data.models import User
+from data.models import Notification, User
 
 class Request:
-    def __init__(self, payload=None, reminder_id=None): self.payload = payload or {}; self.match_info = {"reminder_id": str(reminder_id)}
+    def __init__(self, payload=None, reminder_id=None, notification_id=None): self.payload = payload or {}; self.match_info = {"reminder_id": str(reminder_id), "notification_id": str(notification_id)}; self.query = {}
     async def json(self): return self.payload
 
 class Result:
@@ -53,6 +54,20 @@ async def test_push_token_is_validated_and_persisted(monkeypatch, user):
     assert user.tech_stack["expo_push_token"] == "ExponentPushToken[abc]"
     with pytest.raises(web.HTTPBadRequest):
         await routes.push_token_route(Request({"token": "not-a-push-token"}))
+
+
+@pytest.mark.asyncio
+async def test_notification_inbox_and_read_routes(monkeypatch, user):
+    item = Notification(id="notification-1", user_id=7, title="ALTER", body="Вернёмся к важному", kind="push", data={})
+    item.created_at = datetime.now(timezone.utc)
+    db = Db(user); db.added = [item]
+    monkeypatch.setattr(routes, "async_session", lambda: db); monkeypatch.setattr(routes, "_bearer", lambda request: 7)
+    response = await routes.notifications_route(Request())
+    assert response.status == 200
+    payload = json.loads(response.text)
+    assert payload["unread"] == 1 and payload["notifications"][0]["id"] == "notification-1"
+    response = await routes.mark_notification_read_route(Request(notification_id="notification-1"))
+    assert response.status == 200 and item.read_at is not None
 
 
 @pytest.mark.asyncio

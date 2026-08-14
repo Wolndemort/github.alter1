@@ -1,4 +1,4 @@
-import type { Account, Agent, ApiErrorShape, AuthResponse, CreditPack, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
+import type { Account, Agent, AlterNotification, ApiErrorShape, AuthResponse, CreditPack, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -63,6 +63,9 @@ export class AlterApi {
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
+  notifications(token: string) { return this.request<{ unread: number; notifications: AlterNotification[] }>("/api/v1/notifications", {}, token); }
+  markNotificationRead(token: string, id: string) { return this.request<{ ok: boolean }>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }, token); }
+  markAllNotificationsRead(token: string) { return this.request<{ ok: boolean }>("/api/v1/notifications/read-all", { method: "POST" }, token); }
   createReminder(token: string, text: string, remind_at: string) { return this.request<Reminder>("/api/v1/reminders", { method: "POST", body: JSON.stringify({ text, remind_at }) }, token); }
   deleteReminder(token: string, id: number) { return this.request<{ ok: boolean }>(`/api/v1/reminders/${id}`, { method: "DELETE" }, token); }
   agent(token: string) { return this.request<{ agent: Agent }>("/api/v1/agent", {}, token); }

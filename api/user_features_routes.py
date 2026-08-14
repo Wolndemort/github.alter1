@@ -4,11 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from aiohttp import web
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from api.auth_routes import _bearer, _json
 from data.database import async_session
-from data.models import Reminder, User, WebAccount
+from data.models import Notification, Reminder, User, WebAccount
 from utils.action_log import read_actions
 from utils.scenarios import get_scenario, list_scenarios
 from utils.billing import has_owner_access
@@ -322,6 +322,62 @@ async def push_token_route(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def notifications_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    try:
+        limit = max(1, min(int(request.query.get("limit", "50")), 100))
+    except ValueError:
+        raise web.HTTPBadRequest(text="limit must be an integer")
+    async with async_session() as session:
+        result = await session.execute(
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(limit)
+        )
+        items = result.scalars().all()
+        return web.json_response({
+            "unread": sum(1 for item in items if item.read_at is None),
+            "notifications": [{
+                "id": item.id,
+                "title": item.title,
+                "body": item.body,
+                "kind": item.kind,
+                "route": item.route,
+                "data": item.data or {},
+                "read": item.read_at is not None,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            } for item in items],
+        })
+
+
+async def mark_notification_read_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    notification_id = str(request.match_info.get("notification_id") or "").strip()
+    if not notification_id:
+        raise web.HTTPBadRequest(text="notification id is required")
+    async with async_session() as session:
+        result = await session.execute(select(Notification).where(Notification.id == notification_id, Notification.user_id == user_id))
+        item = result.scalar_one_or_none()
+        if item is None:
+            raise web.HTTPNotFound(text="notification not found")
+        item.read_at = datetime.now(timezone.utc)
+        await session.commit()
+    return web.json_response({"ok": True})
+
+
+async def mark_all_notifications_read_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        await session.execute(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+            .values(read_at=datetime.now(timezone.utc))
+        )
+        await session.commit()
+    return web.json_response({"ok": True})
+
+
 async def reminders_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     async with async_session() as session:
@@ -372,6 +428,9 @@ def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/agent/run", agent_run_route)
     app.router.add_post("/api/v1/checkins", checkins_route)
     app.router.add_post("/api/v1/push-token", push_token_route)
+    app.router.add_get("/api/v1/notifications", notifications_route)
+    app.router.add_post("/api/v1/notifications/{notification_id}/read", mark_notification_read_route)
+    app.router.add_post("/api/v1/notifications/read-all", mark_all_notifications_read_route)
     app.router.add_get("/api/v1/reminders", reminders_route)
     app.router.add_post("/api/v1/reminders", create_reminder_route)
     app.router.add_delete("/api/v1/reminders/{reminder_id}", delete_reminder_route)

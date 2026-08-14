@@ -13,7 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, InteractionManager, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, SubscriptionResponse, api } from "./src/api/client";
+import { AccountResponse, AlterNotification, LocationContext, MediaJob, MemoryResponse, MyDayResponse, SubscriptionResponse, api } from "./src/api/client";
 
 type ScenarioItem = { id: string; title: string; prompt: string; mode: string };
 type ActionItem = { action: string; status: string; at: string; route?: string; tool?: string };
@@ -372,6 +372,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [reminders, setReminders] = useState<{ id: number; text: string; remind_at: string }[]>([]);
   const [remindersError, setRemindersError] = useState("");
   const [remindersVisible, setRemindersVisible] = useState(false);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [notifications, setNotifications] = useState<AlterNotification[]>([]);
+  const [notificationUnread, setNotificationUnread] = useState(0);
   // Reminders are created from the main chat (text or voice), not by a fixed
   // one-hour shortcut. The reminders screen is read/delete only.
   const [reminderText, setReminderText] = useState("");
@@ -438,8 +441,13 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   }, [idleShade]);
   const showPermissionOfferIfNeeded = () => { AsyncStorage.getItem(`alter_permission_offer_seen_${token}`).then((value) => { if (value !== "1") setPermissionOfferVisible(true); }).catch(() => setPermissionOfferVisible(true)); };
   const refreshAccount = () => { api.account(token).then((value) => { setAccount(value); if (value.legal_accepted) showPermissionOfferIfNeeded(); else setLegalVisible(true); }).catch((err) => setMenuError(userFacingError(err))); };
+  const loadNotifications = () => { api.notifications(token).then((result) => { setNotifications(result.notifications); setNotificationUnread(result.unread); }).catch((err) => setMenuError(userFacingError(err))); };
+  const markNotificationRead = async (id: string) => { try { await api.markNotificationRead(token, id); loadNotifications(); } catch (err) { setMenuError(userFacingError(err)); } };
+  const markAllNotificationsRead = async () => { try { await api.markAllNotificationsRead(token); loadNotifications(); } catch (err) { setMenuError(userFacingError(err)); } };
+  useEffect(() => { if (menuVisible && notificationUnread > 0) setNotificationsVisible(true); }, [menuVisible, notificationUnread]);
   useEffect(() => {
     refreshAccount();
+    loadNotifications();
     api.usage(token).then(setUsage).catch(() => undefined);
     api.subscription(token).then(setSubscriptionData).catch(() => undefined);
     api.settings(token).then(({ settings, checkins_enabled }) => {
@@ -470,6 +478,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const id = `push-${notification.request.identifier}`;
       const item = { id, role: "assistant", text: `${title}\n${body}`, createdAt: Date.now() } as ChatItem;
       setItems((current) => current.some((entry) => entry.id === id) ? current : [...current, item]);
+      setNotificationsVisible(true);
+      loadNotifications();
       autoScrollAfterUpdate.current = true;
       const key = `alter_push_inbox_${token}`;
       try {
@@ -1202,8 +1212,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={faqVisible} animationType="slide" onRequestClose={() => setFaqVisible(false)}>
     <SafeAreaView style={styles.faqScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>FAQ</Text><Pressable style={premiumStyles.menuAction} onPress={() => setFaqVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><ScrollView contentContainerStyle={styles.faqContent}><Text style={styles.faqText}>{faqText}</Text></ScrollView></SafeAreaView>
   </Modal>
+  <NotificationModal visible={notificationsVisible} items={notifications} unread={notificationUnread} onClose={() => setNotificationsVisible(false)} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} />
   <StatusBar style="light" /></SafeAreaView>;
 }
+
+function NotificationModal({ visible, items, unread, onClose, onRead, onReadAll }: { visible: boolean; items: AlterNotification[]; unread: number; onClose: () => void; onRead: (id: string) => void; onReadAll: () => void }) { return <Modal visible={visible} animationType="slide" onRequestClose={onClose}><SafeAreaView style={styles.memoryScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>Уведомления</Text><Pressable style={premiumStyles.menuAction} onPress={onClose}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><View style={styles.notificationToolbar}><Text style={styles.memoryKey}>{unread ? `${unread} непрочитанных` : "Всё прочитано"}</Text>{unread > 0 && <Pressable onPress={onReadAll}><Text style={styles.memoryForget}>Прочитать всё</Text></Pressable>}</View><FlatList data={items} keyExtractor={(item) => item.id} contentContainerStyle={styles.memoryList} ListEmptyComponent={<Text style={styles.emptyMemory}>Пока нет уведомлений. ALTER вернётся к важному, когда это будет уместно.</Text>} renderItem={({ item }) => <Pressable style={[styles.notificationRow, !item.read && styles.notificationUnread]} onPress={() => !item.read && onRead(item.id)}><View style={styles.notificationDot} /><View style={{ flex: 1 }}><Text style={styles.memoryValue}>{item.title}</Text><Text style={styles.notificationBody}>{item.body}</Text><Text style={styles.memoryKey}>{item.created_at ? new Date(item.created_at).toLocaleString() : ""}</Text></View>{!item.read && <Text style={styles.notificationCheck}>✓</Text>}</Pressable>} /></SafeAreaView></Modal>; }
 
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
@@ -1424,3 +1437,9 @@ const mediaStyles = StyleSheet.create({
 (permissionStyles as Record<string, unknown>).primaryText = { ...StyleSheet.flatten(permissionStyles.primaryText), color: "#111" };
 (authStyles as Record<string, unknown>).primary = { ...StyleSheet.flatten(authStyles.primary), backgroundColor: "#fff" };
 (authStyles as Record<string, unknown>).primaryText = { ...StyleSheet.flatten(authStyles.primaryText), color: "#111" };
+(styles as Record<string, unknown>).notificationToolbar = { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 8 };
+(styles as Record<string, unknown>).notificationRow = { marginHorizontal: 20, marginBottom: 8, padding: 14, borderRadius: 12, backgroundColor: "#101010", borderWidth: 1, borderColor: "#292929", flexDirection: "row", alignItems: "flex-start", gap: 10 };
+(styles as Record<string, unknown>).notificationUnread = { backgroundColor: "#171717", borderColor: "#777" };
+(styles as Record<string, unknown>).notificationDot = { width: 7, height: 7, borderRadius: 4, backgroundColor: "#777", marginTop: 6 };
+(styles as Record<string, unknown>).notificationBody = { color: "#aaa", fontSize: 13, lineHeight: 19, marginTop: 5, marginBottom: 5 };
+(styles as Record<string, unknown>).notificationCheck = { color: "#fff", fontSize: 18 };

@@ -20,6 +20,7 @@ export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; 
 export type CapabilityResponse = { version: string; categories: Record<string, string[]>; text: string; reply: string };
 export type SubscriptionResponse = { active: boolean; trial_active?: boolean; trial_days?: number; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; credit_packs?: CreditPack[]; credit_balance?: number; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
+export type AlterNotification = { id: string; title: string; body: string; kind: string; route: string; data?: Record<string, unknown>; read: boolean; created_at: string | null };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 export type YouTubeResult = { title: string; url: string; channel?: string; thumbnail?: string };
 export type CalendarEvent = { id?: string; summary: string; description?: string; location?: string; start: Record<string, string>; end: Record<string, string>; htmlLink?: string };
@@ -368,6 +369,9 @@ export class AlterApi {
   voiceGeneration(token: string, description: string) { return this.request<{ voice_id?: string; previews?: { audio_base_64?: string }[]; [key: string]: unknown }>("/api/v1/audio/voice-generation", { method: "POST", body: JSON.stringify({ description }) }, token); }
   setCheckins(token: string, enabled: boolean) { return this.request<{ checkins_enabled: boolean }>("/api/v1/checkins", { method: "POST", body: JSON.stringify({ enabled }) }, token); }
   registerPushToken(token: string, pushToken: string) { return this.request<{ ok: boolean }>("/api/v1/push-token", { method: "POST", body: JSON.stringify({ token: pushToken }) }, token); }
+  notifications(token: string) { return this.request<{ unread: number; notifications: AlterNotification[] }>("/api/v1/notifications", {}, token); }
+  markNotificationRead(token: string, id: string) { return this.request<{ ok: boolean }>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }, token); }
+  markAllNotificationsRead(token: string) { return this.request<{ ok: boolean }>("/api/v1/notifications/read-all", { method: "POST" }, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
   createReminder(token: string, text: string, remindAt: string) { return this.request<Reminder>("/api/v1/reminders", { method: "POST", body: JSON.stringify({ text, remind_at: remindAt }) }, token); }
   deleteReminder(token: string, id: number) { return this.request<{ ok: boolean }>(`/api/v1/reminders/${id}`, { method: "DELETE" }, token); }
