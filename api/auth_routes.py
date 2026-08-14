@@ -15,11 +15,21 @@ from config import config
 from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, create_credit_payment, configured as billing_configured, has_active_subscription, has_active_trial, has_owner_access, is_owner, price, PLANS, CREDIT_PACKS, normalize_plan, normalize_pack, pack_info, plan_info, credits_limit, effective_plan
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used, revoke_token
 
 _resolved_telegram_username: str | None = None
+
+
+def _web_payment_return_url(value: object) -> str | None:
+    """Accept only ALTER's own HTTPS return URL; mobile/Telegram keep legacy fallback."""
+    raw = str(value or "").strip()
+    parsed = urlparse(raw)
+    if parsed.scheme == "https" and parsed.netloc in {"alterai.ru", "www.alterai.ru"} and parsed.path in {"", "/", "/index.html"}:
+        return raw
+    return None
 
 
 async def telegram_bot_username() -> str:
@@ -403,7 +413,7 @@ async def create_credit_pack_payment_route(request: web.Request) -> web.Response
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         try:
-            url = await create_credit_payment(session, user, await telegram_bot_username(), "bank_card", pack)
+            url = await create_credit_payment(session, user, await telegram_bot_username(), "bank_card", pack, _web_payment_return_url(payload.get("return_url")))
         except RuntimeError as exc:
             raise web.HTTPBadGateway(text=str(exc))
         return web.json_response({"payment_url": url, "pack": pack, "credits": pack_info(pack)["credits"], "price_rub": pack_info(pack)["price"]})
@@ -453,7 +463,7 @@ async def create_app_payment_route(request: web.Request) -> web.Response:
         if user is None:
             raise web.HTTPUnauthorized(text="account not found")
         try:
-            url = await create_payment(session, user, await telegram_bot_username(), "bank_card", plan)
+            url = await create_payment(session, user, await telegram_bot_username(), "bank_card", plan, _web_payment_return_url(payload.get("return_url")))
         except RuntimeError as exc:
             raise web.HTTPBadGateway(text=str(exc))
         return web.json_response({"payment_url": url, "price_rub": str(price(plan)), "plan": plan, "days": config.SUBSCRIPTION_DAYS})

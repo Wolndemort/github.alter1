@@ -8,6 +8,12 @@ from api import auth_routes
 from data.models import User
 
 
+def test_web_payment_return_url_is_allowlisted():
+    assert auth_routes._web_payment_return_url("https://alterai.ru/?payment=success") == "https://alterai.ru/?payment=success"
+    assert auth_routes._web_payment_return_url("https://evil.example/?payment=success") is None
+    assert auth_routes._web_payment_return_url("javascript:alert(1)") is None
+
+
 class Result:
     def __init__(self, value): self.value = value
     def scalar_one_or_none(self): return self.value

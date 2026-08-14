@@ -124,7 +124,7 @@ def configured() -> bool:
     return bool(config.YUKASSA_SHOP_ID and config.YUKASSA_SECRET_KEY)
 
 
-async def create_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", plan: str = "personal") -> str:
+async def create_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", plan: str = "personal", return_url: str | None = None) -> str:
     if not configured():
         raise RuntimeError("YooKassa is not configured")
     key = f"alter-{user.id}-{uuid.uuid4().hex}"
@@ -139,7 +139,7 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
         "capture": True,
         "confirmation": {
             "type": "redirect",
-            "return_url": f"https://t.me/{bot_username}?start=payment_{key}",
+            "return_url": return_url or f"https://t.me/{bot_username}?start=payment_{key}",
         },
         "metadata": {"user_id": str(user.id), "payment_key": key, "plan": plan},
         "description": f"ALTER — доступ на {config.SUBSCRIPTION_DAYS} дней",
@@ -175,7 +175,7 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
     return data["confirmation"]["confirmation_url"]
 
 
-async def create_credit_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", pack: str = "credits_500") -> str:
+async def create_credit_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", pack: str = "credits_500", return_url: str | None = None) -> str:
     if not configured():
         raise RuntimeError("YooKassa is not configured")
     key = f"alter-credits-{user.id}-{uuid.uuid4().hex}"
@@ -187,7 +187,7 @@ async def create_credit_payment(session: AsyncSession, user: User, bot_username:
     await session.flush()
     payload = {
         "amount": {"value": f"{amount:.2f}", "currency": "RUB"}, "capture": True,
-        "confirmation": {"type": "redirect", "return_url": f"https://t.me/{bot_username}?start=payment_{key}"},
+        "confirmation": {"type": "redirect", "return_url": return_url or f"https://t.me/{bot_username}?start=payment_{key}"},
         "metadata": {"user_id": str(user.id), "payment_key": key, "type": "credit_pack", "pack": pack},
         "description": f"ALTER — {details['name']} (без продления подписки)",
     }

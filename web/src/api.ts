@@ -78,9 +78,9 @@ export class AlterApi {
   scenarios(token: string) { return this.request<{ items: Scenario[] }>("/api/v1/scenarios", {}, token); }
   startWorkflow(token: string, workflow_id: string, goal: string) { return this.request<{ workflow: Workflow }>("/api/v1/workflow/start", { method: "POST", body: JSON.stringify({ workflow_id, goal }) }, token); }
   nextWorkflow(token: string, complete = false) { return this.request<{ workflow: Workflow }>("/api/v1/workflow/next", { method: "POST", body: JSON.stringify({ complete }) }, token); }
-  createPayment(token: string, plan = "personal") { return this.request<{ payment_url: string; price_rub: string; plan: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST", body: JSON.stringify({ plan }) }, token); }
+  createPayment(token: string, plan = "personal", return_url = "https://alterai.ru/?payment=success") { return this.request<{ payment_url: string; price_rub: string; plan: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST", body: JSON.stringify({ plan, return_url }) }, token); }
   creditPacks(token: string) { return this.request<{ packs: CreditPack[] }>("/api/v1/credits/packs", {}, token); }
-  createCreditPackPayment(token: string, pack: string) { return this.request<{ payment_url: string }>("/api/v1/credits/packs/create-payment", { method: "POST", body: JSON.stringify({ pack }) }, token); }
+  createCreditPackPayment(token: string, pack: string, return_url = "https://alterai.ru/?payment=success") { return this.request<{ payment_url: string }>("/api/v1/credits/packs/create-payment", { method: "POST", body: JSON.stringify({ pack, return_url }) }, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   mediaHistory(token: string) { return this.request<{ items: MediaJob[] }>("/api/v1/media/history", {}, token); }
