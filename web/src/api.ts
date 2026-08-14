@@ -112,7 +112,7 @@ export class AlterApi {
   }
   async upload(token: string, path: string, fields: Record<string, string>, file: File, fileField = "file") {
     const form = new FormData(); Object.entries(fields).forEach(([key, value]) => form.append(key, value)); form.append(fileField, file);
-    return this.request<{ reply: string; transcript?: string; artifact_id?: string; document?: { filename: string; media_type: string } }>(path, { method: "POST", body: form }, token);
+    return this.request<{ reply: string; transcript?: string; artifact_id?: string; media_base64?: string; media_mime?: string; media_filename?: string; audio_base64?: string; audio_mime?: string; audio_filename?: string; document?: { filename: string; media_type: string } }>(path, { method: "POST", body: form }, token);
   }
   sendMedia(token: string, message: string, file: File) { return this.upload(token, "/api/v1/chat/media", { message }, file); }
   sendDocument(token: string, prompt: string, file: File, agent = false) { return this.upload(token, "/api/v1/chat/document", { prompt, agent: String(agent) }, file); }

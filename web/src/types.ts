@@ -4,7 +4,7 @@ export type Account = {
   payment_method_saved?: boolean; subscription_expires_at: string | null; auto_renew: boolean;
   subscription_plan?: string; legal_accepted?: boolean; trial_active?: boolean; trial_days?: number; credit_balance?: number;
 };
-export type ChatItem = { id: string; role: "user" | "assistant"; text: string; createdAt: number; mediaUrl?: string; mediaMime?: string; filename?: string; artifactId?: string; streaming?: boolean };
+export type ChatItem = { id: string; role: "user" | "assistant"; text: string; createdAt: number; mediaUrl?: string; mediaMime?: string; filename?: string; artifactId?: string; audioUrl?: string; audioMime?: string; audioAutoplay?: boolean; feedback?: string; streaming?: boolean };
 export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
 export type MemoryAudit = { category: string; key: string; confirmed: boolean; first_seen?: string; last_seen?: string; replacements: number };
 export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; description?: string; audit?: MemoryAudit[] };

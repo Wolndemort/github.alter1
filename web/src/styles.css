@@ -24,3 +24,9 @@
 .search-result { display:flex;gap:10px;align-items:flex-start;border-top:1px solid #242421;padding:12px 0;color:#ddd;text-decoration:none; }
 .search-result span { color:var(--accent); }.search-result strong,.search-result small { display:block; }.search-result strong { font-size:12px; }.search-result small { color:#777;font-size:10px;margin-top:4px; }.tool-copy { color:#888;font-size:12px;line-height:1.6; }
 @media (max-width:760px) { .tool-grid { grid-template-columns:1fr; }.tool-card:last-child { grid-column:auto; } }
+ .answer-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; padding-top:9px; border-top:1px solid #282824; }
+ .answer-actions button { min-width:30px; height:30px; border:1px solid #383832; border-radius:7px; background:#181816; color:#aaa; cursor:pointer; }
+ .answer-actions button:hover,.answer-actions button:focus { color:#111; background:var(--accent); border-color:var(--accent); }
+ .message-download { display:block; margin-top:10px; padding:8px 10px; border:1px solid #35352f; border-radius:7px; background:#1a1a17; color:#c8d98e; cursor:pointer; font-size:11px; }
+ .message-download:hover { background:#c8d98e; color:#111; }
+ .message-audio { display:block; max-width:100%; margin-top:10px; }
