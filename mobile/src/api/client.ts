@@ -8,7 +8,7 @@ export type ChatResponse = { reply: string; session_id: number; transcript?: str
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean; trial_active?: boolean; trial_days?: number;
 };
 export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
 export type MemoryAudit = { category: string; key: string; confirmed: boolean; first_seen?: string; last_seen?: string; replacements: number };
@@ -17,7 +17,7 @@ export type MyDayItem = { kind: string; title: string; detail: string; at: strin
 export type MyDayResponse = { date: string; focus: MyDayItem[]; next_step: { title: string; prompt: string }; counts: { reminders: number; open_loops: number; goals: number }; memory_permanent: boolean };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type CapabilityResponse = { version: string; categories: Record<string, string[]>; text: string; reply: string };
-export type SubscriptionResponse = { active: boolean; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
+export type SubscriptionResponse = { active: boolean; trial_active?: boolean; trial_days?: number; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 export type YouTubeResult = { title: string; url: string; channel?: string; thumbnail?: string };

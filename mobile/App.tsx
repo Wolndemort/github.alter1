@@ -13,7 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, InteractionManager, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, api } from "./src/api/client";
+import { AccountResponse, LocationContext, MediaJob, MemoryResponse, MyDayResponse, SubscriptionResponse, api } from "./src/api/client";
 
 type ScenarioItem = { id: string; title: string; prompt: string; mode: string };
 type ActionItem = { action: string; status: string; at: string; route?: string; tool?: string };
@@ -394,6 +394,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   const [emailVisible, setEmailVisible] = useState(false);
   const [openSection, setOpenSection] = useState<"profile" | "connections" | "tools" | "settings" | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number } | null>(null);
+  const [subscriptionData, setSubscriptionData] = useState<SubscriptionResponse | null>(null);
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
   const [mediaPickerBusy, setMediaPickerBusy] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null);
@@ -440,6 +441,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   useEffect(() => {
     refreshAccount();
     api.usage(token).then(setUsage).catch(() => undefined);
+    api.subscription(token).then(setSubscriptionData).catch(() => undefined);
     api.settings(token).then(({ settings, checkins_enabled }) => {
       setCheckinsEnabled(checkins_enabled);
       setProactiveEnabled(settings.proactive_enabled !== false);
