@@ -1,4 +1,4 @@
-from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, should_search_web, youtube_query
+from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, should_recall_context, should_search_web, youtube_query
 
 
 def test_ordinary_messages_do_not_trigger_web_search():
@@ -38,6 +38,11 @@ def test_web_request_is_detected_and_youtube_is_prioritized():
 
 def test_explicit_memory_fact_is_extracted():
     assert explicit_memory_fact("запомни, что у меня BMW") == "у меня BMW"
+
+
+def test_common_memory_questions_trigger_context_recall():
+    for request in ("Ты меня помнишь?", "Что ты обо мне знаешь?", "Расскажи, что ты обо мне знаешь"):
+        assert should_recall_context(request), request
 
 
 def test_youtube_query_removes_command_words():
