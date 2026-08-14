@@ -100,6 +100,8 @@ async def main():
                     raise web.HTTPServiceUnavailable(text="quota service unavailable")
             if request.method == "POST" and request.path.startswith(("/api/v1/chat/", "/api/v1/audio/", "/api/v1/youtube/", "/api/v1/media/")):
                 request_key = request.headers.get("Idempotency-Key")
+                if authenticated_user_id is not None and not request_key:
+                    raise web.HTTPBadRequest(text="Idempotency-Key header required for chargeable requests")
                 if request_key and authenticated_user_id is not None:
                     idempotency_redis = redis
                     idempotency_storage_key = await acquire_idempotency(idempotency_redis, authenticated_user_id, request.path, request_key)

@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from utils.idempotency import acquire, normalize_key, release
 
@@ -26,3 +27,8 @@ def test_idempotency_acquire_rejects_duplicate_and_release_allows_retry():
         await release(redis, first)
         assert await acquire(redis, 7, "youtube_audio", "request-1")
     asyncio.run(run())
+
+
+def test_http_chargeable_routes_require_an_idempotency_key():
+    source = (Path(__file__).parents[1] / "main.py").read_text(encoding="utf-8")
+    assert "Idempotency-Key header required for chargeable requests" in source
