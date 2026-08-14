@@ -45,6 +45,18 @@ function readableErrorBody(_body: string, status: number): string {
   return messages[status] || "Не удалось выполнить запрос. Попробуй ещё раз позже.";
 }
 
+function idempotencyKey(): string {
+  const random = globalThis.crypto?.randomUUID?.();
+  return random || `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function withIdempotency(init: RequestInit): Record<string, string> {
+  const headers = (init.headers || {}) as Record<string, string>;
+  return init.method?.toUpperCase() === "POST" && !headers["Idempotency-Key"] && !headers["idempotency-key"]
+    ? { "Idempotency-Key": idempotencyKey() }
+    : {};
+}
+
 export class AlterApi {
   constructor(private readonly baseUrl: string) {}
 
@@ -53,6 +65,7 @@ export class AlterApi {
       ...init,
       headers: {
         ...(init.headers || {}),
+        ...withIdempotency(init),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
@@ -70,6 +83,7 @@ export class AlterApi {
         signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
+          ...withIdempotency(init),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(init.headers || {}),
         },
@@ -134,7 +148,7 @@ export class AlterApi {
   }
   async sendMessageStream(token: string, message: string, location: LocationContext | null | undefined, onDelta: (text: string) => void, signal?: AbortSignal, onStatus?: (status: string) => void): Promise<ChatResponse> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/stream`, {
-      method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", "Idempotency-Key": idempotencyKey(), Authorization: `Bearer ${token}` },
       body: JSON.stringify({ message, ...(location ? { location } : {}) }), signal,
     });
     if (response.status === 404 || response.status === 405 || response.status === 409) return this.sendMessage(token, message, location, signal);
@@ -207,7 +221,7 @@ export class AlterApi {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/chat/media`, {
-        method: "POST", signal: controller.signal, headers: { Authorization: `Bearer ${token}` }, body: form,
+        method: "POST", signal: controller.signal, headers: { Authorization: `Bearer ${token}`, "Idempotency-Key": idempotencyKey() }, body: form,
       });
     } catch (error) {
       throw new ApiError(0, (error as { name?: string })?.name === "AbortError" ? "Вложение обрабатывается слишком долго." : "Сетевая ошибка при отправке вложения.");
@@ -261,7 +275,7 @@ export class AlterApi {
       form.append("file", { uri, type: kind === "image" ? "image/jpeg" : "video/mp4", name: `alter-source.${kind === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
     }
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/media/generate`, {
-      method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Idempotency-Key": idempotencyKey() }, body: form,
     });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.json() as Promise<{ media_type: string; filename: string; data_base64: string; artifact_id?: string }>;
@@ -302,7 +316,7 @@ export class AlterApi {
   workflow(token: string) { return this.request<{ workflow: Record<string, unknown> | null }>("/api/v1/workflow", {}, token); }
   nextWorkflowStep(token: string, complete = false) { return this.request<{ workflow: Record<string, unknown> | null }>("/api/v1/workflow/next", { method: "POST", body: JSON.stringify({ complete }) }, token); }
   async voiceReply(token: string, text: string) {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/voice/reply`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/v1/voice/reply`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(), Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
     if (!response.ok) throw new ApiError(response.status, readableErrorBody(await response.text(), response.status));
     return response.blob();
   }

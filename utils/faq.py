@@ -295,7 +295,11 @@ FAQ_LATEST_APPENDIX = FAQ_LATEST_APPENDIX.replace("\ufffd\ufffd", "п")
 
 
 def faq_text() -> str:
-    return FAQ_TEXT + FAQ_APPENDIX + FAQ_LATEST_APPENDIX
+    # Keep the public copy canonical even while older constants remain
+    # available to integrations that import them directly.
+    appendix = FAQ_APPENDIX.replace("\n15.", "\n16.", 1)
+    latest = FAQ_LATEST_APPENDIX.replace("\n16.", "\n17.", 1)
+    return FAQ_TEXT + appendix + latest
 
 
 def faq_html() -> str:

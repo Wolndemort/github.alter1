@@ -110,11 +110,22 @@ async def refund_credits(redis: Redis, user_id: int, cost: int) -> bool:
     key = _credits_key(user_id)
     amount = max(1, int(cost))
     try:
+        # A repeated failure callback must never make the monthly usage
+        # counter negative. Lua keeps the clamp atomic across workers.
+        eval_script = getattr(redis, "eval", None)
+        if callable(eval_script):
+            await eval_script(
+                "local v=tonumber(redis.call('GET',KEYS[1]) or '0'); v=math.max(0,v-ARGV[1]); redis.call('SET',KEYS[1],v); return v",
+                1, key, amount,
+            )
+            return True
         decrby = getattr(redis, "decrby", None)
         if callable(decrby):
-            await decrby(key, amount)
+            current = int(await redis.get(key) or 0)
+            await decrby(key, min(amount, max(0, current)))
         else:
-            for _ in range(amount):
+            current = int(await redis.get(key) or 0)
+            for _ in range(min(amount, max(0, current))):
                 await redis.decr(key)
         return True
     except (RedisError, AttributeError):
