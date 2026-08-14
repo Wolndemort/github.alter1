@@ -10,6 +10,10 @@ def test_extracts_identity_location_work_and_learning():
     }
 
 
+def test_name_does_not_absorb_following_clause():
+    assert extract_user_facts("Меня зовут Адам и я работаю в дизайне") ["identity"]["name"] == "Адам"
+
+
 def test_classifies_preferences_into_useful_categories():
     assert extract_user_facts("Я люблю чёрную одежду") == {"style_clothing": {"style": "чёрную одежду"}}
     assert extract_user_facts("Мне нравится электронная музыка") == {"music": {"likes": "электронная музыка"}}

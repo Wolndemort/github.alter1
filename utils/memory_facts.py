@@ -35,7 +35,10 @@ def extract_user_facts(text: str) -> dict:
             result["preferences"] = {"response_style": name}
 
     patterns = (
-        ("identity", "name", r"\b(?:меня зовут|мо[её] имя)\s+(?P<value>[^.!?\n]{2,80})"),
+        # Stop before a second question/clause (e.g. "Меня зовут Адам и я
+        # работаю..."). The old greedy capture could store the whole clause
+        # as the user's name and overwrite a correct value.
+        ("identity", "name", r"\b(?:меня зовут|мо[её] имя)\s+(?P<value>(?!(?:и|я|мой|моя|мне)\b)[^.!?\n,]{2,80}?)(?=\s+(?:и|я|мой|моя|мне)\b|[,.!?]|$)"),
         ("identity", "age", r"\b(?:мне|мой возраст)\s+(?P<value>\d{1,3})\s*(?:лет|года|год)?"),
         ("identity", "city", r"\b(?:я живу в|я из|проживаю в)\s+(?P<value>[^.!?\n]{2,80})"),
         ("identity", "language", r"\b(?:мой родной язык|я говорю на|я изучаю язык)\s+(?P<value>[^.!?\n]{2,80})"),
