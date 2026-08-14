@@ -38,7 +38,7 @@ from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
 from config import config
-from utils.billing import check_and_activate, configured as billing_configured, create_payment, has_active_subscription, has_active_trial, has_paid_subscription, is_owner, price, plan_info, credits_limit, normalize_plan, effective_plan
+from utils.billing import check_and_activate, configured as billing_configured, create_payment, create_credit_payment, CREDIT_PACKS, has_active_subscription, has_active_trial, has_paid_subscription, is_owner, price, plan_info, credits_limit, normalize_plan, effective_plan
 from services.account_linking import link_telegram_identity, resolve_telegram_user
 from services import google_calendar
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices
@@ -1055,6 +1055,27 @@ async def cmd_buy(message: types.Message, db_session: AsyncSession):
     except Exception:
         logging.exception("Failed to create YooKassa payment")
         await message.answer("Не удалось создать оплату. Попробуй ещё раз позже.")
+
+
+@router.message(Command("buy_credits"))
+async def cmd_buy_credits(message: types.Message, db_session: AsyncSession):
+    if is_owner(message.from_user.id):
+        await message.answer("У владельца ALTER полный доступ без ограничений.")
+        return
+    if not billing_configured():
+        await message.answer("Оплата пока настраивается. Попробуй позже.")
+        return
+    try:
+        me = await message.bot.get_me()
+        user = await get_or_create_user(message, db_session)
+        rows = []
+        for pack_id, pack in CREDIT_PACKS.items():
+            card_url = await create_credit_payment(db_session, user, me.username or "", "bank_card", pack_id)
+            rows.append([InlineKeyboardButton(text=f"{pack['name']} · {pack['price']} ₽", url=card_url)])
+        await message.answer("Докупить AI-кредиты. Пакеты суммируются, не сгорают и не продлевают подписку:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    except Exception:
+        logging.exception("Failed to create credit pack payments")
+        await message.answer("Не удалось открыть пакеты кредитов. Попробуй ещё раз позже.")
 
 
 @router.message(Command("status"))

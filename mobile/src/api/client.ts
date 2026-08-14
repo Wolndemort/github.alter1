@@ -8,8 +8,9 @@ export type ChatResponse = { reply: string; session_id: number; transcript?: str
 export type ChatHistoryResponse = { session_id: number | null; messages: { role: string; content: string }[] };
 export type AccountResponse = {
   id: number; name: string; email: string; telegram_linked: boolean;
-  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean; trial_active?: boolean; trial_days?: number;
+  subscription_expires_at: string | null; auto_renew: boolean; owner?: boolean; payment_method_saved?: boolean; subscription_plan?: string; legal_accepted?: boolean; trial_active?: boolean; trial_days?: number; credit_balance?: number;
 };
+export type CreditPack = { id: string; name: string; price: string; credits: number };
 export type MemorySection = { category: string; title: string; items: { label: string; value: string }[] };
 export type MemoryAudit = { category: string; key: string; confirmed: boolean; first_seen?: string; last_seen?: string; replacements: number };
 export type MemoryResponse = { sections: MemorySection[]; permanent?: boolean; description?: string; audit?: MemoryAudit[] };
@@ -17,7 +18,7 @@ export type MyDayItem = { kind: string; title: string; detail: string; at: strin
 export type MyDayResponse = { date: string; focus: MyDayItem[]; next_step: { title: string; prompt: string }; counts: { reminders: number; open_loops: number; goals: number }; memory_permanent: boolean };
 export type MediaJob = { id: string; user_id?: number; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; media_type?: string; filename?: string; data_base64?: string; error?: string };
 export type CapabilityResponse = { version: string; categories: Record<string, string[]>; text: string; reply: string };
-export type SubscriptionResponse = { active: boolean; trial_active?: boolean; trial_days?: number; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
+export type SubscriptionResponse = { active: boolean; trial_active?: boolean; trial_days?: number; plan: string; plans: { id: string; name: string; price: string; credits: number }[]; credit_packs?: CreditPack[]; credit_balance?: number; price_rub: string; days: number; expires_at: string | null; auto_renew: boolean };
 export type Reminder = { id: number; text: string; kind?: string; remind_at: string };
 export type LocationContext = { latitude: number; longitude: number; city?: string; region?: string; country?: string };
 export type YouTubeResult = { title: string; url: string; channel?: string; thumbnail?: string };
@@ -308,11 +309,13 @@ export class AlterApi {
   clearMemory(token: string) { return this.request<{ ok: boolean }>("/api/v1/memory", { method: "DELETE" }, token); }
   clearAllPersonalData(token: string) { return this.request<{ ok: boolean; deleted: string[] }>("/api/v1/account/personal-data", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE" }) }, token); }
   clearContext(token: string) { return this.request<{ ok: boolean }>("/api/v1/context", { method: "DELETE" }, token); }
-  usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
+  usage(token: string) { return this.request<{ used: number; limit: number; remaining: number; credit_balance: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<SubscriptionResponse>("/api/v1/subscription", {}, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
   removePaymentMethod(token: string) { return this.request<{ ok: boolean; auto_renew: boolean; payment_method_saved: boolean }>("/api/v1/subscription/payment-method", { method: "DELETE" }, token); }
   createPayment(token: string, plan: string = "personal") { return this.request<{ payment_url: string; price_rub: string; plan: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST", body: JSON.stringify({ plan }) }, token); }
+  creditPacks(token: string) { return this.request<{ packs: CreditPack[] }>("/api/v1/credits/packs", {}, token); }
+  createCreditPackPayment(token: string, pack: string) { return this.request<{ payment_url: string }>("/api/v1/credits/packs/create-payment", { method: "POST", body: JSON.stringify({ pack }) }, token); }
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }

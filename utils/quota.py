@@ -26,7 +26,16 @@ async def charge_user_id_credits(redis, user_id: int, cost: int, session_factory
         user = await session.get(User, user_id)
         if user is None:
             return False
-        return await charge_user_credits(redis, user, cost)
+        if await charge_user_credits(redis, user, cost):
+            return True
+        if int(user.credit_balance or 0) < max(1, int(cost)):
+            return False
+        user.credit_balance = int(user.credit_balance or 0) - max(1, int(cost))
+        await session.commit()
+        marker = f"alter:pack-reservation:{user_id}:{max(1, int(cost))}"
+        await redis.incr(marker)
+        await redis.expire(marker, 3600)
+        return True
 
 
 async def refund_user_id_credits(redis, user_id: int, cost: int, session_factory=async_session) -> bool:
@@ -38,4 +47,15 @@ async def refund_user_id_credits(redis, user_id: int, cost: int, session_factory
         account = account_result.scalar_one_or_none()
         if account and has_owner_access(user_id, account.email):
             return True
-    return await refund_credits(redis, user_id, cost)
+    amount = max(1, int(cost))
+    marker = f"alter:pack-reservation:{user_id}:{amount}"
+    reserved = int(await redis.get(marker) or 0)
+    if reserved > 0:
+        await redis.decr(marker)
+        async with session_factory() as session:
+            user = await session.get(User, user_id, with_for_update=True)
+            if user:
+                user.credit_balance = int(user.credit_balance or 0) + amount
+                await session.commit()
+                return True
+    return await refund_credits(redis, user_id, amount)

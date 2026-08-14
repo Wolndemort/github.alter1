@@ -1,4 +1,4 @@
-import type { Account, Agent, ApiErrorShape, AuthResponse, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
+import type { Account, Agent, ApiErrorShape, AuthResponse, CreditPack, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -56,7 +56,7 @@ export class AlterApi {
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   memory(token: string) { return this.request<MemoryResponse>("/api/v1/memory", {}, token); }
   myDay(token: string) { return this.request<MyDay>("/api/v1/my-day", {}, token); }
-  usage(token: string) { return this.request<{ used: number; limit: number; remaining: number }>("/api/v1/usage", {}, token); }
+  usage(token: string) { return this.request<{ used: number; limit: number; remaining: number; credit_balance: number }>("/api/v1/usage", {}, token); }
   subscription(token: string) { return this.request<Subscription>("/api/v1/subscription", {}, token); }
   faq(token: string) { return this.text("/api/v1/faq/text", token); }
   capabilities(token: string) { return this.request<{ version: string; categories: Record<string, string[]>; text: string; reply: string }>("/api/v1/capabilities", {}, token); }
@@ -76,6 +76,8 @@ export class AlterApi {
   startWorkflow(token: string, workflow_id: string, goal: string) { return this.request<{ workflow: Workflow }>("/api/v1/workflow/start", { method: "POST", body: JSON.stringify({ workflow_id, goal }) }, token); }
   nextWorkflow(token: string, complete = false) { return this.request<{ workflow: Workflow }>("/api/v1/workflow/next", { method: "POST", body: JSON.stringify({ complete }) }, token); }
   createPayment(token: string, plan = "personal") { return this.request<{ payment_url: string; price_rub: string; plan: string; days: number }>("/api/v1/subscription/create-payment", { method: "POST", body: JSON.stringify({ plan }) }, token); }
+  creditPacks(token: string) { return this.request<{ packs: CreditPack[] }>("/api/v1/credits/packs", {}, token); }
+  createCreditPackPayment(token: string, pack: string) { return this.request<{ payment_url: string }>("/api/v1/credits/packs/create-payment", { method: "POST", body: JSON.stringify({ pack }) }, token); }
   setAutoRenew(token: string, enabled: boolean) { return this.request<{ auto_renew: boolean }>("/api/v1/subscription/auto-renew", { method: "PATCH", body: JSON.stringify({ enabled }) }, token); }
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   mediaHistory(token: string) { return this.request<{ items: MediaJob[] }>("/api/v1/media/history", {}, token); }

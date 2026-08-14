@@ -8,7 +8,7 @@ from config import config
 from data.models import Payment, User
 from middleware.guard_middleware import GuardMiddleware
 from utils import billing
-from utils.billing import charge_recurring_payment, check_and_activate, create_payment, has_active_subscription
+from utils.billing import charge_recurring_payment, check_and_activate, create_credit_payment, create_payment, has_active_subscription
 from utils.keyboards import AUTO_RENEW_OFF_BUTTON, AUTO_RENEW_ON_BUTTON, BUY_SUBSCRIPTION_BUTTON, UNLINK_CARD_BUTTON, cabinet_keyboard
 
 
@@ -180,6 +180,28 @@ def test_ego_payment_uses_ego_amount_and_persists_plan(configured_yookassa):
     })
     assert run(check_and_activate(session, payment.idempotence_key)) is True
     assert user.tech_stack["subscription_plan"] == "ego"
+
+
+def test_credit_pack_activation_accumulates_without_extending_subscription(configured_yookassa):
+    user = User(id=7, first_name="Test", memory={}, tech_stack={})
+    user.credit_balance = 120
+    user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=8)
+    session = Session(user=user)
+    FakeClient.response = FakeResponse(201, {"id": "pack-pay", "confirmation": {"confirmation_url": "https://pay"}})
+    assert run(create_credit_payment(session, user, "alter_bot", pack="credits_500")) == "https://pay"
+    payment = session.added[-1]
+    payment.provider_payment_id = "pack-pay"
+    session.payment = payment
+    old_expiry = user.subscription_expires_at
+    FakeClient.response = FakeResponse(200, {
+        "status": "succeeded", "paid": True, "amount": {"value": "490.00", "currency": "RUB"},
+        "metadata": {"payment_key": payment.idempotence_key, "user_id": "7", "type": "credit_pack", "pack": "credits_500"},
+    })
+    assert run(check_and_activate(session, payment.idempotence_key)) is True
+    assert user.credit_balance == 620
+    assert user.subscription_expires_at == old_expiry
+    assert run(check_and_activate(session, payment.idempotence_key)) is True
+    assert user.credit_balance == 620
 
 
 def test_successful_payment_is_idempotent_after_first_activation(configured_yookassa):

@@ -38,6 +38,13 @@ PLANS = {
     "ego": {"name": "ALTER Ego", "price": "2990.00", "credits": config.EGO_MONTHLY_CREDITS},
 }
 
+# Purchased credits are account-wide, never expire and never extend a subscription.
+CREDIT_PACKS = {
+    "credits_500": {"name": "500 кредитов", "credits": 500, "price": "490.00"},
+    "credits_1500": {"name": "1500 кредитов", "credits": 1500, "price": "990.00"},
+    "credits_3500": {"name": "3500 кредитов", "credits": 3500, "price": "1990.00"},
+}
+
 
 def normalize_plan(value: object) -> str:
     return str(value or "personal").strip().casefold() if str(value or "personal").strip().casefold() in PLANS else "personal"
@@ -45,6 +52,15 @@ def normalize_plan(value: object) -> str:
 
 def plan_info(plan: object = "personal") -> dict:
     return PLANS[normalize_plan(plan)]
+
+
+def normalize_pack(value: object) -> str:
+    key = str(value or "").strip().casefold()
+    return key if key in CREDIT_PACKS else "credits_500"
+
+
+def pack_info(pack: object = "credits_500") -> dict:
+    return CREDIT_PACKS[normalize_pack(pack)]
 
 
 def credits_limit(user: User | None) -> int:
@@ -159,6 +175,38 @@ async def create_payment(session: AsyncSession, user: User, bot_username: str, p
     return data["confirmation"]["confirmation_url"]
 
 
+async def create_credit_payment(session: AsyncSession, user: User, bot_username: str, payment_method_type: str = "bank_card", pack: str = "credits_500") -> str:
+    if not configured():
+        raise RuntimeError("YooKassa is not configured")
+    key = f"alter-credits-{user.id}-{uuid.uuid4().hex}"
+    pack = normalize_pack(pack)
+    details = pack_info(pack)
+    amount = Decimal(details["price"])
+    payment = Payment(user_id=user.id, idempotence_key=key, amount_rub=str(amount), status="pending")
+    session.add(payment)
+    await session.flush()
+    payload = {
+        "amount": {"value": f"{amount:.2f}", "currency": "RUB"}, "capture": True,
+        "confirmation": {"type": "redirect", "return_url": f"https://t.me/{bot_username}?start=payment_{key}"},
+        "metadata": {"user_id": str(user.id), "payment_key": key, "type": "credit_pack", "pack": pack},
+        "description": f"ALTER — {details['name']} (без продления подписки)",
+    }
+    if payment_method_type == "sbp":
+        payload["payment_method_data"] = {"type": "sbp"}
+    elif config.YUKASSA_SAVE_PAYMENT_METHOD:
+        payload["save_payment_method"] = True
+    async with httpx.AsyncClient(auth=(config.YUKASSA_SHOP_ID, config.YUKASSA_SECRET_KEY.get_secret_value()), timeout=15) as client:
+        response = await client.post("https://api.yookassa.ru/v3/payments", json=payload, headers={"Idempotence-Key": key})
+    data = response.json()
+    if response.status_code not in {200, 201} or not data.get("id"):
+        await session.delete(payment)
+        await session.commit()
+        raise RuntimeError(data.get("description") or "YooKassa payment creation failed")
+    payment.provider_payment_id = data["id"]
+    await session.commit()
+    return data["confirmation"]["confirmation_url"]
+
+
 async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     payment = (await session.execute(
         select(Payment).where(Payment.idempotence_key == payment_key).with_for_update()
@@ -168,14 +216,16 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     async with httpx.AsyncClient(auth=(config.YUKASSA_SHOP_ID, config.YUKASSA_SECRET_KEY.get_secret_value()), timeout=15) as client:
         response = await client.get(f"https://api.yookassa.ru/v3/payments/{payment.provider_payment_id}")
     data = response.json()
-    plan = normalize_plan((data.get("metadata") or {}).get("plan"))
-    expected = price(plan)
     actual = data.get("amount") or {}
     metadata = data.get("metadata") or {}
     if response.status_code != 200 or data.get("status") != "succeeded" or not data.get("paid"):
         return False
     if metadata.get("payment_key") != payment_key or str(metadata.get("user_id")) != str(payment.user_id):
         return False
+    payment_type = metadata.get("type", "subscription")
+    pack = normalize_pack(metadata.get("pack"))
+    plan = normalize_plan(metadata.get("plan"))
+    expected = Decimal(pack_info(pack)["price"]) if payment_type == "credit_pack" else price(plan)
     if actual.get("currency") != "RUB" or Decimal(str(actual.get("value", "0"))) != expected:
         return False
     if payment.status == "succeeded":
@@ -184,15 +234,18 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     if not user:
         return False
     now = datetime.now(timezone.utc)
-    base = user.subscription_expires_at if has_active_subscription(user) else now
-    user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
-    settings = dict(user.tech_stack or {})
-    settings["subscription_plan"] = plan
-    user.tech_stack = settings
-    payment_method = (data.get("payment_method") or {}).get("id")
-    if payment_method:
-        user.payment_method_id = str(payment_method)
-    user.next_charge_at = user.subscription_expires_at
+    if payment_type == "credit_pack":
+        user.credit_balance = int(user.credit_balance or 0) + int(pack_info(pack)["credits"])
+    else:
+        base = user.subscription_expires_at if has_active_subscription(user) else now
+        user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
+        settings = dict(user.tech_stack or {})
+        settings["subscription_plan"] = plan
+        user.tech_stack = settings
+        payment_method = (data.get("payment_method") or {}).get("id")
+        if payment_method:
+            user.payment_method_id = str(payment_method)
+        user.next_charge_at = user.subscription_expires_at
     payment.status = "succeeded"
     payment.paid_at = now
     await session.commit()

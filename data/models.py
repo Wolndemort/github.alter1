@@ -30,6 +30,7 @@ class User(Base):
     auto_renew: Mapped[bool] = mapped_column(default=False, server_default='false')
     next_charge_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     subscription_reminders: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}')
+    credit_balance: Mapped[int] = mapped_column(BigInteger, default=0, server_default='0', nullable=False)
     legal_accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

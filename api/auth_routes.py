@@ -16,7 +16,7 @@ from data.database import async_session
 from services.auth_service import authenticate, issue_token, register, resend_verification, verify_email
 from datetime import datetime, timezone
 from services.account_linking import resolve_telegram_user
-from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_active_trial, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit, effective_plan
+from utils.billing import create_payment, create_credit_payment, configured as billing_configured, has_active_subscription, has_active_trial, has_owner_access, is_owner, price, PLANS, CREDIT_PACKS, normalize_plan, normalize_pack, pack_info, plan_info, credits_limit, effective_plan
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used, revoke_token
 
 _resolved_telegram_username: str | None = None
@@ -127,6 +127,7 @@ async def account_route(request: web.Request) -> web.Response:
             "trial_days": config.TRIAL_DAYS,
             "auto_renew": user.auto_renew,
             "subscription_plan": effective_plan(user.id, user, account.email),
+            "credit_balance": int(user.credit_balance or 0),
             "legal_accepted": user.legal_accepted_at is not None,
         })
 
@@ -359,7 +360,7 @@ async def usage_route(request: web.Request) -> web.Response:
         await close_redis(redis)
     plan = effective_plan(user_id, user)
     limit = credits_limit(user)
-    return web.json_response({"used": used, "limit": limit, "remaining": max(0, limit - used)})
+    return web.json_response({"used": used, "limit": limit, "remaining": max(0, limit - used), "credit_balance": int(user.credit_balance or 0)})
 
 
 async def subscription_route(request: web.Request) -> web.Response:
@@ -380,7 +381,32 @@ async def subscription_route(request: web.Request) -> web.Response:
             "auto_renew": user.auto_renew,
             "plan": current_plan,
             "plans": [{"id": key, **value} for key, value in PLANS.items()],
+            "credit_balance": int(user.credit_balance or 0),
+            "credit_packs": [{"id": key, **value} for key, value in CREDIT_PACKS.items()],
         })
+
+
+async def credit_packs_route(request: web.Request) -> web.Response:
+    _bearer(request)
+    return web.json_response({"packs": [{"id": key, **value} for key, value in CREDIT_PACKS.items()]})
+
+
+async def create_credit_pack_payment_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    if not billing_configured():
+        raise web.HTTPServiceUnavailable(text="payments are not configured")
+    payload = await _json(request)
+    pack = normalize_pack(payload.get("pack"))
+    async with async_session() as session:
+        from data.models import User
+        user = await session.get(User, user_id)
+        if user is None:
+            raise web.HTTPUnauthorized(text="account not found")
+        try:
+            url = await create_credit_payment(session, user, await telegram_bot_username(), "bank_card", pack)
+        except RuntimeError as exc:
+            raise web.HTTPBadGateway(text=str(exc))
+        return web.json_response({"payment_url": url, "pack": pack, "credits": pack_info(pack)["credits"], "price_rub": pack_info(pack)["price"]})
 
 
 async def auto_renew_route(request: web.Request) -> web.Response:
@@ -521,6 +547,8 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_patch("/api/v1/subscription/auto-renew", auto_renew_route)
     app.router.add_delete("/api/v1/subscription/payment-method", remove_payment_method_route)
     app.router.add_post("/api/v1/subscription/create-payment", create_app_payment_route)
+    app.router.add_get("/api/v1/credits/packs", credit_packs_route)
+    app.router.add_post("/api/v1/credits/packs/create-payment", create_credit_pack_payment_route)
     app.router.add_post("/api/v1/telegram/link", start_telegram_link_route)
     app.router.add_post("/api/v1/legal/accept", accept_legal_route)
     app.router.add_post("/api/v1/auth/login", login_route)

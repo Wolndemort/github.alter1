@@ -776,6 +776,11 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     try { const result = await api.createPayment(token, plan); await safeOpenUrl(result.payment_url); }
     catch (err) { setMenuError(err instanceof Error ? err.message : "Оплата пока недоступна"); }
   };
+  const buyCreditPack = async (pack: string) => {
+    setMenuError("");
+    try { const result = await api.createCreditPackPayment(token, pack); await safeOpenUrl(result.payment_url); }
+    catch (err) { setMenuError(err instanceof Error ? err.message : "Покупка кредитов пока недоступна"); }
+  };
   const requestLocation = async (background: boolean) => {
     setMenuError("");
     const foreground = await Location.requestForegroundPermissionsAsync();
@@ -1133,6 +1138,10 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     <View style={planStyles.backdrop}><View style={planStyles.sheet}><Text style={planStyles.title}>Выбери ALTER</Text><Text style={planStyles.subtitle}>Память, Telegram и мобильное приложение входят в оба тарифа.</Text>
       <Pressable style={planStyles.card} onPress={() => buySubscription("personal")}><Text style={planStyles.name}>ALTER Personal</Text><Text style={planStyles.price}>990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Личный чат · память · премиум-голос ElevenLabs · медиа · поиск · Telegram</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
       <Pressable style={[planStyles.card, planStyles.featured]} onPress={() => buySubscription("ego")}><Text style={planStyles.badge}>БОЛЬШЕ ВОЗМОЖНОСТЕЙ</Text><Text style={planStyles.name}>ALTER Ego</Text><Text style={planStyles.price}>2 990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Всё из Personal · ElevenLabs · изменение и очистка голоса · создание звуков и медиа · расширенные квоты · приоритет</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
+      <Text style={planStyles.sectionLabel}>ДОКУПИТЬ КРЕДИТЫ · НЕ ПРОДЛЕВАЮТ СРОК</Text>
+      <Pressable style={planStyles.card} onPress={() => void buyCreditPack("credits_500")}><Text style={planStyles.name}>500 кредитов · 490 ₽</Text><Text style={planStyles.features}>Суммируются с остатком и не сгорают</Text><Text style={planStyles.action}>КУПИТЬ ПАКЕТ</Text></Pressable>
+      <Pressable style={planStyles.card} onPress={() => void buyCreditPack("credits_1500")}><Text style={planStyles.name}>1500 кредитов · 990 ₽</Text><Text style={planStyles.features}>Суммируются с остатком и не сгорают</Text><Text style={planStyles.action}>КУПИТЬ ПАКЕТ</Text></Pressable>
+      <Pressable style={planStyles.card} onPress={() => void buyCreditPack("credits_3500")}><Text style={planStyles.name}>3500 кредитов · 1990 ₽</Text><Text style={planStyles.features}>Суммируются с остатком и не сгорают</Text><Text style={planStyles.action}>КУПИТЬ ПАКЕТ</Text></Pressable>
       <Pressable onPress={() => setPlansVisible(false)}><Text style={planStyles.cancel}>Закрыть</Text></Pressable>
     </View></View>
   </Modal>
@@ -1280,6 +1289,7 @@ const planStyles = StyleSheet.create({
   sheet: { backgroundColor: "#101010", borderRadius: 28, borderWidth: 1, borderColor: "#fff", padding: 20, gap: 12, shadowColor: "#fff", shadowOpacity: 0.35, shadowRadius: 28, elevation: 16 },
   title: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: 1 },
   subtitle: { color: "#aaa", fontSize: 13, lineHeight: 19, marginBottom: 4 },
+  sectionLabel: { color: "#b8d66f", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginTop: 8 },
   card: { backgroundColor: "#181818", borderRadius: 22, borderWidth: 1, borderColor: "#444", padding: 18, gap: 8 },
   featured: { borderColor: "#fff", shadowColor: "#fff", shadowOpacity: 0.28, shadowRadius: 18, elevation: 8 },
   badge: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 1.3 },
@@ -1292,7 +1302,7 @@ const planStyles = StyleSheet.create({
 });
 
 const linkStyles = StyleSheet.create({
-  link: { color: "#ffffff", textDecorationLine: "underline" },
+  link: { color: "#b8d66f", textDecorationLine: "underline" },
 });
 
 const answerActionStyles = StyleSheet.create({
