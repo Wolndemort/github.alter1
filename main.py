@@ -12,7 +12,7 @@ from data.models import WebAccount
 from handlers.user_handlers import router
 from middleware.db_middleware import DbSessionMiddleware
 from middleware.guard_middleware import GuardMiddleware
-from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request, cache_get, cache_set
+from utils.redis_store import create_redis, close_redis, allow_http_request, charge_request, cache_get, cache_set, is_token_revoked
 from utils.billing import has_owner_access, is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
@@ -72,6 +72,10 @@ async def main():
                 raise web.HTTPServiceUnavailable(text="rate limiter unavailable")
             expensive = request.path.startswith(("/api/v1/chat/", "/api/v1/audio/", "/api/v1/youtube/", "/api/v1/media/"))
             header = request.headers.get("Authorization", "")
+            if header.startswith("Bearer "):
+                presented_token = header[7:].strip()
+                if await is_token_revoked(redis, presented_token):
+                    raise web.HTTPUnauthorized(text="token revoked")
             if expensive and header.startswith("Bearer ") and config.APP_AUTH_SECRET:
                 try:
                     user_id = verify_token(header[7:].strip(), config.APP_AUTH_SECRET.get_secret_value())

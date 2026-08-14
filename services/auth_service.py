@@ -75,7 +75,7 @@ def _secret(secret: str) -> bytes:
 
 
 def issue_token(user_id: int, secret: str, *, now: int | None = None) -> str:
-    payload = {"sub": str(user_id), "exp": (now or int(time.time())) + TOKEN_TTL_SECONDS}
+    payload = {"sub": str(user_id), "exp": (now or int(time.time())) + TOKEN_TTL_SECONDS, "jti": str(uuid.uuid4())}
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
     signature = hmac.new(_secret(secret), body.encode(), hashlib.sha256).digest()
     return body + "." + base64.urlsafe_b64encode(signature).decode().rstrip("=")

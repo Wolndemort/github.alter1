@@ -1,6 +1,7 @@
 """Shared Redis primitives: FSM storage, short-lived cache and billing counters."""
 import json
 import secrets
+import hashlib
 from datetime import datetime, timezone
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -14,6 +15,19 @@ def create_redis() -> Redis:
 
 async def close_redis(redis: Redis) -> None:
     await redis.aclose()
+
+
+def revoked_token_key(token: str) -> str:
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    return f"alter:auth:revoked:{digest}"
+
+
+async def revoke_token(redis: Redis, token: str, ttl: int = 60 * 60 * 24 * 7) -> None:
+    await redis.set(revoked_token_key(token), "1", ex=ttl)
+
+
+async def is_token_revoked(redis: Redis, token: str) -> bool:
+    return bool(await redis.get(revoked_token_key(token)))
 
 
 async def cache_get(redis: Redis, key: str) -> str | None:

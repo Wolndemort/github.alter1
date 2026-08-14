@@ -139,6 +139,12 @@ export class AlterApi {
   me(token: string) {
     return this.request<MeResponse>("/api/v1/auth/me", {}, token);
   }
+  logout(token: string) {
+    return this.request<{ ok: boolean }>("/api/v1/auth/logout", { method: "POST" }, token);
+  }
+  rotateToken(token: string) {
+    return this.request<AuthResponse>("/api/v1/auth/rotate", { method: "POST" }, token);
+  }
 
   sendMessage(token: string, message: string, location?: LocationContext | null, signal?: AbortSignal) {
     return this.request<ChatResponse>("/api/v1/chat/messages", {

@@ -17,7 +17,7 @@ from services.auth_service import authenticate, issue_token, register, resend_ve
 from datetime import datetime, timezone
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, configured as billing_configured, has_active_subscription, has_active_trial, has_owner_access, is_owner, price, PLANS, normalize_plan, plan_info, credits_limit, effective_plan
-from utils.redis_store import close_redis, create_link_token, create_redis, credits_used
+from utils.redis_store import close_redis, create_link_token, create_redis, credits_used, revoke_token
 
 _resolved_telegram_username: str | None = None
 
@@ -478,6 +478,31 @@ async def me_route(request: web.Request) -> web.Response:
         return web.json_response({"id": user.id, "name": user.first_name, "subscription_expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None})
 
 
+async def logout_route(request: web.Request) -> web.Response:
+    """Revoke the presented bearer token until its natural expiry."""
+    token = request.headers.get("Authorization", "")[7:].strip()
+    user_id = _bearer(request)
+    del user_id
+    redis = create_redis()
+    try:
+        await revoke_token(redis, token)
+    finally:
+        await close_redis(redis)
+    return web.json_response({"ok": True})
+
+
+async def rotate_token_route(request: web.Request) -> web.Response:
+    """Atomically retire the current token and issue a fresh one."""
+    token = request.headers.get("Authorization", "")[7:].strip()
+    user_id = _bearer(request)
+    redis = create_redis()
+    try:
+        await revoke_token(redis, token)
+    finally:
+        await close_redis(redis)
+    return web.json_response({"access_token": issue_token(user_id, _auth_secret()), "token_type": "bearer"})
+
+
 def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/auth/register", register_route)
     app.router.add_post("/api/v1/auth/verify-email", verify_email_route)
@@ -500,3 +525,5 @@ def setup_auth_routes(app: web.Application) -> None:
     app.router.add_post("/api/v1/legal/accept", accept_legal_route)
     app.router.add_post("/api/v1/auth/login", login_route)
     app.router.add_get("/api/v1/auth/me", me_route)
+    app.router.add_post("/api/v1/auth/logout", logout_route)
+    app.router.add_post("/api/v1/auth/rotate", rotate_token_route)
