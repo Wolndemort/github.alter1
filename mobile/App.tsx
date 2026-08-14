@@ -618,7 +618,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     } catch (err) { setMenuError(err instanceof Error ? err.message : "Не удалось отредактировать документ"); }
     finally { setBusy(false); }
   };
-  const saveAudioResult = async (blob: Blob, label: string) => {
+  const saveAudioResult = async (blob: Blob, label: string): Promise<{ uri: string; filename: string }> => {
     if (!FileSystem.documentDirectory) throw new Error("Не удалось открыть хранилище устройства");
     const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
     const comma = dataUrl.indexOf(",");
@@ -626,6 +626,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     const uri = `${FileSystem.documentDirectory}${filename}`;
     await FileSystem.writeAsStringAsync(uri, comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, { encoding: FileSystem.EncodingType.Base64 });
     await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
+    return { uri, filename };
   };
   const runAudioAction = async (action: "transcribe" | "isolate" | "process") => {
     if (!attachment || attachment.type !== "audio" || busy) return;
@@ -674,6 +675,14 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     autoScrollAfterUpdate.current = true;
     Keyboard.dismiss(); setMessage(""); setAttachment(null); setItems((old) => [...old, { id: userMessageId, role: "user", text: currentAttachment?.type === "audio" ? "Голосовое сообщение" : currentAttachment ? `${text || "Вложение"} · ${currentAttachment.type}` : text }, { id: pendingId, role: "assistant", text: "" }]); setBusy(true); setActivity(currentAttachment ? "analyzing" : /найди|поищи|проверь|актуальн|новост|цену|погода/i.test(text) ? "searching" : /план|составь|распиши|подготовь|организуй/i.test(text) ? "planning" : "analyzing");
     try {
+      const youtubeUrl = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s]+|youtu\.be\/[^\s]+)/i)?.[0];
+      const asksForYoutubeAudio = Boolean(youtubeUrl && /скач|аудио|mp3|песн|музык|трек/i.test(text));
+      if (asksForYoutubeAudio) {
+        const blob = await api.youtubeAudio(token, youtubeUrl!);
+        const saved = await saveAudioResult(blob, "youtube");
+        setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: `${Date.now()}yt`, role: "assistant", text: "Готово — аудио из YouTube подготовлено.", audioUri: saved.uri, audioMime: "audio/mpeg", audioFilename: saved.filename }]);
+        return;
+      }
       if (currentAttachment) {
         try {
           const info = await FileSystem.getInfoAsync(currentAttachment.uri);
