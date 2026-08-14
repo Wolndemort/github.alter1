@@ -1,5 +1,6 @@
 {
-  "name": "ALTER — персональный интеллект",
+  "id": "/",
+  "name": "ALTER - Personal Intelligence",
   "short_name": "ALTER",
   "icons": [
     { "src": "/web-app-manifest-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
@@ -7,5 +8,8 @@
   ],
   "theme_color": "#050505",
   "background_color": "#050505",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/"
 }
