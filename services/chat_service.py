@@ -64,7 +64,10 @@ async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bo
     trace = tool_trace()
     if tool_mode:
         reply = _append_source_links(reply, trace)
-    if tool_mode and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
+    # Tool-aware generation is also used for ordinary text to keep its
+    # quality consistent with voice/non-streaming replies. Do not add a
+    # source footer when the model did not actually call a tool.
+    if tool_mode and trace and "http" not in reply.casefold() and "source:" not in reply.casefold() and "источник" not in reply.casefold():
         failed = any(str(item.get("status") or "") != "ok" for item in trace)
         note = "Источник: данные инструмента не получены, актуальные факты не подтверждены." if failed or not trace else "Источник: подключённый инструмент ALTER."
         reply = f"{reply.rstrip()}\n\n{note}"
