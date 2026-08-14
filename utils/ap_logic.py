@@ -149,6 +149,7 @@ def _bounded_memory(value, max_chars: int = 4500) -> dict:
     for category in ordered_categories:
         if remaining <= 0:
             break
+        facts = normalized[category]
         text = json.dumps({category: facts}, ensure_ascii=False)
         if len(text) <= remaining:
             bounded[category] = facts

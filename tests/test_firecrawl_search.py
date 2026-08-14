@@ -88,6 +88,8 @@ def test_firecrawl_limit_is_per_request_result_count_not_provider_quota(monkeypa
     monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", None)
     monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("secret"))
     monkeypatch.setattr(web_search.config, "FIRECRAWL_SEARCH_LIMIT", 10)
+    for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+        monkeypatch.setattr(web_search.config, name, None)
     monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     run(web_search.search_web("test"))
     assert calls[0][1]["json"]["limit"] == 10
