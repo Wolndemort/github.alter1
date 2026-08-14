@@ -826,17 +826,31 @@ async def generate_reply(messages, memory=None, search_results=None):
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         latest_request = _latest_user_message(messages)
+        raw_issues = assess_reply(raw_reply).issues
         if len(raw_reply) > 9000 or has_internal_leak(raw_reply):
-            logging.warning("Rejecting oversized model reply as possible reasoning leak: chars=%d", len(raw_reply))
-            response.choices[0].message.content = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — я отвечу коротко и по делу."
+            logging.warning(
+                "Rejecting model reply before public output: chars=%d issues=%s",
+                len(raw_reply), ",".join(raw_issues) or "internal_leak",
+            )
+            response.choices[0].message.content = "Не удалось надёжно сформировать ответ. Попробуй отправить голосовое ещё раз или напиши запрос текстом."
         reply = response.choices[0].message.content or "Не смог сформулировать ответ."
         if config.AI_DEEP_REVIEW_ENABLED and (_needs_deep_review(messages, search_results) or has_language_mismatch(reply, latest_request)):
             reply = await _deep_review_reply(messages, reply, search_results)
         reply = sanitize_public_reply(reply)
         reply = _append_source_links(reply, tool_trace())
-        if len(reply) > 9000 or has_internal_leak(reply) or has_language_mismatch(reply, latest_request):
-            logging.warning("Rejecting final reply as possible reasoning leak: chars=%d", len(reply))
-            reply = "Понял тебя. Сформулируй, пожалуйста, что именно нужно сделать — отвечу коротко и по делу."
+        final_issues: list[str] = []
+        if has_internal_leak(reply):
+            final_issues.append("internal_leak")
+        if has_language_mismatch(reply, latest_request):
+            final_issues.append("language_mismatch")
+        if len(reply) > 9000:
+            final_issues.append("too_long_public")
+        if final_issues:
+            logging.warning(
+                "Rejecting final model reply before public output: chars=%d issues=%s request_chars=%d",
+                len(reply), ",".join(dict.fromkeys(final_issues)), len(latest_request),
+            )
+            reply = "Не удалось надёжно сформировать ответ. Попробуй отправить голосовое ещё раз или напиши запрос текстом."
         quality = assess_reply(reply, has_sources=bool(search_results))
         increment("ai.reply.quality", score=quality.score)
         for issue in quality.issues:

@@ -200,8 +200,10 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
                 media_data=artifact.data, media_filename=artifact.filename, media_type=artifact.media_type, artifact_id=artifact_id,
             )
         from services.chat_service import ChatService
-        _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
-                                   operation="transcription", transcript=transcript)
+        # A voice note is ordinary chat after transcription.  Do not insert an
+        # assistant-role attachment description before ChatService builds the
+        # prompt: that synthetic message can make the model treat the
+        # transcript as metadata instead of the user's actual request.
         result = await ChatService().reply(db, user_id, prompt)
         return MediaChatResult(reply=result.reply, session_id=result.session_id, transcript=transcript)
     # Image edit/animation requests must use the source image.  Otherwise the
