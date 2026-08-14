@@ -2,6 +2,7 @@ import asyncio
 
 from services.chat_service import _quality_gated_chunks
 from utils.quality import PUBLIC_FALLBACK
+from utils.quality import repair_mojibake
 
 
 async def _stream(*parts):
@@ -40,3 +41,8 @@ def test_early_stream_does_not_release_internal_marker_in_prefix():
 
     chunks = asyncio.run(collect())
     assert "internal response mode" not in "".join(chunks).casefold()
+
+
+def test_quality_repairs_cp1251_mojibake_but_keeps_normal_cyrillic():
+    assert repair_mojibake("РџСЂРёРІРµС‚") == "Привет"
+    assert repair_mojibake("Привет, как дела?") == "Привет, как дела?"

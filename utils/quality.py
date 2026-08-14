@@ -14,6 +14,21 @@ class ReplyQuality:
     issues: tuple[str, ...]
 
 
+def _mojibake_score(value: str) -> int:
+    return sum(value.count(marker) for marker in ("Р", "С", "вЂ", "в„", "в™"))
+
+
+def repair_mojibake(value: str) -> str:
+    """Repair common UTF-8 decoded as Windows-1251 without touching normal Cyrillic."""
+    if _mojibake_score(value) < 3:
+        return value
+    try:
+        candidate = value.encode("cp1251").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    return candidate if _mojibake_score(candidate) < _mojibake_score(value) else value
+
+
 def has_internal_leak(reply: str) -> bool:
     """Return True when a model reply looks like exposed planning notes."""
     return "internal_details" in assess_reply(reply).issues
@@ -69,7 +84,7 @@ def has_language_mismatch(reply: str, request: str) -> bool:
 
 def sanitize_public_reply(reply: str) -> str:
     """Never expose prompts, roles, tool payloads, or planner notes to clients."""
-    value = str(reply or "").strip()
+    value = repair_mojibake(str(reply or "").strip())
     value = re.sub(r"</?answer(?:\s+[^>]*)?>", "", value, flags=re.IGNORECASE)
     value = re.sub(r"</?(?:internal|analysis|final)>", "", value, flags=re.IGNORECASE)
     value = value.strip()

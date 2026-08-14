@@ -409,7 +409,10 @@ class ChatService:
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
-        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools, early_stream=not use_tools)
+        # Hold text until the complete provider response is available. Early
+        # prefix streaming exposed half-formed tool/model continuations and
+        # made mobile render semantic fragments before the quality gate ran.
+        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools, early_stream=False)
         reply_parts = []
         async for chunk in gated_chunks:
             reply_parts.append(chunk)
