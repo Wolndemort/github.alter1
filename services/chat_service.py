@@ -408,6 +408,11 @@ class ChatService:
         # family facts, making the model claim it knew nothing about them.
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
+        # Do not keep the database transaction open while waiting for an
+        # external model/tool response. The stream route owns this session,
+        # so an uncommitted session insert here used to remain idle in
+        # transaction and block other web requests for the same user.
+        await db.commit()
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
         # Hold text until the complete provider response is available. Early
         # prefix streaming exposed half-formed tool/model continuations and
