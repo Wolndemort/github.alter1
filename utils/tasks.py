@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+from math import ceil
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -17,7 +18,7 @@ from utils.checkins import generate_contextual_checkin
 from utils.ap_logic import summarize_session
 from utils.memory_store import merge_memory_facts
 from utils.user_settings import DEFAULT_HEALTH_FOLLOWUP_HOURS, is_quiet_time, user_setting
-from utils.billing import charge_recurring_payment, create_payment, has_active_subscription, has_active_trial
+from utils.billing import charge_recurring_payment, credits_limit, has_active_subscription, has_active_trial, has_owner_access
 from utils.vector_memory import purge_expired
 from utils.memory_store import purge_expired_memory
 from utils.memory_quality import sanitize_summary
@@ -25,6 +26,8 @@ from utils.push_notifications import send_push
 from utils.weather import get_weather
 from services.agent_executor import model_agent_executor, run_agent_steps
 from utils.metrics_persistence import persist_metrics_snapshot
+from utils.personal_notifications import deliver_reminder, quota_reminder_text, subscription_reminder_text
+from utils.redis_store import close_redis, create_redis, credits_used
 
 
 def telegram_chat_id(user: User) -> int | None:
@@ -578,7 +581,7 @@ def subscription_expiry_reminder(days_left: int, first_name: str, auto_renew: bo
 
 
 async def monitor_subscription_expiry_reminders(bot: Bot):
-    """Send exactly one reminder per expiry date at 5, 3 and 1 day before expiry."""
+    """Send one personal reminder per expiry date at 5, 3 and 1 day before expiry."""
     while True:
         try:
             async with async_session() as db:
@@ -586,7 +589,6 @@ async def monitor_subscription_expiry_reminders(bot: Bot):
                 result = await db.execute(
                     select(User).options(selectinload(User.web_account)).where(User.subscription_expires_at > now).with_for_update(skip_locked=True)
                 )
-                bot_user = await bot.get_me()
                 for user in result.scalars().all():
                     if not user.subscription_expires_at or not has_active_subscription(user):
                         continue
@@ -595,29 +597,52 @@ async def monitor_subscription_expiry_reminders(bot: Bot):
                     if days_left not in {5, 3, 1}:
                         continue
                     expiry_key = user.subscription_expires_at.isoformat()
-                    marker = f"{expiry_key}:{days_left}"
-                    reminders = dict(user.subscription_reminders or {})
-                    if reminders.get(marker):
-                        continue
-                    chat_id = telegram_chat_id(user)
-                    if chat_id is None:
-                        continue
                     try:
-                        payment_url = await create_payment(db, user, bot_user.username or "", "bank_card")
-                        await bot.send_message(
-                            chat_id,
-                            subscription_expiry_reminder(days_left, user.first_name, bool(user.auto_renew)),
-                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(text="💳 Продлить подписку", url=payment_url)],
-                            ]),
+                        await deliver_reminder(
+                            db, user, bot, subscription_reminder_text(user, days_left),
+                            "ALTER · Доступ", f"subscription:{expiry_key}:{days_left}",
                         )
                     except Exception:
                         await db.rollback()
                         logging.exception("Subscription expiry reminder failed for user %s", user.id)
-                        continue
-                    reminders[marker] = now.isoformat()
-                    user.subscription_reminders = dict(list(reminders.items())[-30:])
-                    await db.commit()
         except Exception:
             logging.exception("Subscription expiry reminder monitor failed")
+        await asyncio.sleep(3600)
+
+
+async def monitor_quota_reminders(bot: Bot):
+    """Send one personal reminder as the shared monthly AI quota runs low."""
+    while True:
+        redis = create_redis()
+        try:
+            async with async_session() as db:
+                now = datetime.now(timezone.utc)
+                result = await db.execute(select(User).options(selectinload(User.web_account)))
+                for user in result.scalars().all():
+                    account = getattr(user, "web_account", None)
+                    if has_owner_access(user.id, account.email if account else None):
+                        continue
+                    if not (has_active_subscription(user) or has_active_trial(user)):
+                        continue
+                    limit = credits_limit(user)
+                    used = await credits_used(redis, user.id)
+                    remaining = max(0, limit - used)
+                    if remaining <= 0:
+                        level = "depleted"
+                    elif remaining <= max(3, ceil(limit * 0.1)):
+                        level = "low"
+                    else:
+                        continue
+                    try:
+                        await deliver_reminder(
+                            db, user, bot, quota_reminder_text(user, remaining, limit, level),
+                            "ALTER · Квота", f"quota:{now:%Y-%m}:{level}",
+                        )
+                    except Exception:
+                        await db.rollback()
+                        logging.exception("Quota reminder failed for user %s", user.id)
+        except Exception:
+            logging.exception("Quota reminder monitor failed")
+        finally:
+            await close_redis(redis)
         await asyncio.sleep(3600)

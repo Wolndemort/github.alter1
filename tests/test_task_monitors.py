@@ -136,15 +136,15 @@ async def test_expiry_monitor_sends_once_and_marks_expiry(monkeypatch):
     user.subscription_reminders = {}
     db = Db([user])
     monkeypatch.setattr(tasks, "async_session", lambda: Context(db))
-    async def payment(session, current, username, method): return "https://pay.example"
+    async def deliver(db_session, current, bot, text, title, marker):
+        current.subscription_reminders[marker] = "now"
+        await db_session.commit()
+        return True
     async def stop(seconds): raise StopLoop()
-    monkeypatch.setattr(tasks, "create_payment", payment)
+    monkeypatch.setattr(tasks, "deliver_reminder", deliver)
     monkeypatch.setattr(tasks.asyncio, "sleep", stop)
-    sent = []
     class Bot:
-        async def get_me(self): return SimpleNamespace(username="alter_bot")
-        async def send_message(self, user_id, text, **kwargs): sent.append((user_id, text, kwargs))
+        async def send_message(self, user_id, text, **kwargs): pass
     with pytest.raises(StopLoop): await tasks.monitor_subscription_expiry_reminders(Bot())
-    assert sent and sent[0][0] == 3
     assert user.subscription_reminders
     assert db.commits == 1
