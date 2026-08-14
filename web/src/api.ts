@@ -15,8 +15,8 @@ async function parseError(response: Response): Promise<never> {
     message = payload.detail || payload.message || payload.error || message;
   } catch { /* stable fallback for plain-text errors */ }
   if (response.status === 401) message = "Сессия закончилась. Войди в ALTER снова.";
-  if (response.status === 402) message = "Для этого действия нужна активная подписка.";
-  if (response.status === 429) message = "Лимит исчерпан. Попробуй позже.";
+  if (response.status === 402) message = "Доступ приостановлен: trial или подписка закончились. Память, история и настройки сохранены. Продолжить можно на alterai.ru.";
+  if (response.status === 429) message = "AI-квота исчерпана. Память и история сохранены — пополни баланс или дождись обновления лимита.";
   throw new ApiError(response.status, message);
 }
 

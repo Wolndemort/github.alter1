@@ -1,5 +1,6 @@
 import pytest
 from types import SimpleNamespace
+from datetime import datetime, timezone
 from middleware.guard_middleware import GuardMiddleware
 
 class Redis:
@@ -55,6 +56,32 @@ async def test_guard_blocks_unpaid_and_reports_to_user(monkeypatch):
     async def handler(event, data): seen.append(True)
     await __import__("middleware.guard_middleware", fromlist=["GuardMiddleware"]).GuardMiddleware(object())(handler, event, {"db_session": Db()})
     assert not seen and answers
+
+
+@pytest.mark.asyncio
+async def test_expired_access_blocks_before_consuming_quota_or_mutating_data(monkeypatch):
+    from data.models import User
+    user = User(id=8, first_name="Adam", memory={"goals": ["ship"]}, tech_stack={}, subscription_reminders={"old": "marker"})
+    user.legal_accepted_at = datetime.now(timezone.utc)
+    answers = []
+    async def answer(text): answers.append(text)
+    event = SimpleNamespace(from_user=SimpleNamespace(id=8), text="hello", answer=answer)
+    class Db:
+        async def get(self, model, ident): return user
+    async def resolved(*args): return user
+    async def allowed(*args): return True
+    charged = []
+    async def charge(*args): charged.append(args); return True
+    monkeypatch.setattr("middleware.guard_middleware.resolve_telegram_user", resolved)
+    monkeypatch.setattr("middleware.guard_middleware.has_active_subscription", lambda _: False)
+    monkeypatch.setattr("middleware.guard_middleware.charge_request", allowed)
+    monkeypatch.setattr("middleware.guard_middleware.allow_request", allowed)
+    monkeypatch.setattr("middleware.guard_middleware.charge_credits", charge)
+    await GuardMiddleware(object())(lambda event, data: allowed(), event, {"db_session": Db()})
+    assert not charged
+    assert user.memory == {"goals": ["ship"]}
+    assert user.subscription_reminders == {"old": "marker"}
+    assert any("Память, история и настройки сохранены" in text for text in answers)
 
 
 @pytest.mark.asyncio

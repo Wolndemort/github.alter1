@@ -30,10 +30,10 @@ export function userFacingError(error: unknown): string {
   const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : 0;
   const message = error instanceof Error ? error.message : "Не удалось выполнить запрос.";
   if (status === 401) return "Сессия закончилась. Войди в ALTER снова.";
-  if (status === 402) return "Для этого действия нужна активная подписка.";
+  if (status === 402) return "Доступ приостановлен: trial или подписка закончились. Память, история и настройки сохранены. Продолжить можно на alterai.ru.";
   if (status === 409) return "Запрос уже выполняется. Подожди результат.";
   if (status === 413) return "Файл слишком большой. Выбери файл меньшего размера.";
-  if (status === 429) return "Лимит исчерпан. Попробуй позже.";
+  if (status === 429) return "AI-квота исчерпана. Память и история сохранены — пополни баланс или дождись обновления лимита.";
   if (status >= 500) return "Сервис временно недоступен. Попробуй ещё раз через минуту.";
   if (status === 0 && message === "Сетевая ошибка") return message;
   if (status === 0 && /сетевая|интернет/i.test(message)) return "Сетевая ошибка. Проверь интернет и попробуй ещё раз.";

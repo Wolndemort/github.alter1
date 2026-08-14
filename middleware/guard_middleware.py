@@ -61,7 +61,10 @@ class GuardMiddleware(BaseMiddleware):
                     linked_email = linked_email or getattr(account, "email", None)
                 owner_access = has_owner_access(user.id, linked_email)
                 data["owner_access"] = owner_access
-                data["billing_allowed"] = True if owner_access else await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
+                data["billing_allowed"] = True if (
+                    owner_access or _billing_exempt(event) or
+                    (linked_user is not None and not has_active_subscription(linked_user))
+                ) else await charge_request(self.redis, user.id, config.DAILY_REQUEST_LIMIT)
             except RedisError:
                 logging.exception("Redis billing check failed; blocking request")
                 data["billing_allowed"] = False
@@ -72,6 +75,16 @@ class GuardMiddleware(BaseMiddleware):
                 data["spam_allowed"] = False
             db_user = linked_user if user is not None else None
             owner_access = data.get("owner_access", has_owner_access(user.id, getattr(db_user, "email", None)))
+            db_session = data.get("db_session")
+            if db_session is not None:
+                db_user = await resolve_telegram_user(db_session, user.id)
+                if (db_user is None or not db_user.legal_accepted_at) and not _legal_exempt(event):
+                    answer = getattr(event, "answer", None)
+                    if answer:
+                        await answer("Сначала открой /start, ознакомься с документами и нажми «Принять и продолжить».")
+                    return None
+                if not owner_access:
+                    data["subscription_allowed"] = has_active_subscription(db_user)
             if data.get("db_session") is not None and not owner_access and not _billing_exempt(event):
                 answer = getattr(event, "answer", None)
                 if not data["spam_allowed"]:
@@ -82,28 +95,18 @@ class GuardMiddleware(BaseMiddleware):
                     if answer:
                         await answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
                     return None
+                subscription_allowed = has_active_subscription(db_user)
+                data["subscription_allowed"] = subscription_allowed
+                if not subscription_allowed and not _billing_exempt(event):
+                    if answer:
+                        await answer("Доступ ALTER приостановлен: trial или подписка закончились. Память, история и настройки сохранены. Продолжить можно через /buy на alterai.ru.")
+                    return None
                 data["credits_allowed"] = True if _credit_exempt(event) else await charge_credits(self.redis, user.id, 1, credits_limit(db_user))
                 if not data["credits_allowed"]:
                     if answer:
                         await answer("Месячный лимит AI-запросов исчерпан. Лимит обновится в начале следующего месяца.")
                     return None
-            db_session = data.get("db_session")
-            if db_session is not None:
-                db_user = await resolve_telegram_user(db_session, user.id)
-                if (db_user is None or not db_user.legal_accepted_at) and not _legal_exempt(event):
-                    answer = getattr(event, "answer", None)
-                    if answer:
-                        await answer("Сначала открой /start, ознакомься с документами и нажми «Принять и продолжить».")
-                    return None
-            if db_session is not None and not owner_access:
-                subscription_allowed = has_active_subscription(db_user)
-                data["subscription_allowed"] = subscription_allowed
-                if not subscription_allowed and not _billing_exempt(event):
-                    answer = getattr(event, "answer", None)
-                    if answer:
-                        await answer("Доступ ALTER доступен после оплаты подписки на 30 дней. Используй /buy, чтобы оплатить.")
-                    return None
-            else:
+            if db_session is not None and owner_access:
                 data["subscription_allowed"] = True
         try:
             return await handler(event, data)

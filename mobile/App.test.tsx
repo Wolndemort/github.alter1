@@ -29,7 +29,7 @@ jest.mock("@react-navigation/native-stack", () => {
 describe("ALTER mobile critical screens", () => {
   it("translates common API failures into concise user-facing messages", () => {
     expect(userFacingError({ status: 401 })).toContain("Сессия закончилась");
-    expect(userFacingError({ status: 429 })).toContain("Лимит исчерпан");
+    expect(userFacingError({ status: 429 })).toContain("AI-квота исчерпана");
     expect(userFacingError({ status: 413 })).toContain("Файл слишком большой");
     expect(userFacingError(new Error("Сетевая ошибка"))).toBe("Сетевая ошибка");
   });
