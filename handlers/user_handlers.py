@@ -1046,6 +1046,13 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
     if is_owner(message.from_user.id):
         await message.answer("Ты владелец ALTER — доступ без подписки.")
     elif user and not has_paid_subscription(user):
+        redis = create_redis()
+        try:
+            used = await credits_used(redis, user.id)
+        finally:
+            await close_redis(redis)
+        limit = credits_limit(user)
+        quota_line = f"\nКвота: {max(0, limit - used)} из {limit} AI-кредитов осталось · баланс пакетов: {int(user.credit_balance or 0)}"
         pending_payments = (await db_session.execute(
             select(Payment).where(Payment.user_id == user.id, Payment.status == "pending")
             .order_by(Payment.created_at.desc())
@@ -1058,12 +1065,18 @@ async def cmd_status(message: types.Message, db_session: AsyncSession):
                 logging.exception("Failed to refresh pending YooKassa payment")
         if has_paid_subscription(user):
             expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
-            await message.answer(f"Оплата подтверждена, подписка активна до {expires}.")
+            await message.answer(f"Оплата подтверждена, подписка активна до {expires}.{quota_line}")
         else:
-            await message.answer("Платёж ещё не подтверждён. Если уже оплатил, подожди минуту и повтори /status.")
+            await message.answer(f"Платёж ещё не подтверждён. Если уже оплатил, подожди минуту и повтори /status.{quota_line}")
     elif has_paid_subscription(user):
         expires = user.subscription_expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
-        await message.answer(f"Подписка активна до {expires}.")
+        redis = create_redis()
+        try:
+            used = await credits_used(redis, user.id)
+        finally:
+            await close_redis(redis)
+        limit = credits_limit(user)
+        await message.answer(f"Подписка активна до {expires}.\nКвота: {max(0, limit - used)} из {limit} AI-кредитов осталось · баланс пакетов: {int(user.credit_balance or 0)}")
     else:
         await message.answer("Активной подписки нет. Используй /buy, чтобы получить доступ на 30 дней.")
 
