@@ -386,8 +386,11 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
                 memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
-        system = _stream_system_prompt(text, memory, use_tools=use_tools)
-        system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text)
+        # Keep durable memory at the very end of the system message. The
+        # upstream prompt guard preserves the tail when the policy is long;
+        # placing the mode marker after memory used to cut off identity and
+        # family facts, making the model claim it knew nothing about them.
+        system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         streamer = stream_chat_with_tools(working) if use_tools else stream_text_reply(working)
         gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools, early_stream=not use_tools)
