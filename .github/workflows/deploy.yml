@@ -29,7 +29,9 @@ jobs:
         with:
           node-version: '20.19.4'
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            mobile/package-lock.json
+            web/package-lock.json
 
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
@@ -70,11 +72,22 @@ jobs:
           npx tsc --noEmit
           npm test -- --runInBand --testTimeout=30000 --testPathIgnorePatterns=App.test.tsx
 
+      - name: Run web checks
+        working-directory: web
+        timeout-minutes: 6
+        run: |
+          npm ci --no-audit --no-fund
+          npm test -- --run
+          npm run build
+
       - name: Validate Compose
         run: docker compose config --quiet
 
       - name: Build Docker image
         run: docker build -t alter-ci .
+
+      - name: Build web image
+        run: docker build -t alter-web-ci web
 
   deploy:
     needs: checks
