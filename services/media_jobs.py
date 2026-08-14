@@ -15,6 +15,7 @@ from utils.redis_store import close_redis, create_redis
 from utils.quota import refund_user_id_credits
 
 QUEUE_KEY = "alter:media_jobs"
+HEARTBEAT_KEY = "alter:media_worker:heartbeat"
 
 
 def _key(job_id: str) -> str:
@@ -123,6 +124,11 @@ async def _run(payload: dict, redis) -> None:
 
 async def media_job_worker() -> None:
     redis = create_redis()
+    async def heartbeat() -> None:
+        while True:
+            await redis.set(HEARTBEAT_KEY, str(datetime.now(timezone.utc).timestamp()), ex=60)
+            await asyncio.sleep(15)
+    heartbeat_task = asyncio.create_task(heartbeat())
     try:
         while True:
             item = await redis.blpop(QUEUE_KEY, timeout=0)
@@ -134,4 +140,7 @@ async def media_job_worker() -> None:
             except (TypeError, json.JSONDecodeError, KeyError):
                 logging.exception("invalid media job payload")
     finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+        await redis.delete(HEARTBEAT_KEY)
         await close_redis(redis)

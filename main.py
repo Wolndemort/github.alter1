@@ -16,7 +16,7 @@ from utils.redis_store import create_redis, close_redis, allow_http_request, cha
 from utils.billing import has_owner_access, is_owner
 from services.auth_service import verify_token
 from redis.exceptions import RedisError
-from utils.runtime import check_dependencies
+from utils.runtime import check_dependencies, check_readiness
 from utils.tasks import monitor_agents, monitor_checkins, monitor_daily_briefs, monitor_memory_cleanup, monitor_personality_imprint, monitor_reminders, monitor_subscription_renewals, monitor_subscription_expiry_reminders
 from utils.payment_webhook import handle_yookassa_webhook
 from api.auth_routes import setup_auth_routes
@@ -57,7 +57,11 @@ async def main():
         idempotency_storage_key = None
         authenticated_user_id = None
         if request.path.startswith("/api/") and request.path not in {"/api/v1/usage"}:
-            remote = request.remote or "unknown"
+            # nginx is the only public entry point and overwrites X-Real-IP
+            # from its socket peer. Using it avoids one shared limiter bucket
+            # for every client behind the reverse proxy; never trust the
+            # client-controlled X-Forwarded-For chain here.
+            remote = request.headers.get("X-Real-IP") or request.remote or "unknown"
             try:
                 if not await allow_http_request(redis, remote, config.HTTP_RATE_LIMIT, config.HTTP_RATE_WINDOW_SECONDS):
                     raise web.HTTPTooManyRequests(text="too many requests")
@@ -110,7 +114,7 @@ async def main():
         return web.json_response({"ok": True, "service": "alter"})
 
     async def readiness(request):
-        if not await check_dependencies(redis, engine):
+        if not await check_readiness(redis, engine):
             raise web.HTTPServiceUnavailable(text="dependencies unavailable")
         return web.json_response({"ok": True, "ready": True})
 

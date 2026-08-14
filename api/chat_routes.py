@@ -62,6 +62,11 @@ def _voice_preview_audio(generated: object) -> dict:
 async def chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
     payload = await _json(request)
+    message_text = str(payload.get("message") or "").strip()
+    if not message_text:
+        raise web.HTTPBadRequest(text="message required")
+    charged_cost = 0
+    requested_audio_effect = detect_audio_action(message_text) == "effect"
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -77,11 +82,12 @@ async def chat_route(request: web.Request) -> web.Response:
         if not owner_access:
             redis = create_redis()
             try:
-                if not await charge_user_id_credits(redis, user_id, 1, async_session):
+                reservation_cost = 20 if requested_audio_effect else 1
+                if not await charge_user_id_credits(redis, user_id, reservation_cost, async_session):
                     raise web.HTTPTooManyRequests(text="monthly AI limit reached")
+                charged_cost = reservation_cost
             finally:
                 await close_redis(redis)
-        message_text = str(payload.get("message") or "").strip()
         # Keep capability inventory deterministic across Telegram and mobile;
         # do not send this question through a generic model that may answer
         # with a vague "tell me what to do" prompt.
@@ -109,13 +115,7 @@ async def chat_route(request: web.Request) -> web.Response:
                 raise web.HTTPBadGateway(text=str(exc))
             items = voices.get("voices", []) if isinstance(voices, dict) else []
             return web.json_response({"reply": "Доступные голоса: " + ", ".join(str(item.get("name") or item.get("voice_id")) for item in items[:30]), "voices": items})
-        if detect_audio_action(payload.get("message", "")) == "effect":
-            audio_redis = create_redis()
-            try:
-                if not await charge_user_id_credits(audio_redis, user_id, 20, async_session):
-                    raise web.HTTPTooManyRequests(text="monthly audio limit reached")
-            finally:
-                await close_redis(audio_redis)
+        if requested_audio_effect:
             audio_result = await process_audio_action(payload.get("message", ""), b"")
             if audio_result:
                 answer, audio = audio_result
@@ -130,7 +130,21 @@ async def chat_route(request: web.Request) -> web.Response:
             location = payload.get("location")
             result = await ChatService().reply(session, user_id, payload.get("message", ""), location) if location else await ChatService().reply(session, user_id, payload.get("message", ""))
         except ValueError as exc:
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
             raise web.HTTPBadRequest(text=str(exc))
+        except Exception:
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
+            raise
     payload = {"reply": result.reply, "session_id": result.session_id}
     if hasattr(result, "transcript"):
         payload["transcript"] = result.transcript
@@ -384,9 +398,21 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
         except asyncio.CancelledError:
             increment("ai.reply.cancelled")
             logging.info("Streaming chat cancelled by client user_id=%s", user_id)
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
             raise
         except ElevenLabsError as exc:
             logging.info("Voice generation was rejected user_id=%s reason=%s", user_id, str(exc)[:240])
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
             await response.write(("data: " + json.dumps({"type": "done", "reply": str(exc), "voice_id": None}, ensure_ascii=False) + "\n\n").encode("utf-8"))
         except MediaGenerationError as exc:
             if charged_cost:
@@ -399,6 +425,12 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
             await response.write(("data: " + json.dumps({"type": "done", "reply": "Не удалось создать медиафайл: " + str(exc)[:240]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
         except Exception:
             logging.exception("Streaming chat failed")
+            if charged_cost:
+                refund_redis = create_redis()
+                try:
+                    await refund_user_id_credits(refund_redis, user_id, charged_cost, async_session)
+                finally:
+                    await close_redis(refund_redis)
             await response.write(("data: " + json.dumps({"type": "error", "message": "stream failed"}) + "\n\n").encode("utf-8"))
         finally:
             await response.write_eof()
@@ -447,12 +479,7 @@ async def history_route(request: web.Request) -> web.Response:
 
 async def media_chat_route(request: web.Request) -> web.Response:
     user_id = _bearer(request)
-    redis = create_redis()
-    try:
-        if not await charge_user_id_credits(redis, user_id, 20, async_session):
-            raise web.HTTPTooManyRequests(text="monthly media limit reached")
-    finally:
-        await close_redis(redis)
+    charged = False
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -490,10 +517,22 @@ async def media_chat_route(request: web.Request) -> web.Response:
                         raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES, actual_size=size)
                     chunks.append(chunk)
                 data = b"".join(chunks)
+        redis = create_redis()
         try:
+            if not await charge_user_id_credits(redis, user_id, 20, async_session):
+                raise web.HTTPTooManyRequests(text="monthly media limit reached")
+            charged = True
             result = await media_reply(session, user_id, prompt, content_type, data, filename)
         except ValueError as exc:
+            if charged:
+                await refund_user_id_credits(redis, user_id, 20, async_session)
             raise web.HTTPBadRequest(text=str(exc))
+        except Exception:
+            if charged:
+                await refund_user_id_credits(redis, user_id, 20, async_session)
+            raise
+        finally:
+            await close_redis(redis)
     payload = {"reply": result.reply, "session_id": result.session_id, "transcript": result.transcript}
     if result.audio:
         payload.update({"audio_base64": base64.b64encode(result.audio).decode("ascii"), "audio_filename": result.audio_filename or "alter-audio.mp3", "audio_mime": "audio/mpeg"})
@@ -585,6 +624,10 @@ async def media_generate_route(request: web.Request) -> web.Response:
             append_action(user, "billing", "refunded", credits=cost, provider=config.MEDIA_PROVIDER, route="media")
             logging.warning("media generation failed user=%s kind=%s provider=%s elapsed_ms=%d error=%s", user_id, kind, config.MEDIA_PROVIDER, int((time.monotonic() - started_at) * 1000), str(exc)[:240])
             raise web.HTTPBadRequest(text=str(exc))
+        except Exception:
+            await refund_user_id_credits(redis, user_id, cost, async_session)
+            append_action(user, "billing", "refunded", credits=cost, provider=config.MEDIA_PROVIDER, route="media")
+            raise
         finally:
             await close_redis(redis)
         logging.info("media generation success user=%s kind=%s provider=%s model=%s bytes=%d elapsed_ms=%d cost=%d", user_id, kind, config.MEDIA_PROVIDER, (config.FAL_TEXT_VIDEO_MODEL if kind == "video" and source is None else config.FAL_VIDEO_MODEL if kind == "video" else config.FAL_TEXT_IMAGE_MODEL if source is None else config.FAL_IMAGE_MODEL), len(artifact.data), int((time.monotonic() - started_at) * 1000), cost)
@@ -655,16 +698,16 @@ async def media_history_route(request: web.Request) -> web.Response:
 async def voice_reply_route(request: web.Request) -> web.Response:
     """Synthesize a short, explicitly requested mobile voice reply."""
     user_id = _bearer(request)
+    payload = await _json(request)
+    text = sanitize_public_reply(payload.get("text"))
+    if not text:
+        raise web.HTTPBadRequest(text="text required")
     redis = create_redis()
     try:
         if not await charge_user_id_credits(redis, user_id, 5, async_session):
             raise web.HTTPTooManyRequests(text="monthly voice limit reached")
     finally:
         await close_redis(redis)
-    payload = await _json(request)
-    text = sanitize_public_reply(payload.get("text"))
-    if not text:
-        raise web.HTTPBadRequest(text="text required")
     async with async_session() as session:
         from data.models import User, WebAccount
         user = await session.get(User, user_id)
@@ -688,6 +731,11 @@ async def voice_reply_route(request: web.Request) -> web.Response:
             await close_redis(refund_redis)
         raise web.HTTPBadGateway(text="voice service temporarily unavailable")
     if not audio:
+        refund_redis = create_redis()
+        try:
+            await refund_user_id_credits(refund_redis, user_id, 5, async_session)
+        finally:
+            await close_redis(refund_redis)
         raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
     return web.Response(body=audio, content_type="audio/wav")
 

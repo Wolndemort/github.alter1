@@ -100,7 +100,7 @@ data: {"type":"done"}
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ reply: "seen", session_id: 4 }) });
     await new AlterApi("https://alter.example").sendMedia("token", "describe", "file:///photo.jpg", "image");
     expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/chat/media", expect.objectContaining({
-      method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData),
+      method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token", "Idempotency-Key": expect.any(String) }), body: expect.any(FormData),
     }));
   });
 
@@ -108,7 +108,7 @@ data: {"type":"done"}
     (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ media_type: "image/png", data_base64: "aA==" }) });
     await new AlterApi("https://alter.example").generateMedia("token", "make it cinematic", "file:///photo.jpg", "image");
     expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/media/generate", expect.objectContaining({
-      method: "POST", headers: { Authorization: "Bearer token" },
+      method: "POST", headers: expect.objectContaining({ Authorization: "Bearer token", "Idempotency-Key": expect.any(String) }),
     }));
   });
 
@@ -156,6 +156,6 @@ data: {"type":"done"}
   it("downloads YouTube audio with authorization", async () => {
     (fetch as jest.Mock).mockResolvedValue({ ok: true, blob: async () => new Blob(["audio"]) });
     await expect(new AlterApi("https://alter.example").youtubeAudio("token", "https://youtu.be/x")).resolves.toBeInstanceOf(Blob);
-    expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/youtube/audio", expect.objectContaining({ method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer token" } }));
+      expect(fetch).toHaveBeenCalledWith("https://alter.example/api/v1/youtube/audio", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "Content-Type": "application/json", Authorization: "Bearer token", "Idempotency-Key": expect.any(String) }) }));
   });
 });
