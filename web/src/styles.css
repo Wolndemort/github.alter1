@@ -42,6 +42,8 @@
   .content-panel { width:100%; min-height:calc(100dvh - 56px - env(safe-area-inset-top)); overflow-y:auto; -webkit-overflow-scrolling:touch; padding:28px 18px calc(36px + env(safe-area-inset-bottom)); }
   .panel-header { max-width:none; }
   .memory-intro, .billing-status { align-items:flex-start; }
+  .memory-intro > div, .billing-status > div { min-width:0; }
+  .quota-summary { align-items:flex-start; flex-direction:column; gap:6px; }
   .plan-grid { grid-template-columns:1fr; }
   .reminder-form { grid-template-columns:1fr; }
   .job-list article { gap:10px; flex-wrap:wrap; }
@@ -56,11 +58,24 @@
   input, textarea, select { font-size:16px; }
 }
 
+@media (max-width:760px) {
+  .onboarding-overlay { align-items:flex-start; padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)); overflow-y:auto; }
+  .onboarding-card { max-height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .voice-setting { align-items:flex-start; flex-wrap:wrap; gap:10px; }
+  .voice-setting > div { min-width:0; flex:1 1 180px; }
+  .voice-setting select { width:100%; min-width:0; max-width:100%; }
+  .inline-form { min-width:0; }
+  .inline-form input { min-width:0; flex:1; }
+  .segmented { max-width:100%; overflow-x:auto; }
+}
+
 @media (max-width:380px) {
   .chat-panel { padding-left:10px; padding-right:10px; }
   .message-bubble { padding:11px 12px; }
   .chat-heading h1, .panel-header h1 { font-size:27px; }
   .answer-actions button { min-width:36px; }
+  .content-panel { padding-left:14px; padding-right:14px; }
+  .billing-status, .memory-intro { padding:14px; }
 }
 
 .notification-launcher { position:fixed; right:24px; bottom:24px; z-index:8; width:46px; height:46px; border:1px solid #555; border-radius:50%; background:#111; color:#fff; box-shadow:0 10px 30px #000; font-size:20px; }
@@ -141,4 +156,5 @@
  .diagnostics-modal { position:relative; width:min(980px,100%); max-height:92vh; overflow:auto; background:#0d0d0c; border:1px solid #444; border-radius:14px; padding:22px; box-shadow:0 20px 80px #000; }
  .diagnostics-modal .content-panel { padding:0; max-width:none; }
  .diagnostics-grid { grid-template-columns:repeat(3,1fr); margin-top:20px; }
- @media (max-width:760px) { .diagnostics-grid { grid-template-columns:repeat(2,1fr); } .diagnostics-launcher { right:10px; bottom:10px; } }
+@media (max-width:760px) { .diagnostics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .diagnostics-launcher { right:10px; bottom:10px; } }
+@media (max-width:380px) { .diagnostics-grid { grid-template-columns:1fr; } }

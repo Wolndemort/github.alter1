@@ -1138,7 +1138,8 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     </Pressable>
   </Modal>
   <Modal visible={plansVisible} transparent animationType="fade" onRequestClose={() => setPlansVisible(false)}>
-    <View style={planStyles.backdrop}><View style={planStyles.sheet}><Text style={planStyles.title}>Выбери ALTER</Text><Text style={planStyles.subtitle}>Память, Telegram и мобильное приложение входят в оба тарифа.</Text>
+    <View style={planStyles.backdrop}><View style={planStyles.sheet}><ScrollView contentContainerStyle={planStyles.content} showsVerticalScrollIndicator={false} bounces={false}>
+      <Text style={planStyles.title}>Выбери ALTER</Text><Text style={planStyles.subtitle}>Память, Telegram и мобильное приложение входят в оба тарифа.</Text>
       <Pressable style={planStyles.card} onPress={() => buySubscription("personal")}><Text style={planStyles.name}>ALTER Personal</Text><Text style={planStyles.price}>990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Личный чат · память · премиум-голос ElevenLabs · медиа · поиск · Telegram</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
       <Pressable style={[planStyles.card, planStyles.featured]} onPress={() => buySubscription("ego")}><Text style={planStyles.badge}>БОЛЬШЕ ВОЗМОЖНОСТЕЙ</Text><Text style={planStyles.name}>ALTER Ego</Text><Text style={planStyles.price}>2 990 ₽ <Text style={planStyles.period}>/ месяц</Text></Text><Text style={planStyles.features}>Всё из Personal · ElevenLabs · изменение и очистка голоса · создание звуков и медиа · расширенные квоты · приоритет</Text><Text style={planStyles.action}>ПОДПИСАТЬСЯ</Text></Pressable>
       <Text style={planStyles.sectionLabel}>ДОКУПИТЬ КРЕДИТЫ · НЕ ПРОДЛЕВАЮТ СРОК</Text>
@@ -1146,7 +1147,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       <Pressable style={planStyles.card} onPress={() => void buyCreditPack("credits_1500")}><Text style={planStyles.name}>1500 кредитов · 990 ₽</Text><Text style={planStyles.features}>Суммируются с остатком и не сгорают</Text><Text style={planStyles.action}>КУПИТЬ ПАКЕТ</Text></Pressable>
       <Pressable style={planStyles.card} onPress={() => void buyCreditPack("credits_3500")}><Text style={planStyles.name}>3500 кредитов · 1990 ₽</Text><Text style={planStyles.features}>Суммируются с остатком и не сгорают</Text><Text style={planStyles.action}>КУПИТЬ ПАКЕТ</Text></Pressable>
       <Pressable onPress={() => setPlansVisible(false)}><Text style={planStyles.cancel}>Закрыть</Text></Pressable>
-    </View></View>
+    </ScrollView></View></View>
   </Modal>
   <Modal visible={voiceCreatorVisible} transparent animationType="fade" onRequestClose={() => setVoiceCreatorVisible(false)}>
     <View style={permissionStyles.backdrop}><View style={permissionStyles.card}><Text style={permissionStyles.kicker}>ELEVENLABS</Text><Text style={permissionStyles.title}>Создать голос</Text><Text style={permissionStyles.body}>Опиши голос обычными словами. Например: спокойный низкий голос для подкаста.</Text><TextInput value={voiceDescription} onChangeText={setVoiceDescription} placeholder="Описание голоса" placeholderTextColor="#777" multiline style={styles.voiceDescriptionInput} /><Pressable style={[permissionStyles.primary, { opacity: voiceDescription.trim() && !busy ? 1 : 0.45 }]} onPress={createVoice} disabled={!voiceDescription.trim() || busy}><Text style={permissionStyles.primaryText}>{busy ? "Создаём…" : "Создать голос"}</Text></Pressable><Pressable onPress={() => setVoiceCreatorVisible(false)}><Text style={permissionStyles.later}>Отмена</Text></Pressable></View></View>
@@ -1291,16 +1292,17 @@ const styles: any = StyleSheet.create({
 const reminderComposerStyle = { flexDirection: "row" as const, gap: 8, padding: 20, alignItems: "center" as const };
 
 const planStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.88)", justifyContent: "center", padding: 18 },
-  sheet: { backgroundColor: "#101010", borderRadius: 28, borderWidth: 1, borderColor: "#fff", padding: 20, gap: 12, shadowColor: "#fff", shadowOpacity: 0.35, shadowRadius: 28, elevation: 16 },
-  title: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: 1 },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.88)", justifyContent: "center", paddingHorizontal: 14, paddingVertical: 28 },
+  sheet: { width: "100%", maxHeight: "100%", flexShrink: 1, backgroundColor: "#101010", borderRadius: 24, borderWidth: 1, borderColor: "#fff", shadowColor: "#fff", shadowOpacity: 0.35, shadowRadius: 28, elevation: 16, overflow: "hidden" },
+  content: { padding: 16, gap: 10 },
+  title: { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: 1 },
   subtitle: { color: "#aaa", fontSize: 13, lineHeight: 19, marginBottom: 4 },
   sectionLabel: { color: "#b8d66f", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginTop: 8 },
-  card: { backgroundColor: "#181818", borderRadius: 22, borderWidth: 1, borderColor: "#444", padding: 18, gap: 8 },
+  card: { backgroundColor: "#181818", borderRadius: 18, borderWidth: 1, borderColor: "#444", padding: 15, gap: 7 },
   featured: { borderColor: "#fff", shadowColor: "#fff", shadowOpacity: 0.28, shadowRadius: 18, elevation: 8 },
   badge: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 1.3 },
-  name: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  price: { color: "#fff", fontSize: 24, fontWeight: "900" },
+  name: { color: "#fff", fontSize: 19, fontWeight: "800" },
+  price: { color: "#fff", fontSize: 23, fontWeight: "900" },
   period: { color: "#999", fontSize: 12, fontWeight: "400" },
   features: { color: "#bbb", fontSize: 13, lineHeight: 19 },
   action: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.4, marginTop: 4 },
