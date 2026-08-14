@@ -149,7 +149,14 @@
  .diagnostics-history > div { display:flex; justify-content:space-between; gap:16px; border-bottom:1px solid #20201e; padding:9px 0; color:#999; font:11px 'DM Mono'; }
  .quota-summary { display:flex; justify-content:space-between; gap:16px; align-items:baseline; margin:0 0 20px; padding:15px 18px; border:1px solid #292925; border-radius:10px; background:#111; }
  .quota-summary strong { font-size:18px; color:#fff; }
- .quota-summary span { color:#888; font-size:11px; }
+.quota-summary span { color:#888; font-size:11px; }
+.main-area > .content-panel:has(+ .content-panel) { margin-bottom:0; padding-bottom:24px; border:1px solid #292925; border-bottom:0; border-radius:14px 14px 0 0; background:#0d0d0c; }
+.main-area > .content-panel + .content-panel { margin-top:0; padding-top:0; border:1px solid #292925; border-top:0; border-radius:0 0 14px 14px; background:#0d0d0c; }
+.main-area > .content-panel + .content-panel > .panel-header { display:none; }
+.main-area > .content-panel + .content-panel::before { content:"ДОПОЛНИТЕЛЬНЫЕ КРЕДИТЫ"; display:block; margin:0 0 14px; color:#888; font:10px 'DM Mono'; letter-spacing:.16em; }
+.main-area > .content-panel + .content-panel .plan-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.main-area > .content-panel + .content-panel .plan-grid article { padding:14px; gap:7px; }
+.main-area > .content-panel + .content-panel .plan-grid article > strong { font-size:22px; }
  @media (max-width:760px) { .diagnostics-history > div { flex-direction:column; gap:4px; } }
  .diagnostics-launcher { position:fixed; right:18px; bottom:18px; z-index:40; background:#111; color:#fff; border:1px solid #555; border-radius:999px; padding:9px 13px; }
  .diagnostics-overlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.72); display:grid; place-items:center; padding:20px; overflow:auto; }
