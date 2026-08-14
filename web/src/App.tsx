@@ -26,7 +26,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string) => v
     } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); }
   };
   return <main className="auth-page"><div className="auth-orbit orbit-one" /><div className="auth-orbit orbit-two" /><section className="auth-card">
-    <div className="brand-lockup"><span className="brand-mark">A</span><div><div className="brand-name">ALTER</div><div className="brand-caption">PERSONAL INTELLIGENCE</div></div></div>
+    <div className="brand-lockup"><div><div className="brand-name">ALTER</div><div className="brand-caption">PERSONAL INTELLIGENCE</div></div></div>
     <div className="auth-copy"><p className="eyebrow">{mode === "verify" ? "ПРОВЕРКА ПОЧТЫ" : "ВОЗВРАЩАЙСЯ К СЕБЕ"}</p><h1>{mode === "verify" ? "Введи код" : "Твой контекст\nвсегда рядом."}</h1><p>{mode === "verify" ? "Мы отправили код подтверждения на твою почту." : "Чат, память, цели и действия — в одном спокойном пространстве."}</p></div>
     <form onSubmit={submit} className="auth-form">
       <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required placeholder="you@example.com" /></label>
