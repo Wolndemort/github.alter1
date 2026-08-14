@@ -23,4 +23,10 @@ describe("ALTER web API contract", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "expired" }), { status: 401 }));
     await expect(new AlterApi().account("expired-token")).rejects.toMatchObject({ status: 401, message: "Сессия закончилась. Войди в ALTER снова." });
   });
+
+  it("keeps owner diagnostics behind the shared bearer token", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ counters: {}, latency: {}, tool_success: 0, tool_empty: 0, tool_failures: 0, quality_warnings: 0, model_reliability: { success: 0, failures: 0, fallback_rate: 0 } }), { status: 200 }));
+    await new AlterApi().diagnosticsQuality("owner-token");
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/diagnostics/quality", expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer owner-token" }) }));
+  });
 });

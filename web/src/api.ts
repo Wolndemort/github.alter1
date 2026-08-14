@@ -1,4 +1,4 @@
-import type { Account, Agent, AlterNotification, ApiErrorShape, AuthResponse, CreditPack, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
+import type { Account, Agent, AlterNotification, ApiErrorShape, AuthResponse, CreditPack, DiagnosticsQuality, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -50,6 +50,8 @@ export class AlterApi {
   verifyEmail(email: string, code: string) { return this.request<AuthResponse>("/api/v1/auth/verify-email", { method: "POST", body: JSON.stringify({ email, code }) }); }
   resendVerification(email: string) { return this.request<{ ok: boolean }>("/api/v1/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) }); }
   account(token: string) { return this.request<Account>("/api/v1/account", {}, token); }
+  diagnosticsQuality(token: string) { return this.request<DiagnosticsQuality>("/api/v1/diagnostics/quality", {}, token); }
+  diagnosticsLatency(token: string) { return this.request<{ latency: DiagnosticsQuality["latency"] }>("/api/v1/diagnostics/latency", {}, token); }
   logout(token: string) { return this.request<{ ok: boolean }>("/api/v1/auth/logout", { method: "POST" }, token); }
   rotateToken(token: string) { return this.request<AuthResponse>("/api/v1/auth/rotate", { method: "POST" }, token); }
   history(token: string) { return this.request<{ session_id: number | null; messages: { role: string; content: string }[] }>("/api/v1/chat/history", {}, token); }

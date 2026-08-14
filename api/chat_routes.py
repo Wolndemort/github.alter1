@@ -18,6 +18,7 @@ from services.media_chat_service import reply as media_reply
 from services.media_generation import MediaGenerationError, fal_capabilities, generate_image, generate_video
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
+from utils.metrics import increment
 from utils.quality import sanitize_public_reply
 from utils.tasks import process_session
 from utils.redis_store import create_redis, close_redis
@@ -724,6 +725,7 @@ async def voice_reply_route(request: web.Request) -> web.Response:
     try:
         audio = await synthesize_speech(text, voice=voice, output_format="wav", fast=True, voice_id=generated_voice_id)
     except Exception:
+        increment("voice.reply.failure")
         refund_redis = create_redis()
         try:
             await refund_user_id_credits(refund_redis, user_id, 5, async_session)
@@ -731,12 +733,14 @@ async def voice_reply_route(request: web.Request) -> web.Response:
             await close_redis(refund_redis)
         raise web.HTTPBadGateway(text="voice service temporarily unavailable")
     if not audio:
+        increment("voice.reply.failure")
         refund_redis = create_redis()
         try:
             await refund_user_id_credits(refund_redis, user_id, 5, async_session)
         finally:
             await close_redis(refund_redis)
         raise web.HTTPServiceUnavailable(text="voice synthesis unavailable")
+    increment("voice.reply.success")
     return web.Response(body=audio, content_type="audio/wav")
 
 

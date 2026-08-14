@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from services.account_linking import resolve_telegram_user
 from utils.billing import create_payment, create_credit_payment, configured as billing_configured, has_active_subscription, has_active_trial, has_owner_access, is_owner, price, PLANS, CREDIT_PACKS, normalize_plan, normalize_pack, pack_info, plan_info, credits_limit, effective_plan
 from utils.redis_store import close_redis, create_link_token, create_redis, credits_used, revoke_token
+from utils.metrics import increment
 
 _resolved_telegram_username: str | None = None
 
@@ -78,7 +79,9 @@ async def register_route(request: web.Request) -> web.Response:
                 account = await register(session, str(payload.get("email", "")), str(payload.get("password", "")))
             await session.commit()
     except ValueError as exc:
+        increment("funnel.register.failure")
         raise web.HTTPBadRequest(text=str(exc))
+    increment("funnel.register.completed")
     return web.json_response({"verification_required": True, "email": account.email}, status=202)
 
 
@@ -88,10 +91,13 @@ async def login_route(request: web.Request) -> web.Response:
         async with async_session() as session:
             account = await authenticate(session, str(payload.get("email", "")), str(payload.get("password", "")))
             if account is None:
+                increment("funnel.login.failure")
                 raise web.HTTPUnauthorized(text="invalid credentials or email not verified")
             token = issue_token(account.user_id, _auth_secret())
     except ValueError as exc:
+        increment("funnel.login.failure")
         raise web.HTTPBadRequest(text=str(exc))
+    increment("funnel.login.completed")
     return web.json_response({"access_token": token, "token_type": "bearer"})
 
 
@@ -103,7 +109,9 @@ async def verify_email_route(request: web.Request) -> web.Response:
             await session.commit()
             token = issue_token(account.user_id, _auth_secret())
     except ValueError as exc:
+        increment("funnel.verify.failure")
         raise web.HTTPBadRequest(text=str(exc))
+    increment("funnel.verify.completed")
     return web.json_response({"access_token": token, "token_type": "bearer"})
 
 
@@ -415,7 +423,9 @@ async def create_credit_pack_payment_route(request: web.Request) -> web.Response
         try:
             url = await create_credit_payment(session, user, await telegram_bot_username(), "bank_card", pack, _web_payment_return_url(payload.get("return_url")))
         except RuntimeError as exc:
+            increment("billing.credit_payment.failure")
             raise web.HTTPBadGateway(text=str(exc))
+        increment("billing.credit_payment.created")
         return web.json_response({"payment_url": url, "pack": pack, "credits": pack_info(pack)["credits"], "price_rub": pack_info(pack)["price"]})
 
 
@@ -465,7 +475,9 @@ async def create_app_payment_route(request: web.Request) -> web.Response:
         try:
             url = await create_payment(session, user, await telegram_bot_username(), "bank_card", plan, _web_payment_return_url(payload.get("return_url")))
         except RuntimeError as exc:
+            increment("billing.subscription_payment.failure")
             raise web.HTTPBadGateway(text=str(exc))
+        increment("billing.subscription_payment.created")
         return web.json_response({"payment_url": url, "price_rub": str(price(plan)), "plan": plan, "days": config.SUBSCRIPTION_DAYS})
 
 

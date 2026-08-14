@@ -17,4 +17,5 @@ export type Workflow = Record<string, unknown> | null;
 export type MediaJob = { id: string; kind: "image" | "video"; status: "queued" | "running" | "completed" | "failed" | "cancelled"; progress: number; filename?: string; media_type?: string; data_base64?: string; error?: string };
 export type MyDay = { date: string; focus: { kind: string; title: string; detail: string; at: string | null; priority: string; loop_index?: number }[]; next_step: { title: string; prompt: string }; counts: { reminders: number; open_loops: number; goals: number }; memory_permanent: boolean };
 export type Scenario = { id: string; title: string; prompt: string; mode: string };
+export type DiagnosticsQuality = { counters: Record<string, number>; latency: Record<string, { count: number; p50_ms: number; p95_ms: number; p99_ms: number; last_ms: number }>; tool_success: number; tool_empty: number; tool_failures: number; quality_warnings: number; model_reliability: { success: number; failures: number; fallback_rate: number }; configuration?: Record<string, unknown> };
 export type ApiErrorShape = { detail?: string; message?: string; error?: string };

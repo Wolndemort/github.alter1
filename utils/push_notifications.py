@@ -8,6 +8,7 @@ import uuid
 import httpx
 from data.database import async_session
 from data.models import Notification
+from utils.metrics import increment
 
 
 async def send_push(user, title: str, body: str) -> bool:
@@ -25,10 +26,13 @@ async def send_push(user, title: str, body: str) -> bool:
             )
             session.add(notification)
             await session.commit()
+            increment("push.inbox.written")
     except Exception:
+        increment("push.inbox.failure")
         logging.exception("Notification inbox write failed")
     token = str((user.tech_stack or {}).get("expo_push_token") or "").strip()
     if not token:
+        increment("push.delivery.skipped")
         return False
     payload = {
         "to": token,
@@ -44,9 +48,12 @@ async def send_push(user, title: str, body: str) -> bool:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post("https://exp.host/--/api/v2/push/send", json=payload)
         if response.status_code >= 300:
+            increment("push.delivery.failure")
             logging.warning("Expo push rejected status=%s", response.status_code)
             return False
+        increment("push.delivery.success")
         return True
     except Exception:
+        increment("push.delivery.failure")
         logging.exception("Expo push delivery failed")
         return False
