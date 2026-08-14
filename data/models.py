@@ -158,3 +158,14 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(String(24), server_default='pending', index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MetricSnapshot(Base):
+    """Aggregated operational metrics; deliberately contains no user data."""
+
+    __tablename__ = "metric_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    counters: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
+    latency: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

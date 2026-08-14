@@ -129,6 +129,13 @@
  .message-download:hover { background:#c8d98e; color:#111; }
  .message-audio { display:block; max-width:100%; margin-top:10px; }
  .action-notice { display:block; margin-top:7px; color:var(--accent); font:10px 'DM Mono'; }
+ .diagnostics-history { margin-top:24px; border-top:1px solid #292925; padding-top:16px; }
+ .diagnostics-history > p { margin-bottom:10px; }
+ .diagnostics-history > div { display:flex; justify-content:space-between; gap:16px; border-bottom:1px solid #20201e; padding:9px 0; color:#999; font:11px 'DM Mono'; }
+ .quota-summary { display:flex; justify-content:space-between; gap:16px; align-items:baseline; margin:0 0 20px; padding:15px 18px; border:1px solid #292925; border-radius:10px; background:#111; }
+ .quota-summary strong { font-size:18px; color:#fff; }
+ .quota-summary span { color:#888; font-size:11px; }
+ @media (max-width:760px) { .diagnostics-history > div { flex-direction:column; gap:4px; } }
  .diagnostics-launcher { position:fixed; right:18px; bottom:18px; z-index:40; background:#111; color:#fff; border:1px solid #555; border-radius:999px; padding:9px 13px; }
  .diagnostics-overlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.72); display:grid; place-items:center; padding:20px; overflow:auto; }
  .diagnostics-modal { position:relative; width:min(980px,100%); max-height:92vh; overflow:auto; background:#0d0d0c; border:1px solid #444; border-radius:14px; padding:22px; box-shadow:0 20px 80px #000; }

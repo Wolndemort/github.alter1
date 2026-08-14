@@ -18,6 +18,7 @@ from utils.agent_engine import agent_view, block_task, claim_next_task, complete
 from services.agent_executor import model_agent_executor, run_agent_steps
 from config import config
 from utils.config_audit import configuration_snapshot
+from utils.metrics_persistence import persist_metrics_snapshot, recent_metrics_snapshots
 
 
 def _parse_datetime(value: object) -> datetime:
@@ -116,6 +117,11 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
     model_success = counters.get("ai.model.success", 0)
     model_failures = counters.get("ai.model.failure", 0)
     total_model_attempts = model_success + model_failures
+    try:
+        await persist_metrics_snapshot()
+        history = await recent_metrics_snapshots()
+    except Exception:
+        history = []
     return web.json_response({
         "counters": counters,
         "latency": latency_snapshot(),
@@ -129,6 +135,7 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
             "fallback_rate": round(model_failures / total_model_attempts, 4) if total_model_attempts else 0.0,
         },
         "configuration": configuration_snapshot(config),
+        "history": history,
     })
 
 

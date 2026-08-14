@@ -24,6 +24,7 @@ from utils.memory_quality import sanitize_summary
 from utils.push_notifications import send_push
 from utils.weather import get_weather
 from services.agent_executor import model_agent_executor, run_agent_steps
+from utils.metrics_persistence import persist_metrics_snapshot
 
 
 def telegram_chat_id(user: User) -> int | None:
@@ -37,6 +38,16 @@ def telegram_chat_id(user: User) -> int | None:
     if account is not None:
         return account.telegram_user_id
     return user.id
+
+
+async def monitor_metrics():
+    """Keep aggregate diagnostics history alive across process restarts."""
+    while True:
+        try:
+            await persist_metrics_snapshot()
+        except Exception:
+            logging.exception("Metrics snapshot persistence failed")
+        await asyncio.sleep(60)
 
 
 def active_open_loops(memory: dict | None) -> list:
