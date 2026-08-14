@@ -156,7 +156,7 @@ async def memory_route(request: web.Request) -> web.Response:
         return web.json_response({
             "sections": memory_sections(user.memory, extras),
             "permanent": True,
-            "description": "ALTER хранит память бессрочно и удаляет её только по твоей команде.",
+            "description": "Факты о тебе, подтверждённые в профиле, хранятся бессрочно до твоей команды удалить их. Контекст прошлых разговоров и временные записи могут автоматически очищаться.",
             "audit": memory_audit(user.memory),
         })
 

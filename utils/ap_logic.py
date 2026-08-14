@@ -137,10 +137,16 @@ def _bounded_memory(value, max_chars: int = 4500) -> dict:
     serialized = json.dumps(normalized, ensure_ascii=False)
     if len(serialized) <= max_chars:
         return normalized
-    # Preserve the newest/most useful categories while bounding every value.
+    # Preserve durable identity facts before episodic context. The old
+    # insertion-order walk could spend the budget on reminders/history.
     bounded = {}
     remaining = max_chars
-    for category, facts in normalized.items():
+    priority = ("identity", "family", "skills_career", "education", "relationships")
+    ordered_categories = [
+        *[category for category in priority if category in normalized],
+        *[category for category in normalized if category not in priority],
+    ]
+    for category in ordered_categories:
         if remaining <= 0:
             break
         text = json.dumps({category: facts}, ensure_ascii=False)

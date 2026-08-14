@@ -14,6 +14,11 @@ def test_name_does_not_absorb_following_clause():
     assert extract_user_facts("Меня зовут Адам и я работаю в дизайне") ["identity"]["name"] == "Адам"
 
 
+def test_extracts_common_work_and_activity_phrasings():
+    facts = extract_user_facts("Моя сфера деятельности — дизайн. Я занимаюсь разработкой мобильных приложений")
+    assert facts["skills_career"]["job"] == "разработкой мобильных приложений"
+
+
 def test_classifies_preferences_into_useful_categories():
     assert extract_user_facts("Я люблю чёрную одежду") == {"style_clothing": {"style": "чёрную одежду"}}
     assert extract_user_facts("Мне нравится электронная музыка") == {"music": {"likes": "электронная музыка"}}

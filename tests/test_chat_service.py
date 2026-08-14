@@ -30,6 +30,19 @@ def test_short_stream_prompt_is_smaller_but_tool_prompt_keeps_full_policy():
     assert "<user_memory>" in tool
 
 
+def test_full_reply_memory_budget_keeps_core_categories_first():
+    from utils.ap_logic import _bounded_memory
+    value = {
+        "identity": {"name": "Адам"},
+        "family": {"family": "Седа и Магомед"},
+        "skills_career": {"job": "дизайн"},
+        "active_reminders": {"items": "x" * 5000},
+    }
+    bounded = _bounded_memory(value, 180)
+    assert bounded["identity"]["name"] == "Адам"
+    assert bounded["family"]["family"] == "Седа и Магомед"
+
+
 class Result:
     def __init__(self, value=None, values=None): self.value, self.values = value, values or []
     def scalar_one_or_none(self): return self.value
