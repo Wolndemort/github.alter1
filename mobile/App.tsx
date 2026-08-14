@@ -114,6 +114,10 @@ export function IntroScreen({ onFinished }: { onFinished: () => void }) {
   return <View style={[styles.intro, { backgroundColor: "#050505" }]}><Animated.View style={{ opacity, transform: [{ scale }] }}><Text style={styles.introLogo}>ALTER</Text><Text style={styles.introCaption}>ТВОЙ ЛИЧНЫЙ ПОМОЩНИК</Text><Text style={[styles.introCaption, { marginTop: 14 }]}>ПАМЯТЬ · ГОЛОС · МЕДИА · ПОИСК · ЗАДАЧИ</Text></Animated.View><Animated.View style={[styles.introLine, { width: line.interpolate({ inputRange: [0, 1], outputRange: [0, 150] }) }]} /><StatusBar style="light" /></View>;
 }
 
+export function splitInlineMarkdown(text: string): { text: string; bold: boolean }[] {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).filter(Boolean).map((part) => part.startsWith("**") && part.endsWith("**") ? { text: part.slice(2, -2), bold: true } : { text: part, bold: false });
+}
+
 function TypingText({ text }: { text: string }) {
   const [visible, setVisible] = useState("");
   useEffect(() => {
@@ -127,7 +131,8 @@ function TypingText({ text }: { text: string }) {
     return () => clearInterval(timer);
   }, [text]);
   const parts = visible.split(/(https?:\/\/[^\s]+)/g);
-  return <Text style={styles.message}>{parts.map((part, index) => part.match(/^https?:\/\//) ? <Text key={`${part}-${index}`} style={linkStyles.link} onPress={() => safeOpenUrl(part.replace(/[),.!?]+$/, ""))}>{part}</Text> : <Text key={`${part}-${index}`}>{part}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
+  const formatted = parts.flatMap((part) => splitInlineMarkdown(part));
+  return <Text style={styles.message}>{formatted.map((part, index) => part.bold ? <Text key={`${part.text}-${index}`} style={styles.boldMessage}>{part.text}</Text> : part.text.match(/^https?:\/\//) ? <Text key={`${part.text}-${index}`} style={linkStyles.link} onPress={() => safeOpenUrl(part.text.replace(/[),.!?]+$/, ""))}>{part.text}</Text> : <Text key={`${part.text}-${index}`}>{part.text}</Text>)}{visible.length < text.length ? <Text style={styles.cursor}>▋</Text> : null}</Text>;
 }
 
 function ActivityPulse() {
@@ -1222,6 +1227,7 @@ const styles: any = StyleSheet.create({
 (styles as Record<string, unknown>).clearMemoryText = { color: "#ffb4c8", fontWeight: "700" };
 (styles as Record<string, unknown>).voiceDescriptionInput = { minHeight: 90, maxHeight: 150, backgroundColor: "#181818", borderRadius: 12, color: "#fff", padding: 14, textAlignVertical: "top", marginBottom: 14 };
 (styles as Record<string, unknown>).thinkingDots = { color: "#ffffff", fontSize: 22, letterSpacing: 4, minWidth: 52 };
+(styles as Record<string, unknown>).boldMessage = { fontWeight: "800", color: "#ffffff" };
 (styles as Record<string, unknown>).emptyChat = { alignItems: "center", justifyContent: "center", paddingHorizontal: 24, paddingVertical: 18, gap: 10 };
 (styles as Record<string, unknown>).emptyLogo = { color: "#ffffff", fontSize: 38, fontWeight: "900", letterSpacing: 7, marginBottom: 4 };
 (styles as Record<string, unknown>).emptyTitle = { color: "#ffffff", fontSize: 22, fontWeight: "800", textAlign: "center" };

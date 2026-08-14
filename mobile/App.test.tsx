@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import App, { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds, userFacingError } from "./App";
+import App, { AuthScreen, IntroScreen, VoiceButton, getExpiredChatIds, splitInlineMarkdown, userFacingError } from "./App";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "./src/api/client";
 
@@ -51,6 +51,10 @@ describe("ALTER mobile critical screens", () => {
       { id: "u3", role: "user", text: "", createdAt: 0 },
     ];
     expect(getExpiredChatIds(items, 120_000)).toEqual([]);
+  });
+
+  it("formats assistant markdown without exposing raw bold markers", () => {
+    expect(splitInlineMarkdown("**важно** и дальше")).toEqual([{ text: "важно", bold: true }, { text: " и дальше", bold: false }]);
   });
 
   it("finishes the offline intro scene smoothly", () => {
