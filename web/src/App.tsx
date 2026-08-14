@@ -46,7 +46,7 @@ function InlineMarkdown({ text }: { text: string }) {
 }
 
 export function MarkdownText({ text }: { text: string }) {
-  return <div className="markdown-text">{text.split("\n").map((line, index) => { const heading = line.match(/^#{1,3}\s+(.+)/); const ordered = line.match(/^\s*(\d+)\.\s+(.+)/); const bullet = line.match(/^\s*[-*]\s+(.+)/); if (!line.trim()) return <br key={index} />; if (heading) return <h3 key={index}><InlineMarkdown text={heading[1]} /></h3>; if (ordered) return <div className="markdown-list-item" key={index}><span>{ordered[1]}.</span><InlineMarkdown text={ordered[2]} /></div>; if (bullet) return <div className="markdown-list-item" key={index}><span>•</span><InlineMarkdown text={bullet[1]} /></div>; return <p key={index}><InlineMarkdown text={line} /></p>; })}</div>;
+  return <div className="markdown-text">{text.split("\n").map((line, index) => { const heading = line.match(/^#{1,3}\s+(.+)/); const ordered = line.match(/^\s*(\d+)\.\s+(.+)/); const bullet = line.match(/^\s*[-*]\s+(.+)/); if (!line.trim()) return <br key={index} />; if (heading) return <h3 key={index}><InlineMarkdown text={heading[1]} /></h3>; if (ordered) return <div className="markdown-list-item" key={index}><span>{ordered[1]}.</span><span className="markdown-list-content"><InlineMarkdown text={ordered[2]} /></span></div>; if (bullet) return <div className="markdown-list-item" key={index}><span>•</span><span className="markdown-list-content"><InlineMarkdown text={bullet[1]} /></span></div>; return <p key={index}><InlineMarkdown text={line} /></p>; })}</div>;
 }
 
 function LegacyMessage({ item }: { item: ChatItem }) {
