@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -102,7 +103,22 @@ def _stream_system_prompt(text: str, memory: dict, *, use_tools: bool = False) -
             ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
             CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, RELIABILITY_PROMPT,
         )
-    return "\n\n".join((*parts, "Релевантная память пользователя:\n<user_memory>\n" + str(memory) + "\n</user_memory>"))
+    memory_block = "Релевантная память пользователя:\n<user_memory>\n" + json.dumps(memory, ensure_ascii=False) + "\n</user_memory>"
+    # Keep core durable facts in a compact tail so prompt truncation cannot
+    # hide identity and family behind episodic context or reminders.
+    priority = {
+        category: memory[category]
+        for category in ("identity", "family", "skills_career")
+        if memory.get(category)
+    }
+    if priority:
+        memory_block += (
+            "\n\nКлючевые долговременные факты пользователя:\n"
+            "<priority_user_memory>\n"
+            + json.dumps(priority, ensure_ascii=False)
+            + "\n</priority_user_memory>"
+        )
+    return "\n\n".join((*parts, memory_block))
 
 
 class ChatService:
