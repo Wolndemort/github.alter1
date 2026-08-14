@@ -78,13 +78,14 @@
   .billing-status, .memory-intro { padding:14px; }
 }
 
-.notification-launcher { position:fixed; right:24px; bottom:24px; z-index:8; width:46px; height:46px; border:1px solid #555; border-radius:50%; background:#111; color:#fff; box-shadow:0 10px 30px #000; font-size:20px; }
+.notification-launcher { position:fixed; right:24px; bottom:24px; z-index:8; width:32px; height:32px; border:0; border-radius:0; background:transparent; color:#fff; box-shadow:none; font-size:20px; display:grid; place-items:center; }
 .notification-launcher:hover { background:#fff; color:#111; }
+.mobile-back-button { display:none; }
 .notification-launcher b { position:absolute; top:-5px; right:-5px; min-width:19px; height:19px; padding:2px 4px; border-radius:12px; background:#fff; color:#111; font:10px 'DM Mono'; }
 .notification-overlay { position:fixed; inset:0; z-index:20; display:flex; justify-content:flex-end; background:rgba(0,0,0,.58); }
 .notification-drawer { position:relative; width:min(560px,100%); height:100%; overflow-y:auto; background:#080808; border-left:1px solid #333; box-shadow:-20px 0 60px #000; }
 .notification-drawer .content-panel { width:100%; min-height:100%; padding:54px 32px 40px; }
-.notification-close { position:absolute; top:20px; right:20px; z-index:2; width:40px; height:40px; border:1px solid #444; border-radius:50%; background:#111; color:#fff; font-size:24px; }
+.notification-close { position:absolute; top:30px; right:20px; z-index:2; width:36px; height:36px; border:0; border-radius:0; background:transparent; color:#fff; font-size:26px; }
 .notifications-toolbar { display:flex; align-items:center; justify-content:space-between; min-height:35px; margin-bottom:14px; color:#ddd; font-size:13px; }
 .notifications-toolbar .text-button { margin:0; }
 .notification-list { display:grid; gap:8px; }
@@ -99,9 +100,10 @@
 .notification-mark { width:7px; height:7px; margin-top:5px; border-radius:50%; background:#777; flex:0 0 auto; }
 .notification-card.unread .notification-mark { background:#fff; box-shadow:0 0 10px #fff; }
 @media (max-width:760px) { .notification-launcher { right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); } .notification-drawer .content-panel { padding:48px 18px calc(28px + env(safe-area-inset-bottom)); } }
+@media (max-width:760px) { .mobile-header > button:last-child { display:none; } .mobile-back-button { display:block; position:fixed; top:calc(10px + env(safe-area-inset-top)); right:12px; z-index:12; border:0; background:transparent; color:#aaa; padding:8px 4px; font-size:13px; } .mobile-back-button:hover { color:#fff; } }
 .onboarding-overlay { position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(0,0,0,.72); backdrop-filter:blur(8px); }
 .onboarding-card { position:relative; width:min(500px,100%); padding:34px; border:1px solid #555; border-radius:16px; background:#101010; box-shadow:0 30px 90px #000; }
-.onboarding-close { position:absolute; top:16px; right:16px; width:36px; height:36px; border:1px solid #444; border-radius:50%; background:#181818; color:#fff; font-size:22px; }
+.onboarding-close { position:absolute; top:28px; right:20px; width:36px; height:36px; border:0; border-radius:0; background:transparent; color:#fff; font-size:26px; }
 .onboarding-progress { display:flex; gap:6px; margin-bottom:42px; }
 .onboarding-progress i { width:28px; height:3px; background:#333; border-radius:3px; }
 .onboarding-progress i.active { background:#fff; }
