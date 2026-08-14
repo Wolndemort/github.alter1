@@ -101,10 +101,17 @@ class GuardMiddleware(BaseMiddleware):
                     if answer:
                         await answer("Доступ ALTER приостановлен: trial или подписка закончились. Память, история и настройки сохранены. Продолжить можно через /buy на alterai.ru.")
                     return None
-                data["credits_allowed"] = True if _credit_exempt(event) else await charge_credits(self.redis, user.id, 1, credits_limit(db_user))
+                if _credit_exempt(event):
+                    data["credits_allowed"] = True
+                else:
+                    data["credits_allowed"] = await charge_credits(self.redis, user.id, 1, credits_limit(db_user))
+                    if not data["credits_allowed"] and db_user is not None and int(db_user.credit_balance or 0) > 0:
+                        db_user.credit_balance = int(db_user.credit_balance or 0) - 1
+                        await db_session.commit()
+                        data["credits_allowed"] = True
                 if not data["credits_allowed"]:
                     if answer:
-                        await answer("Месячный лимит AI-запросов исчерпан. Лимит обновится в начале следующего месяца.")
+                        await answer("AI-квота и купленные пакеты закончились. Память и история сохранены — пополни баланс на alterai.ru или дождись обновления месячного лимита.")
                     return None
             if db_session is not None and owner_access:
                 data["subscription_allowed"] = True

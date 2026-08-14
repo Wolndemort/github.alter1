@@ -85,6 +85,32 @@ async def test_expired_access_blocks_before_consuming_quota_or_mutating_data(mon
 
 
 @pytest.mark.asyncio
+async def test_monthly_quota_falls_back_to_purchased_pack(monkeypatch):
+    from data.models import User
+    user = User(id=9, first_name="Adam", memory={}, tech_stack={}, credit_balance=3)
+    user.legal_accepted_at = datetime.now(timezone.utc)
+    answers = []
+    async def answer(text): answers.append(text)
+    event = SimpleNamespace(from_user=SimpleNamespace(id=9), text="hello", answer=answer)
+    class Db:
+        async def get(self, model, ident): return user
+        async def commit(self): pass
+    async def resolved(*args): return user
+    async def allowed(*args): return True
+    monkeypatch.setattr("middleware.guard_middleware.resolve_telegram_user", resolved)
+    monkeypatch.setattr("middleware.guard_middleware.has_active_subscription", lambda _: True)
+    monkeypatch.setattr("middleware.guard_middleware.charge_request", allowed)
+    monkeypatch.setattr("middleware.guard_middleware.allow_request", allowed)
+    monkeypatch.setattr("middleware.guard_middleware.charge_credits", lambda *args: _false())
+    async def handler(event, data): return data
+    async def _false(): return False
+    result = await GuardMiddleware(object())(handler, event, {"db_session": Db()})
+    assert result["credits_allowed"] is True
+    assert user.credit_balance == 2
+    assert not answers
+
+
+@pytest.mark.asyncio
 async def test_guard_returns_safe_error_when_handler_fails():
     answers = []
     async def answer(text): answers.append(text)
