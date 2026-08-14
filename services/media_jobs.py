@@ -72,7 +72,10 @@ async def submit_job(user_id: int, kind: str, prompt: str, source: tuple[str, by
 
 async def cancel_job(job_id: str, user_id: int) -> bool:
     redis = create_redis()
+    lock_key = f"alter:media_cancel_lock:{job_id}"
     try:
+        if not await redis.set(lock_key, "1", ex=30, nx=True):
+            return False
         raw = await redis.get(_key(job_id))
         if not raw:
             return False
@@ -87,6 +90,7 @@ async def cancel_job(job_id: str, user_id: int) -> bool:
         await _save(redis, job_id, job)
         return True
     finally:
+        await redis.delete(lock_key)
         await close_redis(redis)
 
 
