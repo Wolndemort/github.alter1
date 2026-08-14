@@ -318,7 +318,11 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     add_provider("2gis", lambda: _twogis(session, query, limit))
                 provider_results: dict[str, list[dict]] = {}
                 pending = set(tasks)
-                deadline = asyncio.get_running_loop().time() + max(1, config.SEARCH_FAST_RETURN_SECONDS)
+                priority_names = {name for name in ("yandex", "serper") if name in tasks}
+                # Directory results from 2GIS can arrive first, but must not
+                # win the fast-return race over the configured web providers.
+                deadline_seconds = config.SEARCH_PROVIDER_TIMEOUT_SECONDS if priority_names else config.SEARCH_FAST_RETURN_SECONDS
+                deadline = asyncio.get_running_loop().time() + max(1, deadline_seconds)
                 while pending:
                     remaining = max(0.0, deadline - asyncio.get_running_loop().time())
                     if not remaining:
@@ -330,7 +334,8 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                         except Exception:
                             provider_results[tasks[task]] = []
                     current = _normalize([item for provider in provider_results.values() for item in provider], limit)
-                    if len(current) >= max(1, config.SEARCH_MIN_RESULTS_BEFORE_FAST_RETURN):
+                    priority_pending = any(tasks[task] in priority_names for task in pending)
+                    if len(current) >= max(1, config.SEARCH_MIN_RESULTS_BEFORE_FAST_RETURN) and not priority_pending:
                         break
                 for task in pending:
                     task.cancel()
