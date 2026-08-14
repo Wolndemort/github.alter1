@@ -20,11 +20,12 @@ cd "$APP_DIR"
 
 docker compose up -d --build db redis alter-nginx
 docker compose run --rm migrations alembic upgrade head
-docker compose up -d --build bot
+docker compose up -d --build bot media-worker
 test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = healthy
 test "$(docker inspect -f '{{.State.Status}}' alter_redis_container)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_nginx)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
+test "$(docker inspect -f '{{.State.Status}}' alter_media_worker)" = running
 
 # The bot starts polling before its HTTP healthcheck has completed.  A fixed
 # sleep caused healthy deploys to fail while the container was still
