@@ -31,7 +31,7 @@
   .mobile-header > span { position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap; }
   .mobile-header button { min-width:44px; min-height:36px; padding:6px 8px; }
   .chat-panel { width:100%; height:calc(100dvh - 56px - env(safe-area-inset-top)); min-height:0; padding:20px 14px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
-  .chat-heading { flex:0 0 auto; }
+  .chat-heading { display:none; }
   .chat-heading h1, .panel-header h1 { overflow-wrap:anywhere; }
   .messages { flex:1 1 auto; height:auto; min-height:0; margin:18px -2px 12px; padding:4px 2px 18px; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
   .message-row { max-width:100%; gap:8px; }
