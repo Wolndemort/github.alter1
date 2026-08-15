@@ -43,6 +43,25 @@ async def test_image_reply_uses_vision_and_shared_session(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_multiple_images_stay_in_one_contextual_vision_turn(monkeypatch):
+    captured = {}
+
+    async def vision(prompt, media, **kwargs):
+        captured["prompt"] = prompt
+        captured["media"] = media
+        return "Сопоставил оба скрина"
+
+    monkeypatch.setattr(media_chat_service, "generate_media_reply", vision)
+    result = await media_chat_service.reply_many(Db(), 7, "Сравни эти экраны", [
+        ("first.png", "image/png", b"one"),
+        ("second.jpg", "image/jpeg", b"two"),
+    ])
+    assert result.reply == "Сопоставил оба скрина"
+    assert captured["prompt"] == "Сравни эти экраны"
+    assert captured["media"] == [("image/png", b"one"), ("image/jpeg", b"two")]
+
+
+@pytest.mark.asyncio
 async def test_video_requires_extractable_preview(monkeypatch):
     async def no_preview(data): return []
     monkeypatch.setattr(media_chat_service, "video_preview", no_preview)

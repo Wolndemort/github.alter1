@@ -14,7 +14,7 @@ from config import config
 from data.database import async_session
 from services.chat_service import ChatService
 from utils.billing import has_active_subscription, has_owner_access
-from services.media_chat_service import reply as media_reply
+from services.media_chat_service import reply_many as media_reply_many
 from services.media_generation import MediaGenerationError, fal_capabilities, generate_image, generate_video
 from api.auth_routes import _bearer, _json
 from utils.tts import synthesize_speech
@@ -498,6 +498,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
         content_type = ""
         filename = "audio.m4a"
         data = b""
+        attachments: list[tuple[str, str, bytes]] = []
         while True:
             part = await reader.next()
             if part is None:
@@ -518,12 +519,19 @@ async def media_chat_route(request: web.Request) -> web.Response:
                         raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES, actual_size=size)
                     chunks.append(chunk)
                 data = b"".join(chunks)
+                attachments.append((filename, content_type, data))
+                if len(attachments) > 10:
+                    raise web.HTTPBadRequest(text="можно прикрепить не больше 10 изображений")
+        if not attachments:
+            raise web.HTTPBadRequest(text="прикрепи изображение или другой медиафайл")
+        if len(attachments) > 1 and any(not media_type.startswith("image/") for _, media_type, _ in attachments):
+            raise web.HTTPBadRequest(text="несколько вложений поддерживаются только для изображений")
         redis = create_redis()
         try:
             if not await charge_user_id_credits(redis, user_id, 20, async_session):
                 raise web.HTTPTooManyRequests(text="monthly media limit reached")
             charged = True
-            result = await media_reply(session, user_id, prompt, content_type, data, filename)
+            result = await media_reply_many(session, user_id, prompt, attachments)
         except ValueError as exc:
             if charged:
                 await refund_user_id_credits(redis, user_id, 20, async_session)

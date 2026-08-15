@@ -119,7 +119,11 @@ export class AlterApi {
     const form = new FormData(); Object.entries(fields).forEach(([key, value]) => form.append(key, value)); form.append(fileField, file);
     return this.request<{ reply: string; transcript?: string; artifact_id?: string; media_base64?: string; media_mime?: string; media_filename?: string; audio_base64?: string; audio_mime?: string; audio_filename?: string; document?: { filename: string; media_type: string } }>(path, { method: "POST", body: form }, token);
   }
-  sendMedia(token: string, message: string, file: File) { return this.upload(token, "/api/v1/chat/media", { message }, file); }
+  sendMedia(token: string, message: string, files: File | File[]) {
+    const form = new FormData(); form.append("message", message);
+    for (const file of (Array.isArray(files) ? files : [files])) form.append("file", file);
+    return this.request<{ reply: string; transcript?: string; artifact_id?: string; media_base64?: string; media_mime?: string; media_filename?: string; audio_base64?: string; audio_mime?: string; audio_filename?: string }>("/api/v1/chat/media", { method: "POST", body: form }, token);
+  }
   sendDocument(token: string, prompt: string, file: File, agent = false) { return this.upload(token, "/api/v1/chat/document", { prompt, agent: String(agent) }, file); }
   editDocument(token: string, file: File, instruction: string) { return this.upload(token, "/api/v1/chat/document/edit", { instruction }, file); }
   async generateMedia(token: string, message: string, file: File | null, kind: "image" | "video", options: Record<string, unknown> = {}) {

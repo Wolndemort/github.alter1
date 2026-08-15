@@ -219,11 +219,14 @@ export class AlterApi {
     return this.requestBlob(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`, {}, token);
   }
 
-  async sendMedia(token: string, message: string, uri: string, mediaType: "image" | "video" | "audio", mimeType?: string, filename?: string) {
-    const mime = mimeType || (mediaType === "image" ? "image/jpeg" : mediaType === "video" ? "video/mp4" : "audio/m4a");
+  async sendMedia(token: string, message: string, uri: string | { uri: string; mediaType: "image" | "video" | "audio"; mimeType?: string; filename?: string }[], mediaType?: "image" | "video" | "audio", mimeType?: string, filename?: string) {
     const form = new FormData();
     form.append("message", message);
-      form.append("file", { uri, type: mime, name: filename || `alter.${mediaType === "audio" ? "m4a" : mediaType === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
+    const files = Array.isArray(uri) ? uri : [{ uri, mediaType: mediaType!, mimeType, filename }];
+    files.forEach((file) => {
+      const mime = file.mimeType || (file.mediaType === "image" ? "image/jpeg" : file.mediaType === "video" ? "video/mp4" : "audio/m4a");
+      form.append("file", { uri: file.uri, type: mime, name: file.filename || `alter.${file.mediaType === "audio" ? "m4a" : file.mediaType === "image" ? "jpg" : "mp4"}` } as unknown as Blob);
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90_000);
     let response: Response;

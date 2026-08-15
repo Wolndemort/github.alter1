@@ -266,3 +266,64 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     await remember(db, user_id, prompt, source="user_message")
     await db.commit()
     return MediaChatResult(reply=answer, session_id=session.id, transcript=transcript)
+
+
+async def reply_many(
+    db: AsyncSession,
+    user_id: int,
+    prompt: str,
+    attachments: list[tuple[str, str, bytes]],
+) -> MediaChatResult:
+    """Analyze up to ten images as one contextual chat turn.
+
+    The single-file path remains the source of truth for audio/video and
+    document-like media. Multiple attachments are intentionally limited to
+    images so the vision model receives one user message containing the text
+    and every screenshot together.
+    """
+    if len(attachments) == 1:
+        filename, content_type, data = attachments[0]
+        return await reply(db, user_id, prompt, content_type, data, filename)
+    if not 2 <= len(attachments) <= 10:
+        raise ValueError("можно прикрепить от 2 до 10 изображений")
+    if any(not media_type.startswith("image/") for _, media_type, _ in attachments):
+        raise ValueError("несколько вложений поддерживаются только для изображений")
+    if any(len(data) > config.MEDIA_MAX_BYTES for _, _, data in attachments):
+        raise ValueError("один из файлов слишком большой")
+
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ValueError("user not found")
+    session = await _active_session(db, user_id)
+    clean_prompt = validate_message(prompt) if prompt.strip() else "Проанализируй эти изображения вместе и ответь по существу."
+    _append(session, "user", clean_prompt)
+    memory = dict(user.memory or {})
+    feedback = feedback_context(user.tech_stack)
+    if feedback:
+        memory["response_feedback"] = feedback
+    if should_recall_context(clean_prompt):
+        recalled = await recall(db, user_id, clean_prompt)
+        if recalled:
+            memory["related_previous_context"] = recalled
+    media = [(media_type, data) for _, media_type, data in attachments]
+    answer = sanitize_public_reply(await generate_media_reply(
+        clean_prompt,
+        media,
+        memory=memory,
+        conversation_context=session.raw_messages[:-1],
+    ))
+    visual = await extract_visual_context(clean_prompt, media)
+    if visual:
+        _record_attachment_context(
+            session,
+            kind="image",
+            filename=f"{len(attachments)} изображений",
+            media_type="image/*",
+            operation="analysis",
+            observation=str(visual),
+            profile={"count": len(attachments)},
+        )
+    _append(session, "assistant", answer)
+    await remember(db, user_id, clean_prompt, source="user_message")
+    await db.commit()
+    return MediaChatResult(reply=answer, session_id=session.id)
