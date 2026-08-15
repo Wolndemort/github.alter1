@@ -170,6 +170,7 @@ class ChatService:
         if user is None:
             raise ValueError("user not found")
         private_mode = bool((user.tech_stack or {}).get("private_mode"))
+        previous_summary = ""
         if private_mode:
             session = Session(user_id=user_id, raw_messages=[])
         else:
@@ -183,6 +184,7 @@ class ChatService:
                     Session.user_id == user_id,
                 ).order_by(Session.started_at.desc()).limit(1))
                 previous = previous_result.scalar_one_or_none()
+                previous_summary = str(getattr(previous, "summary", "") or "") if previous is not None else ""
                 carried = [
                     {key: item[key] for key in ("role", "content") if key in item}
                     for item in (previous.raw_messages or [])[-40:]
@@ -237,6 +239,8 @@ class ChatService:
             ).order_by(Reminder.remind_at).limit(12)
         )
         memory = dict(user.memory or {})
+        if previous_summary:
+            memory["previous_session_summary"] = previous_summary
         feedback = feedback_context(user.tech_stack)
         if feedback:
             memory["response_feedback"] = feedback
@@ -337,6 +341,7 @@ class ChatService:
         if user is None:
             raise ValueError("user not found")
         private_mode = bool((user.tech_stack or {}).get("private_mode"))
+        previous_summary = ""
         if private_mode:
             session = Session(user_id=user_id, raw_messages=[])
         else:
@@ -349,6 +354,7 @@ class ChatService:
                     Session.user_id == user_id,
                 ).order_by(Session.started_at.desc()).limit(1))
                 previous = previous_result.scalar_one_or_none()
+                previous_summary = str(getattr(previous, "summary", "") or "") if previous is not None else ""
                 carried = [
                     {key: item[key] for key in ("role", "content") if key in item}
                     for item in (previous.raw_messages or [])[-40:]
@@ -423,6 +429,8 @@ class ChatService:
             ).order_by(Reminder.remind_at).limit(12)
         )
         memory = dict(user.memory or {})
+        if previous_summary:
+            memory["previous_session_summary"] = previous_summary
         feedback = feedback_context(user.tech_stack)
         if feedback:
             memory["response_feedback"] = feedback

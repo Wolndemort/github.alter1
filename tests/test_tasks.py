@@ -87,3 +87,4 @@ async def test_process_session_normalizes_corrupt_messages_and_memory(monkeypatc
     monkeypatch.setattr(tasks, "summarize_session", summary)
     assert await process_session(session, db)
     assert isinstance(user.memory, dict)
+    assert '"preferences"' in session.summary

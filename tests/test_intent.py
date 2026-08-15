@@ -45,5 +45,10 @@ def test_common_memory_questions_trigger_context_recall():
         assert should_recall_context(request), request
 
 
+def test_natural_continuations_trigger_context_recall():
+    for request in ("Давай дальше", "Где мы остановились?", "Я вернулся", "А что с концовкой игры?"):
+        assert should_recall_context(request), request
+
+
 def test_youtube_query_removes_command_words():
     assert youtube_query("Найди ролик на ютубе про BMW E39") == "про BMW E39"

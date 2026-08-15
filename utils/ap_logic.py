@@ -69,7 +69,7 @@ def _append_source_links(reply: str, trace: list[dict]) -> str:
     if not urls or "http://" in reply or "https://" in reply:
         return reply
     return reply.rstrip() + "\n\nИсточники:\n" + "\n".join(f"• {url}" for url in urls)
-MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops", "response_feedback"}
+MEMORY_CATEGORIES = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops", "response_feedback", "previous_session_summary"}
 KEY_ALIASES = {"имя": "name", "возраст": "age", "город": "city", "работа": "job", "профессия": "job"}
 TOOL_DEFINITIONS = [
     {

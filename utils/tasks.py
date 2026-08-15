@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from math import ceil
@@ -185,6 +186,10 @@ async def process_session(session: Session, db) -> bool:
     user = await db.get(User, session.user_id) if hasattr(db, "get") else session.user
     if user is None:
         return False
+    # Preserve the model-generated bridge between sessions. The raw transcript
+    # is bounded, so without this summary a long topic can disappear after the
+    # inactivity timeout.
+    session.summary = json.dumps(facts, ensure_ascii=False)[:12000]
     current = dict(user.memory) if isinstance(user.memory, dict) else {}
     user.memory = merge_memory_facts(current, facts)
     flag_modified(user, "memory")
