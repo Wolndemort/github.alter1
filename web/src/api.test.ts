@@ -34,7 +34,9 @@ describe("ALTER web API contract", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("edited", { status: 200, headers: { "Content-Type": "text/plain", "X-ALTER-Artifact-ID": "edited-2", "Content-Disposition": "attachment; filename=latest.txt" } }));
     const result = await new AlterApi().editArtifact("token", "source-1", "replace old => new");
     expect(result.artifactId).toBe("edited-2");
-    expect(result.blob).toBeInstanceOf(Blob);
+    // Node's fetch Blob and the jsdom Blob may come from different realms in CI.
+    // Verify the response contract without relying on cross-realm instanceof.
+    expect(result.blob).toMatchObject({ size: 6, type: "text/plain" });
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/chat/document/edit", expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData) }));
   });
 
