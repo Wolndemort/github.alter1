@@ -96,6 +96,9 @@ Scanned PDFs without a text layer are rejected safely and require OCR first.
 Successful document edits are stored as short-lived owner-scoped artifacts.
 The response includes `X-ALTER-Artifact-ID`, which can be downloaded with
 `GET /api/v1/artifacts/{artifact_id}` using the same bearer token.
+The artifact is associated with the current chat session and becomes the input
+for the next edit, preserving the original request and extracted context across
+multiple sequential edits. Web, mobile and Telegram use the same session flow.
 
 For image scans, the optional local OCR adapter uses Pillow and Tesseract. If
 the native Tesseract binary is absent, the request remains safe and should use

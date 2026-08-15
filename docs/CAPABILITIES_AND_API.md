@@ -1,6 +1,6 @@
 # ALTER: возможности, API и сценарии
 
-Единая карта возможностей ALTER для mobile и Telegram. Оба клиента используют общий backend, сессии, память и Redis-квоты.
+Единая карта возможностей ALTER для web, mobile и Telegram. Все три клиента используют общий backend, сессии, память и Redis-квоты. Канонический machine-readable источник — `GET /api/v1/capabilities` (каталог версии `2026-08-15`).
 
 ## Готово
 
@@ -19,7 +19,7 @@
 | Push | POST /api/v1/push-token | Да | — | Expo Notifications |
 | Геолокация | location в chat payload | С согласием | — | Expo Location |
 | Создание звука | POST /api/v1/audio/sound-effects или обычная фраза | Да | Да | ElevenLabs Sound Effects |
-| Очистка голоса | POST /api/v1/audio/isolate или подпись к аудио | Да | Да | ElevenLabs Audio Isolation |
+| Очистка голоса | endpoint сохранён для совместимости | Нет | Нет | Недоступно с текущим ключом ElevenLabs (401) |
 | Наложение звука | аудиовложение + естественная команда | Да | Да | ElevenLabs + ffmpeg |
 
 ## Примеры для пользователя
@@ -41,7 +41,7 @@
 
 В .env используются ELEVENLABS_ENABLED=true, ELEVENLABS_MODEL=eleven_multilingual_v2 и ELEVENLABS_VOICE_ID. Для Premium voice настройка пользователя должна содержать tts_voice=elevenlabs. При сбое или отсутствии баланса backend использует OpenRouter fallback.
 
-Sound Effects и Audio Isolation подключены как пользовательские workflow. Music Generation, Dubbing и Voice Generation пока не подключены к естественным командам и не рекламируются как готовые функции.
+Sound Effects, TTS, STT, speech-to-speech, voice generation, voices, models и audio mix доступны через текущие маршруты. Audio Isolation не рекламируется как доступная возможность: endpoint сохранён для совместимости, но текущий ключ ElevenLabs отвечает `401`.
 
 ## Fal.ai
 
@@ -54,7 +54,7 @@ Fal используется для генерации и изменения и�
 - media analysis — 20 кредитов;
 - media generation — 40 кредитов;
 - YouTube search/audio — отдельные кредиты;
-- Sound Effects, Audio Isolation и audio mix — 20 кредитов за операцию;
+- Sound Effects и audio mix — 20 кредитов за операцию;
 - Personal — 1000 кредитов;
 - Ego — 3500 кредитов.
 
@@ -64,13 +64,16 @@ Fal используется для генерации и изменения и�
 
 Новую возможность сначала добавляем в service/API слой, затем подключаем к mobile и Telegram. Для каждого нового внешнего API обязательны auth, owner/subscription check, quota charge, timeout, обработка ошибок, fallback где уместно и contract tests.
 
-## Следующие routes ElevenLabs
+## Текущие routes ElevenLabs
 
 - audio effects — Sound Effects;
-- audio isolate — Audio Isolation;
 - speech-to-speech / voice generation;
-- dubbing как асинхронная задача;
-- music generation как отдельный дорогой media action.
+- speech-to-text, text-to-speech, voices и models;
+- audio mix через `POST /api/v1/audio/process`.
+
+`POST /api/v1/audio/isolate` оставлен только как compatibility route и должен
+возвращать контролируемую ошибку недоступности, а не считаться успешной
+возможностью.
 ## Web-поиск: Tavily + Firecrawl
 
 Web-поиск вызывается обычной фразой в Telegram или mobile: «найди актуальную цену», «проверь новость по нескольким сайтам», «изучи страницу и дай ссылки». Называть провайдера не требуется.
@@ -90,7 +93,7 @@ FIRECRAWL_SEARCH_LIMIT=10
 
 В Telegram: `/calendar_connect`, `/calendar`, `/calendar_add YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM название`. После OAuth те же действия доступны mobile через общий API.
 Календарь понимает одинаковые текстовые и голосовые обращения: «подключи Google Calendar», «покажи события», «добавь встречу завтра в 10:00», «удали событие event-123». Голосовой input сначала проходит Speech-to-Text.
-\n+## Мультимодальный контур и vision roadmap
+## Мультимодальный контур и vision roadmap
 
 ALTER принимает текст, голос, изображения, видео и документы. Для PDF/DOCX/TXT/Markdown/CSV/JSON доступны извлечение текста, профиль документа, таблицы, даты, суммы и bounded-контекст агента. Изображения проходят vision-анализ или OCR fallback; видео объединяет кадры и расшифровку аудиодорожки. Изменённые TXT, Markdown, CSV, JSON и DOCX возвращаются как скачиваемые файлы.
 
@@ -124,13 +127,28 @@ layout-aware правок, сравнивает версии документо�
 и сигнал необходимости досэмплирования. Музыкальный анализ использует строгий
 контракт: название, исполнитель, жанр, настроение, инструменты, BPM,
 структура, lyrics и таймкоды остаются пустыми, пока модель их не подтвердила.
-\n+Map tools: `map_geocode`, `map_search_organizations`, `map_route`, and
+Map tools: `map_geocode`, `map_search_organizations`, `map_route`, and
 `map_distance`. Organization and route calls use dedicated keys and return a
 controlled unavailable result when a provider limit is exhausted.
-\n+Полный canonical inventory хранится в `utils/capability_catalog.py` и
+Полный canonical inventory хранится в `utils/capability_catalog.py` и
 используется capability-ответом ALTER, поэтому UI, документация и модель могут
 сверяться с одним техническим источником.
 ## Current verified document and agent behavior
+
+### Document editing parity
+
+Documents are analyzed through `POST /api/v1/chat/document` and edited through
+`POST /api/v1/chat/document/edit`. Web and mobile use this HTTP contract;
+Telegram uses the same attachment pipeline and returns the result in the same
+chat. The original request, extracted context, attachment metadata and later
+instructions remain in one session, so a follow-up edit does not create a new
+chat or fall back to an older attachment.
+
+Each successful edit creates an owner-scoped artifact with a TTL. The response
+exposes `artifact_id`; `GET /api/v1/artifacts/{artifact_id}` downloads the latest
+version. Supported formats are PDF, DOCX, TXT, Markdown, CSV and JSON. Empty or
+unsupported files, scanned PDFs without a text layer, and save failures return
+controlled errors and do not claim a completed edit.
 
 ALTER accepts plans with up to 64 tasks. The execution endpoint limits one
 request to 8 steps, so larger plans continue in bounded batches. Production

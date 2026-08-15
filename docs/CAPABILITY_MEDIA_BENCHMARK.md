@@ -11,7 +11,7 @@ mock-интеграционные и production smoke-тесты.
 | Reminders/workflow | create, clarify, cancel, progress, pause, complete | да |
 | Calendar | OAuth/status/list/create/delete и честный disconnected state | да, через mocks |
 | Web/YouTube | source attribution, provider error, no fabricated completion | частично |
-| Voice/audio | STT, TTS, effects, isolation, speech-to-speech contracts | да, через mocks |
+| Voice/audio | STT, TTS, effects, audio mix, speech-to-speech contracts | да, через mocks |
 | Images/video | validation, options, job state, cancellation, provider errors | да, через mocks |
 | Fal.ai production | real image/video generation | да, проверены image и video jobs |
 | Telegram/mobile | command routing, attachment types, SSE statuses, cancellation | да, через local tests |
@@ -51,4 +51,5 @@ py -3 scripts/collect_capability_stateful_smoke.py --check-workflow-mutation --o
 
 The capability/media regression set passes locally. Real Fal.ai image/video and
 ElevenLabs STT, speech-to-speech and sound-effect checks were completed in
-production after balances were intentionally added.
+production after balances were intentionally added. Audio Isolation is excluded
+from capability claims because the current ElevenLabs key returns provider `401`.

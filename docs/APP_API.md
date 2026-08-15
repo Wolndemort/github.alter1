@@ -97,8 +97,8 @@ only the nullable Telegram identity link to `web_accounts`.
 | Subscription/payment | ready | shared YooKassa records and webhook |
 | Telegram linking | ready | Redis one-time deep link |
 | Memory cabinet | ready | `/api/v1/memory` |
-| Reminders/check-ins/settings | next API slice | existing shared models and tasks |
-| YouTube audio workflow | next API slice | existing Telegram adapter logic |
+| Reminders/check-ins/settings | ready | existing shared models and tasks |
+| YouTube audio workflow | ready | shared YouTube API and Telegram adapter logic |
 
 ## Server deployment checklist
 
@@ -188,15 +188,15 @@ Image options include `aspect_ratio`, `seed`, `guidance_scale`, `sync_mode`,
 `image_prompt_strength`. Video options include `duration`, `negative_prompt`,
 `cfg_scale`, `generate_audio`, `shot_type`, `aspect_ratio`, `tail_image_url`,
 `camera_control` and the other fields documented by the configured model.
-\n+Mobile document attachments support PDF, DOCX, TXT, Markdown, CSV and JSON.
+Mobile document attachments support PDF, DOCX, TXT, Markdown, CSV and JSON.
 They are sent to `POST /api/v1/chat/document` with `agent=true`; the response
 contains the analysis and an active document agent. TXT/MD/CSV/JSON/DOCX edits
 are returned by `POST /api/v1/chat/document/edit`; PDF is readable/comparable
 and text-layer PDFs are edited with coordinate-aware replacements; scanned PDFs
 without a text layer are rejected until OCR is provided.
-\n+Telegram документный pipeline принимает PDF, DOCX, TXT, Markdown, CSV и JSON
+Telegram документный pipeline принимает PDF, DOCX, TXT, Markdown, CSV и JSON
 как вложение с caption, извлекает bounded-текст и профиль документа и отвечает
 по содержимому. Лимит — 25 MB.
-\n+PDF layout editing uses optional PyMuPDF: text is located by coordinates,
+PDF layout editing uses optional PyMuPDF: text is located by coordinates,
 redacted and replaced in the same rectangle. Scanned pages without a text layer
 must go through OCR first; the API refuses unsafe blind replacements.

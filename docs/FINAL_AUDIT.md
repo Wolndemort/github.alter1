@@ -1,6 +1,6 @@
 # ALTER final audit
 
-Updated: 2026-08-13
+Updated: 2026-08-15
 
 ## Product surfaces
 
@@ -43,14 +43,18 @@ These are observed production samples, not a universal guarantee; provider load 
 
 ## Verification baseline
 
-- Backend: `499 passed, 2 skipped`.
-- Mobile: `26/26` tests.
+- Backend: `529 passed, 2 skipped`.
+- Mobile: `27/27` tests.
 - Mobile TypeScript: clean.
+- Web production build: successful.
 - Deterministic quality benchmark: `7/7`.
 - Middleware/API targeted checks: green.
 - Public production smoke: `/health=200`, `/ready=200`, unauthenticated stream=`401`, malformed webhook=`400`.
 - Production document E2E: TXT and searchable text-layer PDF edit, natural-language
   artifact reuse without re-upload, and authenticated artifact downloads passed.
+- Production audio smoke: TTS, STT, speech-to-speech, sound effects and audio mix
+  passed; Audio Isolation was not available because the ElevenLabs key returned
+  provider `401` and is not advertised by the capability catalog.
 - Non-billing availability load check: 50 requests at concurrency 10, 0 failures, p50 `84.8 ms`, p95 `688.3 ms`.
 
 ## Remaining operational work

@@ -29,6 +29,12 @@ selected with `VITE_API_BASE_URL` in the shell environment; no repository
   audio/voice endpoints.
 - Discovery: capabilities, FAQ, YouTube and calendar endpoints.
 
+The web client reads the same canonical `GET /api/v1/capabilities` catalog and
+`reply` contract as mobile and Telegram. Its chat supports document analysis and
+editing, audio uploads, TTS voice replies and media generation; capabilities
+that are unavailable with the configured provider key are not advertised by
+the canonical catalog.
+
 The production nginx container builds the web image from this directory. The
 existing API remains proxied to `alter_bot`; legal pages remain mounted from
 `legal/`.
