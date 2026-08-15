@@ -353,9 +353,14 @@ async def monitor_checkins(bot: Bot):
                 result = await db.execute(
                     select(User).options(selectinload(User.web_account)).where(
                         User.checkins_enabled.is_(True)
-                    ).with_for_update(skip_locked=True)
+                    )
                 )
-                for user in result.scalars().all():
+                users = result.scalars().all()
+                # This monitor performs slow external work (LLM, Telegram and
+                # push notifications). Do not keep the read transaction or
+                # user row locks open while doing that work.
+                await db.commit()
+                for user in users:
                     onboarding = trial_onboarding_stage(user, now)
                     if onboarding and not is_quiet_time(user, now):
                         session_result = await db.execute(select(Session).where(
@@ -364,6 +369,7 @@ async def monitor_checkins(bot: Bot):
                         session = session_result.scalar_one_or_none()
                         if proactive_allowed(user, now, session, 20):
                             _, message = onboarding
+                            await db.commit()
                             chat_id = telegram_chat_id(user)
                             if chat_id is not None:
                                 await bot.send_message(chat_id, message)
@@ -407,6 +413,9 @@ async def monitor_checkins(bot: Bot):
                         events = memory["important_events"]
                         event = events[-1] if isinstance(events, list) else events
                         context = event.get("title") if isinstance(event, dict) else str(event)
+                    # Release the transaction before the potentially slow LLM
+                    # call; the user update is committed after delivery.
+                    await db.commit()
                     question = await generate_contextual_checkin(
                         user.first_name,
                         context,

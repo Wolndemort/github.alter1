@@ -27,6 +27,8 @@
   .app-shell { min-height:100dvh; height:100dvh; overflow:hidden; }
   .main-area { width:100%; height:100dvh; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
   .mobile-header { flex:0 0 auto; min-height:56px; padding-top:calc(12px + env(safe-area-inset-top)); padding-bottom:12px; }
+  .mobile-header { position:relative; justify-content:flex-start; }
+  .mobile-header > span { position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap; }
   .mobile-header button { min-width:44px; min-height:36px; padding:6px 8px; }
   .chat-panel { width:100%; height:calc(100dvh - 56px - env(safe-area-inset-top)); min-height:0; padding:20px 14px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
   .chat-heading { flex:0 0 auto; }
@@ -45,6 +47,10 @@
   .memory-intro > div, .billing-status > div { min-width:0; }
   .quota-summary { align-items:flex-start; flex-direction:column; gap:6px; }
   .plan-grid { grid-template-columns:1fr; }
+  .main-area > .content-panel:has(+ .content-panel),
+  .main-area > .content-panel + .content-panel { width:100%; max-width:none; margin-left:0; margin-right:0; }
+  .main-area > .content-panel:has(+ .content-panel) { border-left:0; border-right:0; }
+  .main-area > .content-panel + .content-panel { border-left:0; border-right:0; }
   .reminder-form { grid-template-columns:1fr; }
   .job-list article { gap:10px; flex-wrap:wrap; }
   .job-list article > .progress { order:3; width:100%; }
@@ -56,6 +62,7 @@
   .auth-page { min-height:100dvh; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow-y:auto; }
   .auth-card { max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; }
   input, textarea, select { font-size:16px; }
+  .composer .voice-button, .composer .send-button { border:0; outline:none; }
 }
 
 @media (max-width:760px) {
