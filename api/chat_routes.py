@@ -12,7 +12,7 @@ from sqlalchemy import select
 from config import config
 
 from data.database import async_session
-from services.chat_service import ChatService
+from services.chat_service import ChatService, record_document_turn
 from utils.billing import has_active_subscription, has_owner_access
 from services.media_chat_service import reply_many as media_reply_many
 from services.media_generation import MediaGenerationError, fal_capabilities, generate_image, generate_video
@@ -203,9 +203,16 @@ async def document_chat_route(request: web.Request) -> web.Response:
             except ValueError as exc:
                 raise web.HTTPBadRequest(text=str(exc))
             artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_edit")
+            if not artifact_id:
+                raise web.HTTPServiceUnavailable(text="Не удалось сохранить изменённый документ. Попробуй ещё раз.")
+            session_id = await record_document_turn(
+                session, user_id, prompt, "Изменённый файл готов и возвращён в чат.",
+                filename=artifact.filename, media_type=artifact.media_type,
+                operation="document_edit", artifact_id=artifact_id,
+            )
             return web.json_response({
                 "reply": "Изменённый файл готов и возвращён в чат.",
-                "session_id": 0,
+                "session_id": session_id,
                 "media_base64": base64.b64encode(artifact.data).decode("ascii"),
                 "media_filename": artifact.filename,
                 "media_mime": artifact.media_type or "application/octet-stream",
@@ -215,6 +222,8 @@ async def document_chat_route(request: web.Request) -> web.Response:
             user_id, data, document.filename, document.media_type,
             kind="document", operation="document_source",
         )
+        if not source_artifact_id:
+            raise web.HTTPServiceUnavailable(text="Не удалось сохранить документ для продолжения работы. Попробуй ещё раз.")
         agent = None
         if agent_mode:
             user.tech_stack = start_document_agent(user.tech_stack, document, prompt, horizon_minutes=agent_horizon)
@@ -223,6 +232,8 @@ async def document_chat_route(request: web.Request) -> web.Response:
             kind="document", filename=document.filename, media_type=document.media_type,
             operation="analysis", observation=document.text[:6000],
             profile={"pages": document.pages, "chars": document.chars},
+            artifact_filename=document.filename, artifact_media_type=document.media_type,
+            artifact_id=source_artifact_id,
         )
         context = f"\n\n{context_record}\nDOCUMENT: {document.filename}\n<document_text>\n{document.text}\n</document_text>"
         try:
@@ -271,10 +282,18 @@ async def document_edit_route(request: web.Request) -> web.Response:
             raise web.HTTPUnauthorized(text="account not found")
         if not has_owner_access(user_id, account.email if account else None) and not has_active_subscription(user):
             raise web.HTTPPaymentRequired(text="active subscription required")
-    artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_edit")
+        artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_edit")
+        if not artifact_id:
+            raise web.HTTPServiceUnavailable(text="Не удалось сохранить изменённый документ. Попробуй ещё раз.")
+        session_id = await record_document_turn(
+            session, user_id, instruction, "Изменённый файл готов и возвращён в чат.",
+            filename=artifact.filename, media_type=artifact.media_type,
+            operation="document_edit", artifact_id=artifact_id,
+        )
     response = web.Response(body=artifact.data, content_type=artifact.media_type or "application/octet-stream")
     response.headers["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
     response.headers["X-ALTER-Artifact-ID"] = artifact_id
+    response.headers["X-ALTER-Session-ID"] = str(session_id)
     response.headers["X-Alter-Edit-Mode"] = "explicit-replacements"
     return response
 

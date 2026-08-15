@@ -28,6 +28,7 @@ from utils.feedback_memory import feedback_context
 from utils.action_log import append_action
 from utils.workflow_state import workflow_view
 from utils.agent_engine import agent_view
+from utils.multimodal_context import attachment_context_message
 from datetime import timedelta
 
 
@@ -41,6 +42,44 @@ def _append(session: Session, role: str, content: str) -> None:
     messages = list(session.raw_messages or [])
     messages.append({"role": role, "content": content, "timestamp": datetime.now(timezone.utc).isoformat()})
     session.raw_messages = messages[-100:]
+
+
+async def record_document_turn(
+    db: AsyncSession,
+    user_id: int,
+    prompt: str,
+    reply: str,
+    *,
+    filename: str,
+    media_type: str,
+    operation: str,
+    artifact_id: str = "",
+    observation: str = "",
+) -> int:
+    """Persist a document turn for every transport using the active chat."""
+    result = await db.execute(select(Session).where(
+        Session.user_id == user_id,
+        Session.is_processed.is_(False),
+    ).order_by(Session.started_at.desc()).limit(1))
+    session = result.scalar_one_or_none()
+    if session is None:
+        # Keeps lightweight transport/unit-test database doubles compatible;
+        # real AsyncSession always provides add/flush.
+        if not hasattr(db, "add") or not hasattr(db, "flush"):
+            return 0
+        session = Session(user_id=user_id, raw_messages=[])
+        db.add(session)
+        await db.flush()
+    _append(session, "user", validate_message(prompt))
+    _append(session, "assistant", sanitize_public_reply(reply))
+    _append(session, "assistant", attachment_context_message(
+        kind="document", filename=filename, media_type=media_type,
+        operation=operation, observation=observation,
+        artifact_filename=filename, artifact_media_type=media_type,
+        artifact_id=artifact_id,
+    ))
+    await db.commit()
+    return session.id or 0
 
 
 async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bool = False, early_stream: bool = False):

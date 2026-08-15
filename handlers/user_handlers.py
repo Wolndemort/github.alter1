@@ -52,6 +52,8 @@ from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
 from services.document_ingestion import edit_document, extract_document, document_profile
+from services.artifact_store import save_artifact
+from services.chat_service import record_document_turn
 from utils.document_commands import document_edit_instruction as shared_document_edit_instruction, is_document_edit_request as shared_document_edit_requested
 from services.media_jobs import cancel_job, get_job, history as media_history, submit_job
 import logging
@@ -711,11 +713,37 @@ async def handle_document(message: types.Message, db_session: AsyncSession):
                 await message.answer("После /edit напиши, что изменить в документе.")
                 return
             artifact = edit_document(filename, raw_data, instruction, document.mime_type or "")
+            artifact_id = await save_artifact(
+                user.id, artifact.data, artifact.filename, artifact.media_type,
+                kind="document", operation="document_edit",
+            )
+            if not artifact_id:
+                await message.answer("Не удалось сохранить изменённый документ. Попробуй ещё раз.")
+                return
+            await record_document_turn(
+                db_session, user.id, prompt,
+                "Готово — отправляю изменённый документ.",
+                filename=artifact.filename, media_type=artifact.media_type,
+                operation="document_edit", artifact_id=artifact_id,
+            )
             await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption="Готово — отправляю изменённый документ.")
             return
         parsed = extract_document(filename, raw_data, document.mime_type or "")
         context = f"\n\nDOCUMENT: {parsed.filename}\n<document_text>\n{parsed.text}\n</document_text>\nDOCUMENT_PROFILE: {document_profile(parsed)}"
         reply = await generate_reply([{"role": "user", "content": prompt + context}], memory=dict(user.memory or {}))
+        artifact_id = await save_artifact(
+            user.id, raw_data, parsed.filename, parsed.media_type,
+            kind="document", operation="document_source",
+        )
+        if not artifact_id:
+            await message.answer("Не удалось сохранить документ для продолжения работы. Попробуй ещё раз.")
+            return
+        await record_document_turn(
+            db_session, user.id, prompt, reply,
+            filename=parsed.filename, media_type=parsed.media_type,
+            operation="analysis", artifact_id=artifact_id,
+            observation=parsed.text[:6000],
+        )
         await message.answer(sanitize_public_reply(reply))
     except ValueError as exc:
         await message.answer(f"Не удалось прочитать документ: {exc}")
