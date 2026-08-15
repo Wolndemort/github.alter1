@@ -63,7 +63,7 @@ DELETE /api/v1/reminders/:id Authorization: Bearer <token>
 POST /api/v1/youtube/search   Authorization: Bearer <token>, {"query":"..."}
 POST /api/v1/youtube/audio    Authorization: Bearer <token>, {"url":"https://youtube.com/..."}
 POST /api/v1/audio/sound-effects Authorization: Bearer <token>, {"prompt":"rain on glass"}; returns MP3
-POST /api/v1/audio/isolate    Authorization: Bearer <token>, multipart `file`; returns MP3
+POST /api/v1/audio/isolate    compatibility endpoint; unavailable with the current ElevenLabs key
 POST /api/v1/audio/process    Authorization: Bearer <token>, multipart `prompt` + optional `file`; returns JSON with base64 MP3
 POST /api/v1/audio/speech-to-text Authorization: Bearer <token>, multipart `file`; returns ElevenLabs transcript JSON
 POST /api/v1/audio/speech-to-speech?voice_id=<id> Authorization: Bearer <token>, multipart `file`; returns MP3

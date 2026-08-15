@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import base64
+import binascii
 import re
 
 from aiogram import F, Router, types
@@ -52,7 +53,7 @@ from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
 from services.document_ingestion import edit_document, extract_document, document_profile
-from services.artifact_store import save_artifact
+from services.artifact_store import latest_artifact, save_artifact
 from services.chat_service import record_document_turn
 from utils.document_commands import document_edit_instruction as shared_document_edit_instruction, is_document_edit_request as shared_document_edit_requested
 from services.media_jobs import cancel_job, get_job, history as media_history, submit_job
@@ -752,6 +753,52 @@ async def handle_document(message: types.Message, db_session: AsyncSession):
         await message.answer("Не удалось обработать документ. Проверь формат и попробуй ещё раз.")
 
 
+async def edit_latest_telegram_document(message: types.Message, user: User, db_session: AsyncSession, prompt: str) -> bool:
+    """Apply a follow-up document edit without requiring a second upload."""
+    if not shared_document_edit_requested(prompt):
+        return False
+    instruction = shared_document_edit_instruction(prompt)
+    if not instruction:
+        await message.answer("Напиши, что изменить в последней версии документа.")
+        return True
+    try:
+        previous = await latest_artifact(user.id, kind="document")
+        if not previous:
+            return False
+        raw_data = base64.b64decode(previous.get("data_base64", ""), validate=True)
+        artifact = edit_document(
+            str(previous.get("filename") or "document"),
+            raw_data,
+            instruction,
+            str(previous.get("media_type") or ""),
+        )
+        artifact_id = await save_artifact(
+            user.id, artifact.data, artifact.filename, artifact.media_type,
+            kind="document", operation="document_edit",
+        )
+        if not artifact_id:
+            await message.answer("Не удалось сохранить изменённый документ. Попробуй ещё раз.")
+            return True
+        await record_document_turn(
+            db_session, user.id, prompt,
+            "Готово — отправляю последнюю изменённую версию документа.",
+            filename=artifact.filename, media_type=artifact.media_type,
+            operation="document_edit", artifact_id=artifact_id,
+        )
+        await message.answer_document(
+            BufferedInputFile(artifact.data, filename=artifact.filename),
+            caption="Готово — отправляю последнюю изменённую версию документа.",
+        )
+        return True
+    except (ValueError, TypeError, binascii.Error) as exc:
+        await message.answer(f"Не удалось изменить последний документ: {exc}")
+        return True
+    except Exception:
+        logging.exception("Telegram latest document edit failed")
+        await message.answer("Не удалось изменить последний документ. Попробуй ещё раз.")
+        return True
+
+
 @router.message(lambda message: message.photo or message.video)
 async def handle_media(message: types.Message, db_session: AsyncSession):
     prompt = message.caption or "Проанализируй это изображение и объясни, что на нём."
@@ -1341,6 +1388,8 @@ async def cmd_checkins_off(message: types.Message, db_session: AsyncSession):
 @router.message(Command("proactive_on"))
 async def cmd_proactive_on(message: types.Message, db_session: AsyncSession):
     user = await get_or_create_user(message, db_session)
+    if await edit_latest_telegram_document(message, user, db_session, message.text):
+        return
     settings = dict(user.tech_stack or {})
     settings["proactive_enabled"] = True
     user.tech_stack = settings

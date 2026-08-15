@@ -149,7 +149,6 @@ curl -X POST "$API/api/v1/chat/media" \
 
 ```text
 POST /api/v1/audio/sound-effects
-POST /api/v1/audio/isolate
 POST /api/v1/audio/process
 ```
 
@@ -163,14 +162,8 @@ curl -X POST "$API/api/v1/audio/sound-effects" \
   --output rain.mp3
 ```
 
-Очистить голос:
-
-```bash
-curl -X POST "$API/api/v1/audio/isolate" \
-  -H "Authorization: Bearer $TOKEN" \
-  -F 'file=@voice.m4a' \
-  --output clean.mp3
-```
+Audio Isolation отключён для текущего ключа ElevenLabs. Endpoint сохранён
+только для обратной совместимости и не считается рабочей возможностью.
 
 Единая естественная команда для эффекта, очистки и микса:
 
@@ -481,8 +474,7 @@ ALTER сообщит об ошибке и не будет придумывать
 Создай звук дождя по стеклу
 Сгенерируй звук леса ночью
 Сделай звук шагов по снегу
-Почисти это голосовое от шума
-Изолируй мой голос
+Улучши это голосовое и убери лишний шум
 Наложи звук дождя на моё голосовое
 Добавь к записи звук костра на фоне
 ```

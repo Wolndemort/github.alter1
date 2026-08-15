@@ -1,6 +1,6 @@
 import asyncio
 
-from utils.audio_actions import detect_audio_action, effect_prompt, process_audio_action
+from utils.audio_actions import AudioActionUnavailableError, detect_audio_action, effect_prompt, process_audio_action
 
 
 def test_audio_actions_are_detected_from_natural_language():
@@ -22,3 +22,12 @@ def test_sound_effect_action_returns_provider_audio(monkeypatch):
     monkeypatch.setattr("utils.audio_actions.sound_effect", fake_effect)
     result = asyncio.run(process_audio_action("создай звук дождя", b""))
     assert result == ("Создал звуковой эффект.", b"mp3")
+
+
+def test_unavailable_audio_isolation_is_not_called_from_natural_language():
+    try:
+        asyncio.run(process_audio_action("почисти запись от шума", b"audio"))
+    except AudioActionUnavailableError as exc:
+        assert "недоступна" in str(exc)
+    else:
+        raise AssertionError("Audio Isolation must remain unavailable for the current provider key")

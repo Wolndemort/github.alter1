@@ -6,7 +6,11 @@ import re
 import tempfile
 from pathlib import Path
 
-from services.elevenlabs_media import isolate_audio, sound_effect
+from services.elevenlabs_media import sound_effect
+
+
+class AudioActionUnavailableError(ValueError):
+    """Raised when the configured provider key cannot perform an action."""
 
 
 def detect_audio_action(text: str) -> str | None:
@@ -63,6 +67,9 @@ async def process_audio_action(prompt: str, data: bytes, filename: str = "voice.
     if action == "effect":
         return "Создал звуковой эффект.", await sound_effect(effect_prompt(prompt))
     if action == "isolate":
-        return "Почистил запись и изолировал голос.", await isolate_audio(data, filename)
+        raise AudioActionUnavailableError(
+            "Очистка голоса временно недоступна с текущим ключом ElevenLabs. "
+            "Используй «улучши запись и убери шум»."
+        )
     effect = await sound_effect(effect_prompt(prompt))
     return "Наложил звуковой эффект на голосовое.", await mix_audio(data, effect, filename)

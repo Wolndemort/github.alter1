@@ -115,9 +115,9 @@ async def process_audio_route(request: web.Request) -> web.Response:
         await close_redis(redis)
     try:
         result = await process_audio_action(prompt, data, filename)
-    except (ElevenLabsError, RuntimeError) as exc:
+    except (ElevenLabsError, RuntimeError, ValueError) as exc:
         await _refund(user_id, 20)
-        raise web.HTTPBadGateway(text=str(exc))
+        raise web.HTTPBadRequest(text=str(exc))
     if result is None:
         raise web.HTTPBadRequest(text="unsupported audio action")
     answer, audio = result
