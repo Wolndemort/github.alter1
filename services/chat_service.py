@@ -22,13 +22,14 @@ from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, extract_reminder_text
-from utils.intent import conversation_mode, do_not_remember, explicit_memory_fact, should_recall_context
+from utils.intent import conversation_mode, do_not_remember, explicit_memory_fact, should_recall_context, should_prefetch_web
 from utils.quality import sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from utils.action_log import append_action
 from utils.workflow_state import workflow_view
 from utils.agent_engine import agent_view
 from utils.multimodal_context import attachment_context_message
+from utils.web_search import search_web
 from datetime import timedelta
 
 
@@ -278,6 +279,14 @@ class ChatService:
                 memory["related_previous_context"] = recalled
                 memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
 
+        if should_prefetch_web(text):
+            results = await search_web(text, max_results=6)
+            if results:
+                memory["web_search_context"] = [
+                    {key: item.get(key, "") for key in ("title", "url", "content")}
+                    for item in results[:6]
+                ]
+
         parsed_reminder = parse_reminder(text)
         if parsed_reminder:
             remind_at, reminder_text = parsed_reminder
@@ -459,6 +468,13 @@ class ChatService:
             if recalled:
                 memory["related_previous_context"] = recalled
                 memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
+        if should_prefetch_web(text):
+            results = await search_web(text, max_results=6)
+            if results:
+                memory["web_search_context"] = [
+                    {key: item.get(key, "") for key in ("title", "url", "content")}
+                    for item in results[:6]
+                ]
         # Keep durable memory at the very end of the system message. The
         # upstream prompt guard preserves the tail when the policy is long;
         # placing the mode marker after memory used to cut off identity and

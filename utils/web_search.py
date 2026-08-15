@@ -12,6 +12,7 @@ import aiohttp
 
 from config import config
 from utils.metrics import increment
+from utils.intent import is_local_search_request
 
 
 _PROVIDER_FAILURES: dict[str, tuple[int, float]] = {}
@@ -97,7 +98,7 @@ def _rank_results(items: list[dict], limit: int) -> list[dict]:
     """Prefer official and local-directory sources while keeping relevance order."""
     def score(item: dict) -> int:
         host = urlsplit(str(item.get("url") or "")).netloc.casefold()
-        if any(marker in host for marker in (".gov", ".gov.ru", "yandex.ru", "google.com", "2gis.ru")):
+        if any(marker in host for marker in (".gov", ".gov.ru", "yandex.ru", "google.com")):
             return 3
         if any(marker in host for marker in ("wikipedia.org", "youtube.com")):
             return 2
@@ -314,7 +315,7 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     add_provider("firecrawl", lambda: _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
                 if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
                     add_provider("google", lambda: _google_cse(session, query, limit))
-                if config.TWOGIS_API_KEY:
+                if config.TWOGIS_API_KEY and is_local_search_request(query):
                     add_provider("2gis", lambda: _twogis(session, query, limit))
                 provider_results: dict[str, list[dict]] = {}
                 pending = set(tasks)

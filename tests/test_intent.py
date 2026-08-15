@@ -1,4 +1,4 @@
-from utils.intent import explicit_memory_fact, is_web_request, is_youtube_request, should_recall_context, should_search_web, youtube_query
+from utils.intent import explicit_memory_fact, is_local_search_request, is_web_request, is_youtube_request, should_prefetch_web, should_recall_context, should_search_web, youtube_query
 
 
 def test_ordinary_messages_do_not_trigger_web_search():
@@ -21,6 +21,18 @@ def test_search_synonyms_trigger_web_search():
         "Глянь в интернете, кто сегодня выступает",
     ):
         assert should_search_web(request), request
+
+
+def test_knowledge_questions_prefetch_web_without_explicit_search_command():
+    for request in ("Знаешь ли ты игру Hades?", "Расскажи про сериал Severance", "Что это за компания Nvidia?"):
+        assert should_prefetch_web(request), request
+    assert not should_prefetch_web("Мне сегодня грустно, побудь со мной")
+
+
+def test_directory_search_is_reserved_for_local_requests():
+    assert is_local_search_request("Где рядом со мной хорошее кафе?")
+    assert is_local_search_request("Как добраться до магазина?")
+    assert not is_local_search_request("Знаешь ли ты игру Hades?")
 
 
 def test_youtube_link_request_is_detected():

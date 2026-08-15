@@ -56,6 +56,36 @@ def should_search_web(text):
     return is_web_request(text)
 
 
+KNOWLEDGE_REQUEST_PATTERNS = (
+    r"\b(?:знаешь\s+ли|кто\s+такой|кто\s+такая|что\s+такое|что\s+за|расскажи\s+(?:о|про)|что\s+можешь\s+сказать\s+о|объясни\s+(?:что|кто))\b",
+    r"\b(?:игр[аеу]|фильм[аеу]|сериал[аеу]|книг[аеу]|аниме|манг[аеу]|групп[аеу]|песн[яе]|альбом[аеу]|акт[её]р|режисс[её]р|компани[яи]|програм|технолог|модел)\b",
+)
+
+
+def should_prefetch_web(text: str) -> bool:
+    """Decide whether ALTER should search before asking the model to answer.
+
+    This is intentionally conservative for casual/personal messages, while
+    making factual requests deterministic instead of leaving search entirely
+    to the model's tool-choice decision.
+    """
+    value = (text or "").casefold().replace("ё", "е")
+    if is_web_request(value):
+        return True
+    if re.search(r"\b(?:как\s+дела|что\s+делаешь|побудь\s+со\s+мной|мне\s+грустно|я\s+(?:устал|устала|устал))\b", value):
+        return False
+    return any(re.search(pattern, value) for pattern in KNOWLEDGE_REQUEST_PATTERNS)
+
+
+def is_local_search_request(text: str) -> bool:
+    """Use directory search only when the user asks for a local place/service."""
+    value = (text or "").casefold().replace("ё", "е")
+    return bool(re.search(
+        r"\b(?:рядом|поблизости|адрес|где\s+находится|как\s+добраться|маршрут|кафе|ресторан|магазин|аптека|банк|салон|организаци|заправк|отель|доставка)\w*\b",
+        value,
+    ))
+
+
 CONTEXT_REFERENCE_PATTERNS = (
     r"\b(?:\u044d\u0442\u043e\u0442|\u044d\u0442\u0430|\u044d\u0442\u043e|\u0442\u043e\u0442|\u0442\u0430\u043c|\u043e\u043d|\u043e\u043d\u0430|\u043e\u043d\u0438|\u043d\u0438\u043c|\u043d\u0435\u0439|\u0441\u043d\u0438\u043c|\u0441\u043d\u0435\u0439)\b",
     r"\b(?:\u043f\u043e\u043c\u043d\u0438\u0448\u044c|\u043d\u0430\u043f\u043e\u043c\u043d\u0438|\u043a\u0430\u043a\s+\u0442\u0430\u043c|\u0447\u0442\u043e\s+\u0441|\u043f\u043e\s+\u043f\u043e\u0432\u043e\u0434\u0443|\u043d\u0430\u0441\u0447\u0451\u0442|\u043d\u0430\u0441\u0447\u0435\u0442|\u0432\u0435\u0440\u043d\u0451\u043c\u0441\u044f|\u0432\u0435\u0440\u043d\u0435\u043c\u0441\u044f|\u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u043c|вернись|прошл\w*|предыдущ\w*)\b",
