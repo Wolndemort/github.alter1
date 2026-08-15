@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import html
 import logging
+import re
 import time
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
@@ -13,9 +16,87 @@ import aiohttp
 from config import config
 from utils.metrics import increment
 from utils.intent import is_local_search_request
+from utils.url_safety import validate_public_url
 
 
 _PROVIDER_FAILURES: dict[str, tuple[int, float]] = {}
+
+
+class _VisibleTextParser(HTMLParser):
+    """Small dependency-free HTML to text extractor for source verification."""
+
+    _SKIP = {"script", "style", "noscript", "svg"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag.casefold() in self._SKIP:
+            self._skip += 1
+
+    def handle_endtag(self, tag):
+        if tag.casefold() in self._SKIP and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data):
+        if not self._skip:
+            value = html.unescape(data).strip()
+            if value:
+                self.parts.append(value)
+
+
+def _page_text(body: bytes, charset: str | None = None) -> str:
+    try:
+        text = body.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        text = body.decode("utf-8", errors="replace")
+    parser = _VisibleTextParser()
+    try:
+        parser.feed(text)
+    except Exception:
+        return ""
+    return re.sub(r"\s+", " ", " ".join(parser.parts)).strip()[:6000]
+
+
+async def _verify_source(session, item: dict) -> dict:
+    """Fetch a top result and attach page text as stronger evidence."""
+    value = dict(item)
+    url = str(value.get("url") or "")
+    try:
+        safe_url = validate_public_url(url)
+        async with session.get(
+            safe_url,
+            headers={"User-Agent": "ALTER/1.0 (+https://alterai.ru)"},
+            allow_redirects=True,
+        ) as response:
+            if response.status != 200 or "text/html" not in str(response.headers.get("Content-Type", "")).casefold():
+                return value
+            validate_public_url(str(response.url))
+            body = await response.content.read(250_000)
+            text = _page_text(body, response.charset)
+            if len(text) >= 160:
+                value["content"] = (str(value.get("content") or "") + "\n\nПроверено по странице:\n" + text)[:9000]
+                value["source_verified"] = True
+    except Exception:
+        logging.debug("Search source verification skipped for %s", url, exc_info=True)
+    return value
+
+
+async def _verify_sources(session, items: list[dict], limit: int = 2) -> list[dict]:
+    """Verify only the first couple of sources to keep search bounded."""
+    if not hasattr(session, "get"):
+        return items
+    selected = items[:max(0, limit)]
+    if not selected:
+        return items
+    verified = await asyncio.gather(
+        *(_verify_source(session, item) for item in selected),
+        return_exceptions=True,
+    )
+    result = [item if isinstance(item, dict) else original for item, original in zip(verified, selected)]
+    return result + items[len(selected):]
 
 
 def _provider_is_available(name: str) -> bool:
@@ -348,6 +429,7 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     for item in provider_results.get(provider, [])
                 ]
                 merged = _annotate_results(_rank_results(_normalize(ordered_items, limit), limit))
+                merged = await _verify_sources(session, merged, limit=2)
                 if merged:
                     increment("search.web.success", results=len(merged), providers=len(tasks))
                 else:

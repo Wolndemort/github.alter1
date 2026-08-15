@@ -1,4 +1,4 @@
-from utils.web_search import _annotate_results, _canonical_url, _rank_results
+from utils.web_search import _annotate_results, _canonical_url, _page_text, _rank_results
 
 
 def test_search_canonicalization_removes_tracking_and_trailing_slash():
@@ -15,3 +15,8 @@ def test_search_quality_prioritizes_official_sources_and_adds_evidence_metadata(
     assert annotated[0]["title"] == "Official"
     assert annotated[0]["source_quality"] == "official"
     assert annotated[1]["source_domain"] == "blog.example"
+
+
+def test_page_text_removes_scripts_and_normalizes_html():
+    body = b"<html><script>secret()</script><main>Hello <b>world</b>.</main></html>"
+    assert _page_text(body) == "Hello world ."
