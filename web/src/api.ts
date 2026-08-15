@@ -126,6 +126,18 @@ export class AlterApi {
   }
   sendDocument(token: string, prompt: string, file: File, agent = false) { return this.upload(token, "/api/v1/chat/document", { prompt, agent: String(agent) }, file); }
   editDocument(token: string, file: File, instruction: string) { return this.upload(token, "/api/v1/chat/document/edit", { instruction }, file); }
+  async editArtifact(token: string, artifactId: string, instruction: string) {
+    const form = new FormData(); form.append("artifact_id", artifactId); form.append("instruction", instruction);
+    const response = await fetch(this.url("/api/v1/chat/document/edit"), { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) return parseError(response);
+    return { blob: await response.blob(), artifactId: response.headers.get("X-ALTER-Artifact-ID") || "", filename: response.headers.get("Content-Disposition") || "alter-edited-document" };
+  }
+  async editDocumentFile(token: string, file: File, instruction: string) {
+    const form = new FormData(); form.append("instruction", instruction); form.append("file", file);
+    const response = await fetch(this.url("/api/v1/chat/document/edit"), { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) return parseError(response);
+    return { blob: await response.blob(), artifactId: response.headers.get("X-ALTER-Artifact-ID") || "", filename: response.headers.get("Content-Disposition") || file.name };
+  }
   async generateMedia(token: string, message: string, file: File | null, kind: "image" | "video", options: Record<string, unknown> = {}) {
     const form = new FormData(); form.append("message", message); form.append("kind", kind); form.append("options", JSON.stringify(options)); if (file) form.append("file", file);
     return this.request<{ media_type: string; filename: string; data_base64: string; artifact_id?: string }>("/api/v1/media/generate", { method: "POST", body: form }, token);
@@ -133,6 +145,7 @@ export class AlterApi {
   async voiceReply(token: string, text: string) { const blob = await this.blob("/api/v1/voice/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }, token); const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); }); return { audio_base64: dataUrl.split(",", 2)[1], audio_mime: blob.type || "audio/wav", audio_filename: "alter-voice.wav" }; }
   voiceGeneration(token: string, description: string) { return this.request<{ voice_id?: string; previews?: { audio_base_64?: string }[] }>("/api/v1/audio/voice-generation", { method: "POST", body: JSON.stringify({ description }) }, token); }
   audioAction(token: string, path: "process" | "isolate" | "speech-to-text" | "speech-to-speech", file: File, prompt = "", voiceId?: string) { const suffix = path === "speech-to-speech" && voiceId ? `?voice_id=${encodeURIComponent(voiceId)}` : ""; const form = new FormData(); if (prompt) form.append("prompt", prompt); form.append("file", file); return this.blob(`/api/v1/audio/${path}${suffix}`, { method: "POST", body: form }, token); }
+  async transcribeAudio(token: string, file: File) { const form = new FormData(); form.append("file", file); return this.request<{ text?: string; transcript?: string }>("/api/v1/audio/speech-to-text", { method: "POST", body: form }, token); }
   audioVoices(token: string) { return this.request<{ voices?: unknown[] }>("/api/v1/audio/voices", {}, token); }
   audioModels(token: string) { return this.request<{ models: unknown[] }>("/api/v1/audio/models", {}, token); }
   youtubeSearch(token: string, query: string) { return this.request<{ results: { title: string; url: string; channel?: string; thumbnail?: string }[] }>("/api/v1/youtube/search", { method: "POST", body: JSON.stringify({ query }) }, token); }

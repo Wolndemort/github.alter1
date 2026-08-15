@@ -29,4 +29,19 @@ describe("ALTER web API contract", () => {
     await new AlterApi().diagnosticsQuality("owner-token");
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/diagnostics/quality", expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer owner-token" }) }));
   });
+
+  it("edits the latest document artifact without re-uploading the source file", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("edited", { status: 200, headers: { "Content-Type": "text/plain", "X-ALTER-Artifact-ID": "edited-2", "Content-Disposition": "attachment; filename=latest.txt" } }));
+    const result = await new AlterApi().editArtifact("token", "source-1", "replace old => new");
+    expect(result.artifactId).toBe("edited-2");
+    expect(result.blob).toBeInstanceOf(Blob);
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/chat/document/edit", expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer token" }, body: expect.any(FormData) }));
+  });
+
+  it("keeps audio transcription on the shared mobile-compatible route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ text: "готово" }), { status: 200 }));
+    const file = new File(["audio"], "voice.webm", { type: "audio/webm" });
+    await expect(new AlterApi().transcribeAudio("token", file)).resolves.toEqual({ text: "готово" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/audio/speech-to-text", expect.objectContaining({ method: "POST", body: expect.any(FormData) }));
+  });
 });

@@ -144,8 +144,14 @@
 .inline-form input { margin:0; }
 .inline-form button { width:42px;background:#eee;border:0;border-radius:8px;font-weight:800; }
 .search-result { display:flex;gap:10px;align-items:flex-start;border-top:1px solid #242421;padding:12px 0;color:#ddd;text-decoration:none; }
+.search-result > a { display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0;color:inherit;text-decoration:none; }
+.search-result > button { flex:0 0 auto;min-width:42px;min-height:42px;border:1px solid #383832;border-radius:8px;background:#181816;color:#fff;cursor:pointer; }
+.document-edit-bar,.audio-action-bar { display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:9px;border:1px solid #383832;border-radius:9px;background:#11110f; }
+.document-edit-bar > div { min-width:130px;display:grid;gap:3px; }.document-edit-bar small { color:#777;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px; }
+.document-edit-bar input { flex:1;min-width:0;margin:0; }.document-edit-bar .primary-button { white-space:nowrap; }.audio-action-bar strong { margin-right:auto;font-size:12px; }.audio-action-bar input { width:110px;min-width:0;margin:0;padding:8px; }.audio-action-bar button { min-height:38px;padding:7px 10px;border:1px solid #555;border-radius:8px;background:#1a1a18;color:#eee; }
 .search-result span { color:var(--accent); }.search-result strong,.search-result small { display:block; }.search-result strong { font-size:12px; }.search-result small { color:#777;font-size:10px;margin-top:4px; }.tool-copy { color:#888;font-size:12px;line-height:1.6; }
 @media (max-width:760px) { .tool-grid { grid-template-columns:1fr; }.tool-card:last-child { grid-column:auto; } }
+@media (max-width:760px) { .document-edit-bar,.audio-action-bar { align-items:stretch;flex-wrap:wrap; }.document-edit-bar > div { flex:1 1 100%; }.document-edit-bar input,.audio-action-bar input { flex:1 1 100%;min-height:44px;width:auto; }.document-edit-bar .primary-button,.audio-action-bar button { min-height:44px;flex:1; }.audio-action-bar strong { flex:1 1 100%;margin:0; }.search-result > button { min-width:44px; } }
 .success-banner { color:#f4f4f0; background:#181818; border:1px solid #666; border-radius:8px; padding:11px 13px; font-size:12px; margin-bottom:18px; }
 .success-banner button { float:right; border:0; background:none; color:#f4f4f0; cursor:pointer; }
  .voice-setting { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:17px 0; border-bottom:1px solid #22221f; color:#eee; font-size:13px; }

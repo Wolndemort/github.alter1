@@ -35,6 +35,12 @@ editing, audio uploads, TTS voice replies and media generation; capabilities
 that are unavailable with the configured provider key are not advertised by
 the canonical catalog.
 
+Mobile is the UX reference for the shared interaction model. Web mirrors its
+document artifact editing, sequential latest-version downloads, audio
+transcription/processing/speech-to-speech actions, voice generation and
+YouTube-audio actions. The web layout remains touch-first below 760px, with
+safe-area spacing and 44px-class controls for phone browsers.
+
 The production nginx container builds the web image from this directory. The
 existing API remains proxied to `alter_bot`; legal pages remain mounted from
 `legal/`.
