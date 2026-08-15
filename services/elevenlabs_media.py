@@ -60,7 +60,10 @@ async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
     response = await client.post(
             "https://api.elevenlabs.io/v1/audio-isolation",
             headers={"xi-api-key": _key(), "Accept": "audio/mpeg"},
-            files={"file": (filename, data, "application/octet-stream")},
+            # Audio Isolation uses the ``audio`` multipart field.  The API
+            # accepts arbitrary audio containers, so preserve the filename
+            # while letting ElevenLabs inspect the payload.
+            files={"audio": (filename, data, "application/octet-stream")},
     )
     if response.status_code >= 400:
         raise ElevenLabsError("ElevenLabs audio isolation failed")
@@ -70,7 +73,12 @@ async def isolate_audio(data: bytes, filename: str = "audio.mp3") -> bytes:
 async def speech_to_text(data: bytes, filename: str = "voice.m4a") -> dict:
     data = bytes(data)
     try:
-        content_type = "audio/mp4" if filename.casefold().endswith((".m4a", ".mp4")) else "audio/ogg"
+        suffix = filename.casefold().rsplit(".", 1)[-1] if "." in filename else ""
+        content_type = {
+            "m4a": "audio/mp4", "mp4": "audio/mp4", "wav": "audio/wav",
+            "webm": "audio/webm", "mp3": "audio/mpeg", "mpeg": "audio/mpeg",
+            "ogg": "audio/ogg", "oga": "audio/ogg",
+        }.get(suffix, "application/octet-stream")
         client = await pooled_client(120)
         response = await client.post(
                 "https://api.elevenlabs.io/v1/speech-to-text",

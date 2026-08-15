@@ -44,6 +44,9 @@ async def test_enabled_elevenlabs_operations_use_expected_endpoints(monkeypatch)
     assert "https://api.elevenlabs.io/v2/voices" in urls
     assert "https://api.elevenlabs.io/v1/models" in urls
 
+    stt_call = next(call for call in Client.calls if call[1].endswith("/v1/speech-to-text"))
+    assert stt_call[2]["files"]["file"][2] == "audio/mp4"
+
 
 @pytest.mark.asyncio
 async def test_sound_effect_requests_a_usable_default_duration(monkeypatch):
@@ -55,6 +58,18 @@ async def test_sound_effect_requests_a_usable_default_duration(monkeypatch):
     call = Client.calls[0]
     assert call[1].endswith("/v1/sound-generation")
     assert call[2]["json"]["duration_seconds"] == 8
+
+
+@pytest.mark.asyncio
+async def test_audio_isolation_uses_the_provider_audio_field(monkeypatch):
+    Client.calls = []
+    monkeypatch.setattr(elevenlabs_media.config, "ELEVENLABS_API_KEY", SimpleNamespace(get_secret_value=lambda: "secret"))
+    monkeypatch.setattr(elevenlabs_media.httpx, "AsyncClient", Client)
+
+    assert await elevenlabs_media.isolate_audio(b"voice", "voice.wav") == b"mp3"
+    call = next(call for call in Client.calls if call[1].endswith("/v1/audio-isolation"))
+    assert "audio" in call[2]["files"]
+    assert "file" not in call[2]["files"]
 
 
 @pytest.mark.asyncio
