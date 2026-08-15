@@ -16,6 +16,7 @@ from utils.ap_logic import generate_reply, plan_audio_request
 from utils.media_logic import extract_visual_context, generate_media_reply
 from services.media_generation import MediaGenerationError, edit_image, generate_image, generate_video
 from utils.media import video_audio, video_duration, video_preview
+from services.media_quality import video_context
 from io import BytesIO
 from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
@@ -777,15 +778,18 @@ async def handle_media(message: types.Message, db_session: AsyncSession):
             if duration and duration > 180:
                 await message.answer("Видео длиннее 3 минут. Пришли короткий фрагмент.")
                 return
-            media = await video_preview(video_data)
+            media = await video_preview(video_data, duration)
             if not media:
                 await message.answer("Не удалось извлечь кадры из видео.")
                 return
             audio = await video_audio(video_data)
+            transcript = ""
             if audio:
                 transcript = await transcribe_voice(audio)
                 if transcript:
                     prompt += f"\n\nРасшифровка речи в видео:\n{transcript}"
+            quality = video_context(duration_seconds=duration, frame_count=len(media), transcript=transcript)
+            prompt += f"\n\nTechnical video quality context: {quality}"
         if not await generation_allowed(user, 20):
             await message.answer("Лимит кредитов для анализа медиа исчерпан.")
             return

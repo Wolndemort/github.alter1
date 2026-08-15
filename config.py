@@ -9,6 +9,9 @@ class Setting(BaseSettings):
     # Keep local defaults aligned with the documented .env configuration.
     # Environment variables still take precedence over these values.
     OPENROUTER_MODEL: str = "openai/gpt-5.6-luna"
+    # Stronger multimodal fallback for image/video analysis. It is used only
+    # when paid fallback is enabled, never for ordinary text chat.
+    OPENROUTER_VISION_MODEL: str = "google/gemini-3.7-flash"
     # Override these with an available OpenRouter :free model in .env.
     OPENROUTER_FREE_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
     OPENROUTER_FREE_MODEL_2: str = "openai/gpt-oss-20b:free"

@@ -230,18 +230,19 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
     analysis_prompt = prompt
     media = [("image/jpeg" if kind == "image" else "video/mp4", data)]
     if kind == "video":
-        media = await video_preview(data)
+        duration = await video_duration(data)
+        media = await video_preview(data, duration)
         if not media:
             raise ValueError("video could not be processed")
         audio = await video_audio(data)
-        quality = video_context(duration_seconds=await video_duration(data), frame_count=len(media), transcript="")
-        analysis_prompt += f"\n\nTechnical video quality context: {quality}"
         if audio:
             transcript = await transcribe_voice(audio)
             if transcript:
                 analysis_prompt = (
                     f"{prompt}\n\nТранскрипт аудиодорожки видео (используй только как дополнительный контекст):\n{transcript[:12000]}"
                 )
+        quality = video_context(duration_seconds=duration, frame_count=len(media), transcript=transcript or "")
+        analysis_prompt += f"\n\nTechnical video quality context: {quality}"
     _append(session, "user", prompt)
     memory = dict(user.memory or {})
     feedback = feedback_context(user.tech_stack)

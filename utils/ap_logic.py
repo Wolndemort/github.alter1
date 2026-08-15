@@ -283,11 +283,12 @@ def _cool_down_model(model: str) -> None:
 def select_model_route(messages, task: str | None = None) -> list[str]:
     """Choose an inexpensive model for chat and a stronger one for hard work."""
     text = _request_text(messages)
+    is_visual = _has_visual_input(messages)
     is_complex = task in {"reasoning", "planning"} or len(text) >= 700 or any(
         re.search(pattern, text) for pattern in COMPLEX_REQUEST_PATTERNS
     )
     if config.OPENROUTER_FREE_MODELS_ENABLED:
-        if _has_visual_input(messages):
+        if is_visual:
             free_models = [config.OPENROUTER_FREE_VISION_MODEL, config.OPENROUTER_FREE_VISION_MODEL_2]
         else:
             free_models = [
@@ -302,12 +303,17 @@ def select_model_route(messages, task: str | None = None) -> list[str]:
     # Paid models are deliberately appended only after every configured free model.
     primary = free_models
     if config.OPENROUTER_ALLOW_PAID_FALLBACK:
-        paid_models = ([config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL]
-                       if is_complex else [config.OPENROUTER_MODEL])
+        vision_model = getattr(config, "OPENROUTER_VISION_MODEL", None)
+        if is_visual and vision_model:
+            paid_models = [vision_model, config.OPENROUTER_MODEL]
+        else:
+            paid_models = ([config.OPENROUTER_REASONING_MODEL, config.OPENROUTER_MODEL]
+                           if is_complex else [config.OPENROUTER_MODEL])
         primary += paid_models + [config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2]
     if config.OPENROUTER_PAID_FIRST and config.OPENROUTER_ALLOW_PAID_FALLBACK:
         paid_preferred = [model for model in (
-            config.OPENROUTER_REASONING_MODEL if is_complex else None,
+            (getattr(config, "OPENROUTER_VISION_MODEL", None) if is_visual else
+             (config.OPENROUTER_REASONING_MODEL if is_complex else None)),
             config.OPENROUTER_MODEL,
         ) if model]
         paid_tail = [model for model in (config.OPENROUTER_FALLBACK_MODEL, config.OPENROUTER_FALLBACK_MODEL_2) if model]

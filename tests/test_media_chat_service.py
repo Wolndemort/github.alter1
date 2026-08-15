@@ -63,7 +63,7 @@ async def test_multiple_images_stay_in_one_contextual_vision_turn(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_video_requires_extractable_preview(monkeypatch):
-    async def no_preview(data): return []
+    async def no_preview(data, duration=None): return []
     monkeypatch.setattr(media_chat_service, "video_preview", no_preview)
     with pytest.raises(ValueError, match="could not be processed"):
         await media_chat_service.reply(Db(), 7, "", "video/mp4", b"video")
@@ -73,7 +73,7 @@ async def test_video_requires_extractable_preview(monkeypatch):
 async def test_video_reply_combines_frames_with_audio_transcript(monkeypatch):
     captured = {}
 
-    async def preview(data): return [("image/jpeg", b"frame")]
+    async def preview(data, duration=None): return [("image/jpeg", b"frame")]
     async def audio(data): return b"audio"
     async def transcribe(data): return "Человек говорит о сроках проекта"
     async def vision(prompt, media, **kwargs):

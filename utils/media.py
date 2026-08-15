@@ -3,14 +3,24 @@ import tempfile
 from pathlib import Path
 
 
-async def video_preview(data: bytes) -> list[tuple[str, bytes]]:
+async def video_preview(data: bytes, duration_seconds: float | None = None) -> list[tuple[str, bytes]]:
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "input.mp4"
         output = Path(directory) / "frame-%02d.jpg"
         source.write_bytes(data)
+        # Sample the whole clip instead of taking only the first 30 seconds.
+        # For short clips this keeps roughly one frame per second; for longer
+        # clips it spreads twelve frames across the complete duration.
+        duration = max(0.0, float(duration_seconds or 0.0))
+        if duration > 0:
+            fps = min(1.0, max(1.0 / 12.0, 8.0 / duration))
+            frame_limit = 12
+        else:
+            fps = 1.0 / 5.0
+            frame_limit = 6
         try:
             process = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y", "-i", str(source), "-vf", "fps=1/5,scale=960:-1", "-frames:v", "6", str(output),
+                "ffmpeg", "-y", "-i", str(source), "-vf", f"fps={fps:g},scale=960:-1", "-frames:v", str(frame_limit), str(output),
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
             await process.communicate()

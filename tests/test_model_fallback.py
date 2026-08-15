@@ -151,6 +151,17 @@ def test_visual_request_uses_free_vision_model_first():
     assert ap_logic.config.OPENROUTER_MODEL not in route[:2]
 
 
+def test_visual_request_uses_stronger_paid_vision_model_when_enabled(monkeypatch):
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_ALLOW_PAID_FALLBACK", True)
+    monkeypatch.setattr(ap_logic.config, "OPENROUTER_PAID_FIRST", True)
+    route = ap_logic.select_model_route([{
+        "role": "user",
+        "content": [{"type": "text", "text": "Разбери видео"},
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,abc"}}],
+    }])
+    assert route[0] == ap_logic.config.OPENROUTER_VISION_MODEL
+
+
 def test_long_system_prompt_does_not_force_reasoning_route():
     route = ap_logic.select_model_route([
         {"role": "system", "content": "memory " * 1000},
