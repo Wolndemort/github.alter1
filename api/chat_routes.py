@@ -499,6 +499,7 @@ async def media_chat_route(request: web.Request) -> web.Response:
         filename = "audio.m4a"
         data = b""
         attachments: list[tuple[str, str, bytes]] = []
+        total_size = 0
         while True:
             part = await reader.next()
             if part is None:
@@ -519,6 +520,9 @@ async def media_chat_route(request: web.Request) -> web.Response:
                         raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES, actual_size=size)
                     chunks.append(chunk)
                 data = b"".join(chunks)
+                total_size += len(data)
+                if total_size > config.MEDIA_MAX_BYTES * 4:
+                    raise web.HTTPRequestEntityTooLarge(max_size=config.MEDIA_MAX_BYTES * 4, actual_size=total_size)
                 attachments.append((filename, content_type, data))
                 if len(attachments) > 10:
                     raise web.HTTPBadRequest(text="можно прикрепить не больше 10 изображений")
