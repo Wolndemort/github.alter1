@@ -13,12 +13,12 @@ CAPABILITY_CATALOG = {
     ],
     "vision": ["image_analysis", "OCR", "structured_visual_audit", "object_geometry", "chart_data", "confidence_gate", "image_editing"],
     "video": ["frame_sampling", "audio_extraction", "transcription", "timestamped_events", "video_generation", "image_to_video"],
-    "audio": ["speech_to_text", "text_to_speech", "voice_change", "audio_isolation", "sound_effects", "audio_mix", "YouTube_audio"],
+    "audio": ["speech_to_text", "text_to_speech", "voice_change", "sound_effects", "audio_mix", "YouTube_audio"],
     "productivity": ["reminders", "push_notifications", "checkins", "Google_Calendar", "location_context"],
     "operations": ["fallback_models", "quality_gate", "latency_metrics", "owner_diagnostics", "quotas", "backup_scripts", "production_smoke"],
 }
 
-CAPABILITY_CATALOG_VERSION = "2026-08-13"
+CAPABILITY_CATALOG_VERSION = "2026-08-15"
 
 
 def capability_catalog_text() -> str:
