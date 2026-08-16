@@ -60,6 +60,21 @@ def test_rejected_stream_reply_is_repaired_with_current_context(monkeypatch):
     assert "Продолжаю собирать билд" in "".join(chunks)
 
 
+def test_empty_provider_reply_is_repaired_with_current_context(monkeypatch):
+    async def repair(*args, **kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Продолжаю с билдом."))])
+
+    monkeypatch.setattr("services.chat_service.chat_with_fallback", repair)
+
+    async def collect():
+        return [chunk async for chunk in _quality_gated_chunks(
+            _stream(""),
+            repair_prompt="Текущий запрос: хорошо, продолжай. Последние реплики: билд мечника.",
+        )]
+
+    assert "Продолжаю с билдом." == "".join(asyncio.run(collect()))
+
+
 def test_quality_repairs_cp1251_mojibake_but_keeps_normal_cyrillic():
     assert repair_mojibake("РџСЂРёРІРµС‚") == "Привет"
     assert repair_mojibake("Привет, как дела?") == "Привет, как дела?"

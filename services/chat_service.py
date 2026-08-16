@@ -105,7 +105,7 @@ async def record_document_turn(
 
 async def _repair_rejected_stream_reply(raw_reply: str, repair_prompt: str) -> str:
     """Turn a model draft rejected by the gate into a public answer."""
-    if not raw_reply.strip() or raw_reply.strip() == PUBLIC_FALLBACK:
+    if raw_reply.strip() == PUBLIC_FALLBACK:
         return PUBLIC_FALLBACK
     try:
         response = await chat_with_fallback(
@@ -121,7 +121,7 @@ async def _repair_rejected_stream_reply(raw_reply: str, repair_prompt: str) -> s
                 },
                 {
                     "role": "user",
-                    "content": f"{repair_prompt}\n\nЧЕРНОВИК:\n{raw_reply[:6000]}",
+                    "content": f"{repair_prompt}\n\nЧЕРНОВИК:\n{raw_reply[:6000] or '(провайдер не вернул текст)'}",
                 },
             ],
             max_tokens=700,
