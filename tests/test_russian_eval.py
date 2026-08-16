@@ -11,6 +11,12 @@ def test_game_build_questions_require_factual_search():
     question = "В Ghost of Tsushima нормальный билд: оберег Инари на урон и доспехи Саругами?"
     assert is_web_request(question)
     assert should_search_web(question)
+
+
+def test_general_factual_questions_require_search():
+    assert is_web_request("Проверь, совместим ли этот адаптер с ноутбуком")
+    assert is_web_request("Какая актуальная цена подписки?")
+    assert is_web_request("Что такое этот препарат и безопасна ли дозировка?")
     assert classify_request("Йо, что по плану на сегодня?").streamable
 
 
