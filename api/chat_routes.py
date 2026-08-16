@@ -408,11 +408,11 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
-                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location"), use_tools=True):
+                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location"), use_tools=False):
                     await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             else:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "analyzing"}, ensure_ascii=False) + "\n\n").encode("utf-8"))
-                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location"), use_tools=True):
+                async for delta in ChatService().stream_reply(session, user_id, text, payload.get("location"), use_tools=route.kind in {"web", "youtube"}):
                     await response.write(("data: " + json.dumps({"type": "delta", "text": delta}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             await response.write(b"data: {\"type\":\"done\"}\n\n")
         except asyncio.CancelledError:

@@ -49,6 +49,16 @@ def _append(session: Session, role: str, content: str) -> None:
     session.raw_messages = messages[-100:]
 
 
+def _update_conversation_state(session: Session, user_text: str) -> None:
+    """Persist deterministic anchors for short follow-ups."""
+    state = dict(getattr(session, "conversation_state", None) or {})
+    state["last_user_message"] = user_text[:600]
+    if session.context_summary:
+        state["topic_summary"] = session.context_summary[:1200]
+    state["message_count"] = len(session.raw_messages or [])
+    session.conversation_state = state
+
+
 async def _refresh_active_context(session: Session) -> None:
     """Refresh the topic summary only after enough new turns accumulated."""
     messages = [
@@ -582,6 +592,9 @@ class ChatService:
             system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
         if session.context_summary:
             system += "\n\nACTIVE CONVERSATION SUMMARY (authoritative for the current topic):\n" + session.context_summary[:1200]
+        live_state = getattr(session, "conversation_state", None) or {}
+        if live_state:
+            system += "\n\nSTRUCTURED LIVE CONVERSATION STATE (use to resolve short follow-ups):\n" + json.dumps(live_state, ensure_ascii=False)[:1400]
         working = [
             {"role": "system", "content": system},
             *recent_conversation_messages(
@@ -617,6 +630,7 @@ class ChatService:
         reply = "".join(reply_parts)
         if not private_mode:
             _append(session, "assistant", reply)
+            _update_conversation_state(session, text)
             if not ephemeral_request:
                 await remember(db, user_id, text, source="user_message", categories=list(new_facts))
             trace = tool_trace()

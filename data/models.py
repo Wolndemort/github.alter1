@@ -78,6 +78,7 @@ class Session(Base):
     # durable-memory extraction produced when an inactive session is closed.
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     context_summary_messages: Mapped[int] = mapped_column(Integer, default=0, server_default='0', nullable=False)
+    conversation_state: Mapped[dict] = mapped_column(JSONB, default=dict, server_default='{}', nullable=False)
     raw_messages: Mapped[list] = mapped_column(JSONB, default=list, server_default='[]')
     is_processed: Mapped[bool] = mapped_column(default=False)
 
