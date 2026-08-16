@@ -2,7 +2,7 @@ import pytest
 from types import SimpleNamespace
 
 from data.models import Session, User
-from services.chat_service import ChatService, _stream_system_prompt, validate_message
+from services.chat_service import ChatService, _refresh_active_context, _stream_system_prompt, validate_message
 
 
 def test_chat_message_is_trimmed():
@@ -41,6 +41,28 @@ def test_full_reply_memory_budget_keeps_core_categories_first():
     bounded = _bounded_memory(value, 180)
     assert bounded["identity"]["name"] == "Адам"
     assert bounded["family"]["family"] == "Седа и Магомед"
+
+
+@pytest.mark.asyncio
+async def test_active_context_summary_refreshes_only_older_dialogue(monkeypatch):
+    session = Session(raw_messages=[
+        {"role": role, "content": f"{role}-{index}"}
+        for index in range(8)
+        for role in ("user", "assistant")
+    ])
+    captured = {}
+
+    async def summarize(messages, previous_summary):
+        captured["messages"] = messages
+        captured["previous"] = previous_summary
+        return "Текущая тема: проект; следующий шаг: продолжить."
+
+    monkeypatch.setattr("services.chat_service.summarize_active_context", summarize)
+    await _refresh_active_context(session)
+
+    assert session.context_summary.startswith("Текущая тема")
+    assert session.context_summary_messages == 16
+    assert len(captured["messages"]) == 8
 
 
 class Result:

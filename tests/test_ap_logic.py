@@ -66,11 +66,37 @@ def test_generate_reply_keeps_recent_topic_and_memory_in_prompt_tail(monkeypatch
         {"role": "user", "content": "Собери билд на максимальный урон"},
         {"role": "assistant", "content": "Подберу оружие и обереги."},
         {"role": "user", "content": "И что по билду?"},
-    ], {"identity": {"name": "Adam"}}))
+    ], {"identity": {"name": "Adam"}}, conversation_summary="Тема: билд на максимальный урон; следующий шаг: выбрать обереги."))
 
     system_prompt = captured["messages"][0]["content"]
-    assert "И что по билду?" in system_prompt
+    assert "ACTIVE CONVERSATION SUMMARY" in system_prompt
+    assert "выбрать обереги" in system_prompt
+    assert any("И что по билду?" in item.get("content", "") for item in captured["messages"])
     assert "Adam" in system_prompt
+
+
+def test_recent_conversation_messages_keeps_six_latest_pairs():
+    messages = [
+        {"role": role, "content": f"{role}-{index}"}
+        for index in range(10)
+        for role in ("user", "assistant")
+    ]
+    recent = ap_logic.recent_conversation_messages(messages)
+    assert len(recent) == 12
+    assert recent[0]["content"] == "user-4"
+    assert recent[-1]["content"] == "assistant-9"
+
+
+def test_active_context_summary_is_plain_bounded_text(monkeypatch):
+    async def fake_chat(*args, **kwargs):
+        return fake_response("Цель: собрать билд. Следующий шаг: выбрать обереги.")
+
+    monkeypatch.setattr(ap_logic, "chat_with_fallback", fake_chat)
+    result = run(ap_logic.summarize_active_context([
+        {"role": "user", "content": "Собери билд на максимальный урон"},
+    ]))
+    assert result == "Цель: собрать билд. Следующий шаг: выбрать обереги."
+    assert len(result) <= 1200
 
 
 def test_tool_definitions_are_present():

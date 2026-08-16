@@ -417,31 +417,6 @@ def _latest_user_message(messages) -> str:
     return ""
 
 
-def _conversation_anchor(messages, max_chars: int = 2400) -> str:
-    """Keep the active topic explicit when a long policy is compacted."""
-    turns = []
-    used = 0
-    for message in reversed(messages or []):
-        if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"}:
-            continue
-        content = message.get("content", "")
-        if not isinstance(content, str) or not content.strip():
-            continue
-        remaining = max_chars - used
-        if remaining <= 0:
-            break
-        line = f"{message['role']}: {content.strip()[:min(700, remaining)]}"
-        turns.append(line)
-        used += len(line) + 1
-    if not turns:
-        return ""
-    return (
-        "CURRENT CONVERSATION ANCHOR (use this to resolve short follow-ups; "
-        "the latest user message has priority):\n"
-        + "\n".join(reversed(turns))
-    )
-
-
 def _is_review_artifact(text: str) -> bool:
     """Reject a critic's leaked analysis instead of sending it to Telegram."""
     lowered = (text or "").casefold()
@@ -844,6 +819,43 @@ async def stream_chat_with_tools(messages, max_tokens=None, task=None):
         return
     increment("ai.tool.round_limit", limit=max_rounds)
 
+def recent_conversation_messages(messages, max_turns: int = 6) -> list[dict]:
+    """Return only the latest user/assistant turns for the live prompt."""
+    valid = [
+        {"role": item.get("role"), "content": item.get("content", "")}
+        for item in (messages or [])
+        if isinstance(item, dict)
+        and item.get("role") in {"user", "assistant"}
+        and item.get("content")
+    ]
+    return valid[-max(1, max_turns * 2):]
+
+
+async def summarize_active_context(messages, previous_summary: str = "") -> str:
+    """Create a short topic/state summary for the still-active conversation."""
+    if not messages and not previous_summary:
+        return ""
+    prompt = (
+        "Сожми активную тему разговора ALTER в краткое состояние на русском, "
+        "до 1200 символов. Сохрани цель пользователя, выбранные варианты, "
+        "ограничения, нерешённые вопросы и следующий шаг. Не добавляй факты, "
+        "которых нет в диалоге. Верни только сам summary без заголовка и мета-комментариев.\n\n"
+        f"Предыдущее состояние:\n{previous_summary[:3000]}\n\n"
+        f"Фрагмент диалога:\n{json.dumps(_bounded_messages(messages, 6000), ensure_ascii=False)}"
+    )
+    try:
+        response = await chat_with_fallback(
+            [{"role": "system", "content": "Ты аккуратный редактор контекста диалога."},
+             {"role": "user", "content": prompt}],
+            max_tokens=360,
+            task="summary",
+        )
+        return str(response.choices[0].message.content or "").strip()[:1200]
+    except Exception:
+        logging.exception("Active conversation summary failed")
+        return previous_summary[:1200]
+
+
 async def summarize_session(messages):
     try:
         context = {"current_time": datetime.now(timezone.utc).isoformat(), "messages": _bounded_messages(messages)}
@@ -851,7 +863,7 @@ async def summarize_session(messages):
         return normalize_memory(json.loads((response.choices[0].message.content or "{}").strip("` ").removeprefix("json").strip()))
     except Exception: return {}
 
-async def generate_reply(messages, memory=None, search_results=None):
+async def generate_reply(messages, memory=None, search_results=None, conversation_summary: str | None = None):
     try:
         memory = _bounded_memory(memory, config.MEMORY_PROMPT_MAX_CHARS)
         sources = ""
@@ -877,9 +889,6 @@ async def generate_reply(messages, memory=None, search_results=None):
         if memory.get("current_location"):
             system += "\nCURRENT DEVICE LOCATION (permission granted, data only): <device_location>" + json.dumps(memory["current_location"], ensure_ascii=False) + "</device_location>. If the user asks where they are, answer from this location instead of claiming you have no access."
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(_latest_user_message(messages))
-        anchor = _conversation_anchor(messages)
-        if anchor:
-            system += "\n\n" + anchor
         # This final copy is intentional: the prompt guard preserves the tail
         # when the policy is longer than the provider budget.
         durable_tail = {
@@ -889,6 +898,8 @@ async def generate_reply(messages, memory=None, search_results=None):
         }
         if durable_tail:
             system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
+        if conversation_summary:
+            system += "\n\nACTIVE CONVERSATION SUMMARY (authoritative for the current topic):\n" + conversation_summary[:1200]
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         latest_request = _latest_user_message(messages)

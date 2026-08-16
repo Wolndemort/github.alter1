@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 from typing import List, Optional
-from sqlalchemy import BigInteger, String, Float, func, ForeignKey, DateTime, Sequence
+from sqlalchemy import BigInteger, String, Text, Integer, Float, func, ForeignKey, DateTime, Sequence
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
@@ -74,6 +74,10 @@ class Session(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
     summary: Mapped[Optional[str]] = mapped_column(String)
+    # Active-topic context is separate from ``summary``: the latter is the
+    # durable-memory extraction produced when an inactive session is closed.
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    context_summary_messages: Mapped[int] = mapped_column(Integer, default=0, server_default='0', nullable=False)
     raw_messages: Mapped[list] = mapped_column(JSONB, default=list, server_default='[]')
     is_processed: Mapped[bool] = mapped_column(default=False)
 

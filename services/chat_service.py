@@ -12,7 +12,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import _append_source_links, _conversation_anchor, clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
+from utils.ap_logic import (_append_source_links, clear_tool_trace,
+                            generate_reply, recent_conversation_messages,
+                            stream_text_reply, stream_chat_with_tools,
+                            summarize_active_context, tool_trace)
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT, RELIABILITY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
@@ -43,6 +46,22 @@ def _append(session: Session, role: str, content: str) -> None:
     messages = list(session.raw_messages or [])
     messages.append({"role": role, "content": content, "timestamp": datetime.now(timezone.utc).isoformat()})
     session.raw_messages = messages[-100:]
+
+
+async def _refresh_active_context(session: Session) -> None:
+    """Refresh the topic summary only after enough new turns accumulated."""
+    messages = [
+        item for item in (session.raw_messages or [])
+        if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
+    ]
+    previous_count = int(getattr(session, "context_summary_messages", 0) or 0)
+    if len(messages) < 16 or len(messages) - previous_count < 8:
+        return
+    source = messages[:-8]
+    summary = await summarize_active_context(source, getattr(session, "context_summary", "") or "")
+    if summary:
+        session.context_summary = summary[:1200]
+        session.context_summary_messages = len(messages)
 
 
 async def record_document_turn(
@@ -188,10 +207,15 @@ class ChatService:
                 previous_summary = str(getattr(previous, "summary", "") or "") if previous is not None else ""
                 carried = [
                     {key: item[key] for key in ("role", "content") if key in item}
-                    for item in (previous.raw_messages or [])[-40:]
+                    for item in (previous.raw_messages or [])[-12:]
                     if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")
                 ] if previous is not None else []
-                session = Session(user_id=user_id, raw_messages=carried)
+                session = Session(
+                    user_id=user_id,
+                    raw_messages=carried,
+                    context_summary=getattr(previous, "context_summary", None) if previous is not None else None,
+                    context_summary_messages=len(carried),
+                )
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
@@ -214,6 +238,7 @@ class ChatService:
             return ChatResult(reply=reply, session_id=session.id or 0)
 
         ephemeral_request = do_not_remember(text)
+        await _refresh_active_context(session)
         new_facts = {} if ephemeral_request else extract_user_facts(text)
         explicit_fact = None if ephemeral_request else explicit_memory_fact(text)
         if explicit_fact:
@@ -334,7 +359,14 @@ class ChatService:
                 city = str(location.get("city") or location.get("region") or "").strip()
             reply = await get_weather(city) or f"Не удалось получить актуальный прогноз для {city}. Попробуй ещё раз через минуту."
         else:
-            reply = await generate_reply(list(session.raw_messages), memory)
+            recent = recent_conversation_messages(
+                session.raw_messages,
+                max_turns=6 if session.context_summary else 8,
+            )
+            if session.context_summary:
+                reply = await generate_reply(recent, memory, conversation_summary=session.context_summary)
+            else:
+                reply = await generate_reply(recent, memory)
         reply = sanitize_public_reply(reply)
         if not private_mode:
             _append(session, "assistant", reply)
@@ -371,15 +403,21 @@ class ChatService:
                 previous_summary = str(getattr(previous, "summary", "") or "") if previous is not None else ""
                 carried = [
                     {key: item[key] for key in ("role", "content") if key in item}
-                    for item in (previous.raw_messages or [])[-40:]
+                    for item in (previous.raw_messages or [])[-12:]
                     if isinstance(item, dict)
                     and item.get("role") in {"user", "assistant"}
                     and item.get("content")
                 ] if previous is not None else []
-                session = Session(user_id=user_id, raw_messages=carried)
+                session = Session(
+                    user_id=user_id,
+                    raw_messages=carried,
+                    context_summary=getattr(previous, "context_summary", None) if previous is not None else None,
+                    context_summary_messages=len(carried),
+                )
                 db.add(session)
                 await db.flush()
         _append(session, "user", text)
+        await _refresh_active_context(session)
         # Capability inventory is deterministic. Do not route this short,
         # well-defined question through a generic streaming model that may
         # answer with a vague "tell me what to do" prompt.
@@ -488,9 +526,6 @@ class ChatService:
         # placing the mode marker after memory used to cut off identity and
         # family facts, making the model claim it knew nothing about them.
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
-        anchor = _conversation_anchor(session.raw_messages)
-        if anchor:
-            system += "\n\n" + anchor
         durable_tail = {
             category: memory[category]
             for category in ("identity", "family", "skills_career", "preferences", "open_loops")
@@ -498,7 +533,15 @@ class ChatService:
         }
         if durable_tail:
             system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
-        working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
+        if session.context_summary:
+            system += "\n\nACTIVE CONVERSATION SUMMARY (authoritative for the current topic):\n" + session.context_summary[:1200]
+        working = [
+            {"role": "system", "content": system},
+            *recent_conversation_messages(
+                session.raw_messages,
+                max_turns=6 if session.context_summary else 8,
+            ),
+        ]
         # Do not keep the database transaction open while waiting for an
         # external model/tool response. The stream route owns this session,
         # so an uncommitted session insert here used to remain idle in
