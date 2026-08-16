@@ -2,13 +2,14 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import uuid
+import logging
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import config
-from data.models import Payment, User
+from data.models import Payment, User, WebAccount
 
 
 def owner_ids() -> set[int]:
@@ -31,6 +32,20 @@ def owner_emails() -> set[str]:
 
 def has_owner_access(user_id: int, email: str | None = None) -> bool:
     return is_owner(user_id) or bool(email and email.strip().casefold() in owner_emails())
+
+
+async def _notify_payment_owners(session: AsyncSession, payment: Payment, payment_type: str) -> None:
+    """Write a non-sensitive payment event to every configured owner inbox."""
+    try:
+        result = await session.execute(select(User, WebAccount.email).outerjoin(WebAccount, WebAccount.user_id == User.id))
+        owners = [user for user, email in result.all() if has_owner_access(user.id, email)]
+        title = "Оплата получена"
+        body = "Новая оплата подписки ALTER подтверждена." if payment_type != "credit_pack" else "Новая покупка пакета кредитов ALTER подтверждена."
+        from utils.push_notifications import send_push
+        for owner in owners:
+            await send_push(owner, title, body)
+    except Exception:
+        logging.exception("Owner payment notification failed")
 
 
 PLANS = {
@@ -249,6 +264,7 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     payment.status = "succeeded"
     payment.paid_at = now
     await session.commit()
+    await _notify_payment_owners(session, payment, payment_type)
     return True
 
 
