@@ -53,6 +53,26 @@ def test_generate_reply_includes_memory_and_avoids_repetition_instruction(monkey
     assert "Не повторяй факты" in system_prompt
 
 
+def test_generate_reply_keeps_recent_topic_and_memory_in_prompt_tail(monkeypatch):
+    captured = {}
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return fake_response("short reply")
+
+    monkeypatch.setattr(ap_logic.client.chat.completions, "create", create)
+    monkeypatch.setattr(ap_logic.config, "AI_MAX_PROMPT_CHARS", 1200)
+    run(ap_logic.generate_reply([
+        {"role": "user", "content": "Собери билд на максимальный урон"},
+        {"role": "assistant", "content": "Подберу оружие и обереги."},
+        {"role": "user", "content": "И что по билду?"},
+    ], {"identity": {"name": "Adam"}}))
+
+    system_prompt = captured["messages"][0]["content"]
+    assert "И что по билду?" in system_prompt
+    assert "Adam" in system_prompt
+
+
 def test_tool_definitions_are_present():
     names = {item["function"]["name"] for item in ap_logic.TOOL_DEFINITIONS}
     assert {"web_search", "get_weather", "youtube_search"} <= names

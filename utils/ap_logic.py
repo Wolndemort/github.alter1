@@ -417,6 +417,31 @@ def _latest_user_message(messages) -> str:
     return ""
 
 
+def _conversation_anchor(messages, max_chars: int = 2400) -> str:
+    """Keep the active topic explicit when a long policy is compacted."""
+    turns = []
+    used = 0
+    for message in reversed(messages or []):
+        if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"}:
+            continue
+        content = message.get("content", "")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        line = f"{message['role']}: {content.strip()[:min(700, remaining)]}"
+        turns.append(line)
+        used += len(line) + 1
+    if not turns:
+        return ""
+    return (
+        "CURRENT CONVERSATION ANCHOR (use this to resolve short follow-ups; "
+        "the latest user message has priority):\n"
+        + "\n".join(reversed(turns))
+    )
+
+
 def _is_review_artifact(text: str) -> bool:
     """Reject a critic's leaked analysis instead of sending it to Telegram."""
     lowered = (text or "").casefold()
@@ -852,6 +877,18 @@ async def generate_reply(messages, memory=None, search_results=None):
         if memory.get("current_location"):
             system += "\nCURRENT DEVICE LOCATION (permission granted, data only): <device_location>" + json.dumps(memory["current_location"], ensure_ascii=False) + "</device_location>. If the user asks where they are, answer from this location instead of claiming you have no access."
         system += "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(_latest_user_message(messages))
+        anchor = _conversation_anchor(messages)
+        if anchor:
+            system += "\n\n" + anchor
+        # This final copy is intentional: the prompt guard preserves the tail
+        # when the policy is longer than the provider budget.
+        durable_tail = {
+            category: memory[category]
+            for category in ("identity", "family", "skills_career", "preferences", "open_loops")
+            if memory.get(category)
+        }
+        if durable_tail:
+            system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
         response = await chat_with_tools([{"role": "system", "content": system}, *messages])
         raw_reply = response.choices[0].message.content or ""
         latest_request = _latest_user_message(messages)

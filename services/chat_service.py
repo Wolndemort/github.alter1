@@ -12,7 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
-from utils.ap_logic import _append_source_links, clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
+from utils.ap_logic import _append_source_links, _conversation_anchor, clear_tool_trace, generate_reply, stream_text_reply, stream_chat_with_tools, tool_trace
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT, RELIABILITY_PROMPT
 from utils.capabilities import CAPABILITIES_PROMPT
 from utils.vector_memory import recall, remember
@@ -488,6 +488,16 @@ class ChatService:
         # placing the mode marker after memory used to cut off identity and
         # family facts, making the model claim it knew nothing about them.
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
+        anchor = _conversation_anchor(session.raw_messages)
+        if anchor:
+            system += "\n\n" + anchor
+        durable_tail = {
+            category: memory[category]
+            for category in ("identity", "family", "skills_career", "preferences", "open_loops")
+            if memory.get(category)
+        }
+        if durable_tail:
+            system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
         working = [{"role": "system", "content": system}, *[{"role": item.get("role"), "content": item.get("content", "")} for item in (session.raw_messages or []) if item.get("role") in {"user", "assistant"}]]
         # Do not keep the database transaction open while waiting for an
         # external model/tool response. The stream route owns this session,
