@@ -51,9 +51,11 @@ def test_firecrawl_is_used_when_tavily_is_not_configured(monkeypatch):
         async def __aexit__(self, *args): pass
         def post(self, *args, **kwargs): return Response()
 
-    monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", None)
-    monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("secret"))
-    monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
+        monkeypatch.setattr(web_search.config, "TAVILY_API_KEY", None)
+        monkeypatch.setattr(web_search.config, "FIRECRAWL_API_KEY", _key("secret"))
+        for name in ("GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID", "SERPER_API_KEY", "YANDEX_SEARCH_API_KEY", "TWOGIS_API_KEY"):
+            monkeypatch.setattr(web_search.config, name, None)
+        monkeypatch.setattr(web_search.aiohttp, "ClientSession", lambda **kwargs: Session())
     assert run(web_search.search_web("test"))[0]["url"] == "https://x.test"
 
 
