@@ -20,6 +20,23 @@
 .message-row.user .markdown-text a { color:#111; }
 .focus-list i.priority-high { background:#fff; box-shadow:0 0 9px #fff; }
 
+/* Shared ALTER surface: web follows the mobile chat language. */
+.message-avatar { display:none; }
+.message-row { max-width:92%; gap:0; margin:10px 0; }
+.message-bubble { max-width:100%; padding:8px 12px; border:0; border-radius:16px; background:#000; color:#fff; font-size:16px; line-height:1.45; }
+.message-row.user .message-bubble { background:#fff; color:#050505; border-radius:16px; }
+.composer { border:0; background:transparent; box-shadow:none; padding:8px 0; }
+.composer textarea { border:1px solid #fff; border-radius:12px; background:#000; color:#fff; padding:11px 14px; }
+.attach-button,.voice-button,.send-button { color:#fff; }
+.voice-button,.send-button { background:#fff; color:#050505; border-radius:18px; }
+.voice-button:hover,.voice-button.recording,.send-button:hover { background:#fff; color:#050505; }
+.agent-board { border:1px solid #555; border-radius:16px; background:#151515; }
+.agent-summary { background:#151515; padding:16px; }
+.agent-summary .primary-button { background:#fff; color:#050505; }
+.task-list article { border-color:#292929; padding:13px 16px; }
+.agent-composer { background:#000; border:1px solid #fff; border-radius:12px; margin:12px; }
+.agent-composer textarea { border:0; border-radius:0; }
+
 /* Mobile web: stable viewport and touch-first layout for iOS Safari and Android Chrome. */
 @media (max-width:760px) {
   html, body, #root { width:100%; min-width:320px; min-height:100%; overflow-x:hidden; }
