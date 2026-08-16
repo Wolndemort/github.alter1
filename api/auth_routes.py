@@ -64,8 +64,11 @@ async def _json(request: web.Request) -> dict:
         # Decode the wire bytes explicitly.  Some clients/proxies omit the
         # charset on application/json; relying on aiohttp's text inference
         # can replace non-ASCII request content before it reaches the model.
-        raw = await request.read()
-        payload = json.loads(raw.decode("utf-8"))
+        if hasattr(request, "read"):
+            raw = await request.read()
+            payload = json.loads(raw.decode("utf-8"))
+        else:  # lightweight request doubles used by the unit tests
+            payload = await request.json()
     except (TypeError, ValueError, UnicodeDecodeError):
         raise web.HTTPBadRequest(text="JSON body required")
     if not isinstance(payload, dict):
