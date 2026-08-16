@@ -87,6 +87,12 @@
   .auth-card { max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; }
   input, textarea, select { font-size:16px; }
   .composer .voice-button, .composer .send-button { border:0; outline:none; }
+  .main-area > .mobile-header > button:last-child { display:none !important; }
+  .mobile-back-button { display:none !important; visibility:hidden !important; }
+  .composer { background:#000 !important; border:0 !important; padding:8px 0 !important; }
+  .composer textarea { background:#000 !important; color:#fff !important; border:1px solid #fff !important; border-radius:12px !important; }
+  .composer .attach-button, .composer .voice-button, .composer .send-button { background:#000 !important; color:#fff !important; opacity:1 !important; }
+  .composer .attach-button { color:#fff !important; }
 }
 
 @media (max-width:760px) {
