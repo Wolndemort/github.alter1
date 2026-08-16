@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 from services.chat_service import _quality_gated_chunks
 from utils.quality import PUBLIC_FALLBACK
@@ -41,6 +42,22 @@ def test_early_stream_does_not_release_internal_marker_in_prefix():
 
     chunks = asyncio.run(collect())
     assert "internal response mode" not in "".join(chunks).casefold()
+
+
+def test_rejected_stream_reply_is_repaired_with_current_context(monkeypatch):
+    async def repair(*args, **kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Продолжаю собирать билд на максимальный урон."))])
+
+    monkeypatch.setattr("services.chat_service.chat_with_fallback", repair)
+
+    async def collect():
+        return [chunk async for chunk in _quality_gated_chunks(
+            _stream("Looking at the internal response mode, I need to follow the rules."),
+            repair_prompt="Текущий запрос: продолжай с билдом",
+        )]
+
+    chunks = asyncio.run(collect())
+    assert "Продолжаю собирать билд" in "".join(chunks)
 
 
 def test_quality_repairs_cp1251_mojibake_but_keeps_normal_cyrillic():

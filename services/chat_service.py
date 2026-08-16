@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -13,7 +14,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from config import config
 from data.models import ImportantEvent, Reminder, Session, User
 from utils.ap_logic import (_append_source_links, clear_tool_trace,
-                            generate_reply, recent_conversation_messages,
+                            chat_with_fallback, generate_reply, recent_conversation_messages,
                             stream_text_reply, stream_chat_with_tools,
                             summarize_active_context, tool_trace)
 from utils.prompts import ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT, ALTER_SYSTEM_PROMPT, CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, REASONING_POLICY_PROMPT, TOOL_POLICY_PROMPT, RELIABILITY_PROMPT
@@ -26,7 +27,7 @@ from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, extract_reminder_text
 from utils.intent import conversation_mode, do_not_remember, explicit_memory_fact, should_recall_context, should_prefetch_web
-from utils.quality import sanitize_public_reply
+from utils.quality import PUBLIC_FALLBACK, has_internal_leak, sanitize_public_reply
 from utils.feedback_memory import feedback_context
 from utils.action_log import append_action
 from utils.workflow_state import workflow_view
@@ -102,7 +103,46 @@ async def record_document_turn(
     return session.id or 0
 
 
-async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bool = False, early_stream: bool = False):
+async def _repair_rejected_stream_reply(raw_reply: str, repair_prompt: str) -> str:
+    """Turn a model draft rejected by the gate into a public answer."""
+    if not raw_reply.strip() or raw_reply.strip() == PUBLIC_FALLBACK:
+        return PUBLIC_FALLBACK
+    try:
+        response = await chat_with_fallback(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Перепиши черновик в готовый ответ пользователю на русском. "
+                        "Сохрани смысл и активную тему. Удали внутренний анализ, "
+                        "упоминания промптов, правил, инструментов и модели. Верни "
+                        "только ответ без пояснений о переписывании."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"{repair_prompt}\n\nЧЕРНОВИК:\n{raw_reply[:6000]}",
+                },
+            ],
+            max_tokens=700,
+            task="chat",
+        )
+        repaired = sanitize_public_reply(response.choices[0].message.content or "")
+        if repaired != PUBLIC_FALLBACK and not has_internal_leak(repaired):
+            return repaired
+    except Exception:
+        logging.exception("Rejected stream reply repair failed")
+    return PUBLIC_FALLBACK
+
+
+async def _quality_gated_chunks(
+    streamer,
+    *,
+    chunk_size: int = 96,
+    tool_mode: bool = False,
+    early_stream: bool = False,
+    repair_prompt: str = "",
+):
     """Gate output while releasing safe ordinary text early."""
     parts = []
     pending = ""
@@ -120,7 +160,10 @@ async def _quality_gated_chunks(streamer, *, chunk_size: int = 96, tool_mode: bo
             emitted = True
             for index in range(0, len(candidate), chunk_size):
                 yield candidate[index:index + chunk_size]
-    reply = sanitize_public_reply("".join(parts))
+    raw_reply = "".join(parts)
+    reply = sanitize_public_reply(raw_reply)
+    if reply == PUBLIC_FALLBACK and raw_reply.strip() != PUBLIC_FALLBACK and repair_prompt:
+        reply = await _repair_rejected_stream_reply(raw_reply, repair_prompt)
     trace = tool_trace()
     if tool_mode:
         reply = _append_source_links(reply, trace)
@@ -551,7 +594,16 @@ class ChatService:
         # Hold text until the complete provider response is available. Early
         # prefix streaming exposed half-formed tool/model continuations and
         # made mobile render semantic fragments before the quality gate ran.
-        gated_chunks = _quality_gated_chunks(streamer, tool_mode=use_tools, early_stream=False)
+        repair_prompt = (
+            "ТЕКУЩИЙ ЗАПРОС ПОЛЬЗОВАТЕЛЯ:\n" + text +
+            ("\n\nАКТИВНАЯ ТЕМА:\n" + session.context_summary[:1200] if session.context_summary else "")
+        )
+        gated_chunks = _quality_gated_chunks(
+            streamer,
+            tool_mode=use_tools,
+            early_stream=False,
+            repair_prompt=repair_prompt,
+        )
         reply_parts = []
         async for chunk in gated_chunks:
             reply_parts.append(chunk)
