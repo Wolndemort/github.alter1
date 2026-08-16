@@ -36,6 +36,11 @@
 .task-list article { border-color:#292929; padding:13px 16px; }
 .agent-composer { background:#000; border:1px solid #fff; border-radius:12px; margin:12px; }
 .agent-composer textarea { border:0; border-radius:0; }
+.send-button { background:#fff !important; color:#050505 !important; opacity:1; }
+.send-button.stop { background:#333 !important; color:#fff !important; }
+.send-button:disabled { background:#555 !important; color:#aaa !important; }
+.voice-button { background:#fff !important; color:#050505 !important; opacity:1; }
+.mobile-back-button { display:none !important; }
 
 /* Mobile web: stable viewport and touch-first layout for iOS Safari and Android Chrome. */
 @media (max-width:760px) {
