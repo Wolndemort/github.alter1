@@ -392,8 +392,10 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     add_provider("serper", lambda: _serper(session, query, limit))
                 if config.TAVILY_API_KEY:
                     add_provider("tavily", lambda: _tavily(session, query, limit))
-                if config.FIRECRAWL_API_KEY:
-                    add_provider("firecrawl", lambda: _firecrawl(session, query, min(limit, config.FIRECRAWL_SEARCH_LIMIT)))
+                # Firecrawl is a paid fallback, never a parallel provider when
+                # the configured primary search stack (Yandex/Serper) exists.
+                # Starting it here used credits even when its results were
+                # discarded in favour of Yandex/Serper.
                 if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
                     add_provider("google", lambda: _google_cse(session, query, limit))
                 if config.TWOGIS_API_KEY and is_local_search_request(query):
