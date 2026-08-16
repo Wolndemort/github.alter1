@@ -183,6 +183,12 @@
  .diagnostics-modal .content-panel { padding:0; max-width:none; }
  .diagnostics-grid { grid-template-columns:repeat(3,1fr); margin-top:20px; }
 @media (max-width:760px) { .diagnostics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .diagnostics-launcher { right:10px; bottom:10px; } }
+.agent-reply { margin:14px 18px; padding:14px 16px; border-radius:10px; background:#151513; color:#e2e2dc; line-height:1.65; }
+.agent-composer { display:flex; align-items:flex-end; gap:8px; margin:16px; padding:8px; border-radius:12px; background:#10100f; }
+.agent-composer textarea { flex:1; min-height:42px; max-height:130px; margin:0; border:0; background:transparent; line-height:1.5; }
+.agent-voice-button,.agent-send-button { flex:0 0 42px; width:42px; height:42px; border:0; border-radius:8px; background:#ecece7; color:#111; font-size:17px; font-weight:800; }
+.agent-voice-button:hover,.agent-send-button:hover { background:#fff; }
+.agent-send-button:disabled { background:#555; color:#aaa; }
 @media (max-width:380px) { .diagnostics-grid { grid-template-columns:1fr; } }
 
 /* Web minimal surface: use spacing, contrast and type instead of outlines. */
