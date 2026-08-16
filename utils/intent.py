@@ -11,10 +11,6 @@ WEB_PATTERNS = (
     # from model memory because similar item names are easy to confuse.
     r"\b(?:билд\w*|оберег\w*|доспех\w*|оружи\w*|навык\w*|урон\w*|патч\w*|талант\w*|персонаж\w*)\b",
     r"\b(?:ghost\s+of\s+tsushima|призрак\s+цусимы|elden\s+ring|cyberpunk|witcher|игр\w*)\b.*\b(?:что\s+даёт|какой|какие|норм|собери|проверь|совет|билд|урон)\b",
-    # General factual requests must be grounded too. Keep these explicit so
-    # ordinary personal conversation does not trigger an external search.
-    r"\b(?:что\s+такое|кто\s+такой|как\s+работает|как\s+устроен|объясни\s+.*\s+факт|проверь\s+факт|правда\s+ли|сравни|характеристик\w*|совместим\w*|инструкци\w*|документаци\w*|официальн\w*|актуальн\w*|последн\w*|новост\w*|цен\w*|стоимост\w*|курс\w*|закон\w*|правил\w*|дозировк\w*|симптом\w*|диагноз\w*|безопасн\w*)\b",
-    r"\b(?:what\s+is|who\s+is|how\s+does|compare|specification\w*|compatible|documentation|official|latest|news|price|cost|law|symptom\w*|dosage|safe)\b",
     # Search synonyms must select the tool route; otherwise the model may
     # answer as if internet access were unavailable.
     r"\b\u043f\u043e\u0438\u0449\w*\b", r"\b\u043f\u043e\u0438\u0441\u043a\w*\b", r"\b(?:\u043f\u043e\u0433\u0443\u0433\u043b|\u0437\u0430\u0433\u0443\u0433\u043b)\w*\b",
