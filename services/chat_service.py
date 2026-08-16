@@ -162,7 +162,11 @@ async def _quality_gated_chunks(
                 yield candidate[index:index + chunk_size]
     raw_reply = "".join(parts)
     reply = sanitize_public_reply(raw_reply)
-    if reply == PUBLIC_FALLBACK and raw_reply.strip() != PUBLIC_FALLBACK and repair_prompt:
+    if (
+        repair_prompt
+        and raw_reply.strip() != PUBLIC_FALLBACK
+        and (reply == PUBLIC_FALLBACK or len(raw_reply.strip()) < 24)
+    ):
         reply = await _repair_rejected_stream_reply(raw_reply, repair_prompt)
     trace = tool_trace()
     if tool_mode:
@@ -597,6 +601,8 @@ class ChatService:
         repair_prompt = (
             "ТЕКУЩИЙ ЗАПРОС ПОЛЬЗОВАТЕЛЯ:\n" + text +
             ("\n\nАКТИВНАЯ ТЕМА:\n" + session.context_summary[:1200] if session.context_summary else "")
+            + "\n\nПОСЛЕДНИЕ РЕПЛИКИ:\n"
+            + json.dumps(recent_conversation_messages(session.raw_messages, max_turns=6), ensure_ascii=False)
         )
         gated_chunks = _quality_gated_chunks(
             streamer,
