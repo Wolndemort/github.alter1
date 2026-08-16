@@ -184,3 +184,51 @@
  .diagnostics-grid { grid-template-columns:repeat(3,1fr); margin-top:20px; }
 @media (max-width:760px) { .diagnostics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .diagnostics-launcher { right:10px; bottom:10px; } }
 @media (max-width:380px) { .diagnostics-grid { grid-template-columns:1fr; } }
+
+/* Web minimal surface: use spacing, contrast and type instead of outlines. */
+button, input, textarea, select,
+.auth-card, .sidebar, .sidebar-user, .chat-state,
+.message-avatar, .message-bubble, .prompt-grid button, .composer,
+.attachment-chip, .memory-intro, .billing-status, .audit-card,
+.memory-card, .empty-state, .loading-state, .agent-board, .tool-card,
+.segmented, .job-list article, .plan-grid article, .toggle,
+.notification-card, .notification-drawer, .onboarding-card,
+.payment-return-notice, .voice-button, .attachment-thumb,
+.document-edit-bar, .audio-action-bar, .quota-summary,
+.diagnostics-modal, .diagnostics-launcher, .search-result > button {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
+.auth-card { background:#0b0b0b; }
+.sidebar { border-right:0; }
+.sidebar-user { background:#111; }
+.chat-state { background:#111; }
+.message-bubble { background:#151513; }
+.message-row.user .message-bubble { background:#e9e9e4; }
+.composer { background:#10100f; }
+.composer textarea, .voice-button, .send-button, .attach-button {
+  border:0;
+  outline:0;
+  box-shadow:none;
+  background:transparent;
+}
+.voice-button:hover, .voice-button.recording,
+.send-button:hover, .send-button.stop { background:#e9e9e4; color:#111; }
+.prompt-grid button, .tool-card, .memory-card, .plan-grid article,
+.notification-card, .job-list article { background:#10100f; }
+.prompt-grid button:hover { border:0; background:#191917; }
+.memory-intro, .billing-status, .audit-card { background:#151513; }
+.message-download, .search-result > button, .audio-action-bar button { border:0; background:#181816; }
+.attachment-chip, .attachment-thumb { background:#151513; }
+.error-banner, .success-banner { border:0; }
+.onboarding-card, .payment-return-notice, .diagnostics-modal { background:#101010; }
+.notification-drawer { border-left:0; }
+.main-area > .content-panel:has(+ .content-panel),
+.main-area > .content-panel + .content-panel { border:0; }
