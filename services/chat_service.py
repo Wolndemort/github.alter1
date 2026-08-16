@@ -203,11 +203,11 @@ async def _quality_gated_chunks(
         reply = f"{reply.rstrip()}\n\n{note}"
     if emitted and not tool_mode:
         if pending and sanitize_public_reply(pending) == pending:
-            for index in range(0, len(pending), chunk_size):
-                yield pending[index:index + chunk_size]
+            for piece in safe_chunks(pending):
+                yield piece
         return
-        for piece in safe_chunks(reply):
-            yield piece
+    for piece in safe_chunks(reply):
+        yield piece
 
 
 def validate_message(text: str) -> str:
