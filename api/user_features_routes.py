@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 
 from api.auth_routes import _bearer, _json
 from data.database import async_session
-from data.models import Notification, Reminder, User, WebAccount
+from data.models import Notification, Payment, Reminder, User, WebAccount
 from utils.action_log import read_actions
 from utils.scenarios import get_scenario, list_scenarios
 from utils.billing import has_owner_access
@@ -122,6 +122,19 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
         history = await recent_metrics_snapshots()
     except Exception:
         history = []
+    try:
+        async with async_session() as payment_session:
+            payment_rows = (await payment_session.execute(
+                select(Payment).order_by(Payment.created_at.desc()).limit(20)
+            )).scalars().all()
+            payments = [{
+                "status": item.status,
+                "amount_rub": item.amount_rub,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "paid_at": item.paid_at.isoformat() if item.paid_at else None,
+            } for item in payment_rows]
+    except Exception:
+        payments = []
     return web.json_response({
         "counters": counters,
         "latency": latency_snapshot(),
@@ -136,6 +149,7 @@ async def quality_diagnostics_route(request: web.Request) -> web.Response:
         },
         "configuration": configuration_snapshot(config),
         "history": history,
+        "payments": payments,
     })
 
 
