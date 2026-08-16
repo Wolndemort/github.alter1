@@ -74,7 +74,12 @@ def should_prefetch_web(text: str) -> bool:
         return True
     if re.search(r"\b(?:как\s+дела|что\s+делаешь|побудь\s+со\s+мной|мне\s+грустно|я\s+(?:устал|устала|устал))\b", value):
         return False
-    return any(re.search(pattern, value) for pattern in KNOWLEDGE_REQUEST_PATTERNS)
+    if any(re.search(pattern, value) for pattern in KNOWLEDGE_REQUEST_PATTERNS):
+        return True
+    # Keep this explicit as a safety net: these terms are frequently used in
+    # short game questions where the broader knowledge classifier misses the
+    # inflected form. Such answers must be grounded in current sources.
+    return bool(re.search(r"\b(?:билд\w*|гайд\w*|сборк\w*|оберег\w*|оружи\w*|патч\w*|верси\w*)\b", value))
 
 
 def is_local_search_request(text: str) -> bool:

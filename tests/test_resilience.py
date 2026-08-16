@@ -26,6 +26,19 @@ def test_openrouter_failure_returns_safe_reply(monkeypatch):
     assert "не удалось получить" in run(ap_logic.generate_reply([])).lower()
 
 
+def test_prompt_budget_keeps_recent_conversation_for_short_followup():
+    messages = [
+        {"role": "system", "content": "S" * 10000},
+        {"role": "user", "content": "Собери мне билд для обычной игры"},
+        {"role": "assistant", "content": "Выбери вариант: урон или универсальный."},
+        {"role": "user", "content": "Хорошо"},
+    ]
+    bounded = ap_logic._bounded_api_messages(messages, max_chars=12000)
+    assert [item["role"] for item in bounded] == ["system", "user", "assistant", "user"]
+    assert "билд" in bounded[1]["content"]
+    assert bounded[-1]["content"] == "Хорошо"
+
+
 def test_metrics_count_failures_and_snapshot(monkeypatch):
     metrics.reset()
 

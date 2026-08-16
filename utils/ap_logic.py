@@ -186,7 +186,14 @@ def _head_tail(value: str, limit: int) -> str:
 
 
 def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
-    """Hard cost guard: never send an unexpectedly huge prompt upstream."""
+    """Bound a prompt without throwing away the conversation.
+
+    The old allocator spent two thirds of the budget on the system message and
+    the rest on the latest user message. With ALTER's fairly large policy
+    prompt that meant every older turn disappeared as soon as the limit was
+    reached. A short follow-up such as ``"Хорошо"`` then looked like a new
+    conversation to the model.
+    """
     max_chars = max_chars or config.AI_MAX_PROMPT_CHARS
     items = list(messages or [])
     if sum(len(str(item.get("content", ""))) for item in items if isinstance(item, dict)) <= max_chars:
@@ -199,19 +206,28 @@ def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
     used = 0
     if system_item:
         system = dict(system_item)
-        system_limit = max_chars if latest_user_item is None or latest_user_item is system_item else (max_chars * 2 // 3)
+        # Reserve a real slice for recent dialogue. The tail keeps memory and
+        # the current mode marker, while the head keeps the core identity and
+        # safety policy.
+        system_limit = max_chars if latest_user_item is None or latest_user_item is system_item else (max_chars * 55 // 100)
         system["content"] = _head_tail(str(system.get("content", "")), system_limit)
         selected[id(system_item)] = system
         used += len(system["content"])
     if latest_user_item and latest_user_item is not system_item:
         latest_user = dict(latest_user_item)
+        remaining_before_latest = max_chars - used
         if isinstance(latest_user.get("content"), list):
             latest_user["content"] = [dict(part) if isinstance(part, dict) else part for part in latest_user["content"]]
-            used += sum(len(str(part.get("text", ""))) for part in latest_user["content"] if isinstance(part, dict))
+            raw_size = sum(len(str(part.get("text", ""))) for part in latest_user["content"] if isinstance(part, dict))
+            used += min(raw_size, max(1, remaining_before_latest * 30 // 100))
         else:
-            latest_user["content"] = _head_tail(str(latest_user.get("content", "")), max_chars // 3)
+            latest_user["content"] = _head_tail(str(latest_user.get("content", "")), max(1, remaining_before_latest * 30 // 100))
             used += len(latest_user["content"])
         selected[id(latest_user_item)] = latest_user
+    # Fill the rest from newest to oldest, so a short acknowledgement keeps
+    # the question and answer immediately before it. Do not reserve a fixed
+    # amount here: short current messages automatically give more room to
+    # history.
     for item in reversed(items):
         if item is system_item or item is latest_user_item:
             continue
@@ -219,8 +235,13 @@ def _bounded_api_messages(messages, max_chars: int | None = None) -> list:
             continue
         raw_content = item.get("content", "")
         if isinstance(raw_content, list):
-            selected[id(item)] = dict(item)
-            used += sum(len(str(part.get("text", ""))) for part in raw_content if isinstance(part, dict))
+            size = sum(len(str(part.get("text", ""))) for part in raw_content if isinstance(part, dict))
+            remaining = max_chars - used
+            if remaining <= 0:
+                break
+            copy = dict(item)
+            selected[id(item)] = copy
+            used += min(size, remaining)
             continue
         content = str(raw_content)
         remaining = max_chars - used

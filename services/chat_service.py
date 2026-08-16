@@ -286,6 +286,11 @@ class ChatService:
                     {key: item.get(key, "") for key in ("title", "url", "content")}
                     for item in results[:6]
                 ]
+            else:
+                # A factual request without evidence must not be answered with
+                # confident guesses by a fallback model.
+                memory["web_search_status"] = "requested_but_unavailable"
+                memory["web_search_policy"] = "State that the fact could not be verified; do not invent specifics."
 
         parsed_reminder = parse_reminder(text)
         if parsed_reminder:
@@ -475,6 +480,9 @@ class ChatService:
                     {key: item.get(key, "") for key in ("title", "url", "content")}
                     for item in results[:6]
                 ]
+            else:
+                memory["web_search_status"] = "requested_but_unavailable"
+                memory["web_search_policy"] = "State that the fact could not be verified; do not invent specifics."
         # Keep durable memory at the very end of the system message. The
         # upstream prompt guard preserves the tail when the policy is long;
         # placing the mode marker after memory used to cut off identity and

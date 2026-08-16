@@ -52,6 +52,11 @@ def test_explicit_memory_fact_is_extracted():
     assert explicit_memory_fact("запомни, что у меня BMW") == "у меня BMW"
 
 
+def test_game_build_questions_are_grounded_in_web_search():
+    assert should_prefetch_web("какой билд и какие обереги собрать")
+    assert should_prefetch_web("какой гайд актуален для этого патча")
+
+
 def test_common_memory_questions_trigger_context_recall():
     for request in ("Ты меня помнишь?", "Что ты обо мне знаешь?", "Расскажи, что ты обо мне знаешь"):
         assert should_recall_context(request), request
