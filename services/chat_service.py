@@ -154,6 +154,19 @@ async def _quality_gated_chunks(
     repair_prompt: str = "",
 ):
     """Gate output while releasing safe ordinary text early."""
+    def safe_chunks(value: str):
+        # Never make the client render a web answer split inside a word. This
+        # is especially noticeable for Russian suffixes in the mobile SSE UI.
+        start = 0
+        while start < len(value):
+            end = min(start + chunk_size, len(value))
+            if end < len(value):
+                boundary = value.rfind(" ", start, end)
+                if boundary > start:
+                    end = boundary + 1
+            yield value[start:end]
+            start = end
+
     parts = []
     pending = ""
     emitted = False
@@ -168,8 +181,8 @@ async def _quality_gated_chunks(
         candidate, pending = pending[:-96], pending[-96:]
         if sanitize_public_reply(candidate) == candidate:
             emitted = True
-            for index in range(0, len(candidate), chunk_size):
-                yield candidate[index:index + chunk_size]
+            for piece in safe_chunks(candidate):
+                yield piece
     raw_reply = "".join(parts)
     reply = sanitize_public_reply(raw_reply)
     if (
@@ -193,8 +206,8 @@ async def _quality_gated_chunks(
             for index in range(0, len(pending), chunk_size):
                 yield pending[index:index + chunk_size]
         return
-    for index in range(0, len(reply), chunk_size):
-        yield reply[index:index + chunk_size]
+        for piece in safe_chunks(reply):
+            yield piece
 
 
 def validate_message(text: str) -> str:
