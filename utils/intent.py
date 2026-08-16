@@ -7,6 +7,10 @@ YOUTUBE_PATTERNS = (
     r"\u043f\u043e\u043a\u0430\u0436\u0438.*(\u0440\u043e\u043b\u0438\u043a|\u0432\u0438\u0434\u0435\u043e)",
 )
 WEB_PATTERNS = (
+    # Game builds and item stats are factual requests: do not answer these
+    # from model memory because similar item names are easy to confuse.
+    r"\b(?:билд\w*|оберег\w*|доспех\w*|оружи\w*|навык\w*|урон\w*|патч\w*|талант\w*|персонаж\w*)\b",
+    r"\b(?:ghost\s+of\s+tsushima|призрак\s+цусимы|elden\s+ring|cyberpunk|witcher|игр\w*)\b.*\b(?:что\s+даёт|какой|какие|норм|собери|проверь|совет|билд|урон)\b",
     # Search synonyms must select the tool route; otherwise the model may
     # answer as if internet access were unavailable.
     r"\b\u043f\u043e\u0438\u0449\w*\b", r"\b\u043f\u043e\u0438\u0441\u043a\w*\b", r"\b(?:\u043f\u043e\u0433\u0443\u0433\u043b|\u0437\u0430\u0433\u0443\u0433\u043b)\w*\b",
