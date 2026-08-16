@@ -6,6 +6,8 @@ services.auth_service, so a future mobile client does not change the domain.
 
 from __future__ import annotations
 
+import json
+
 from aiohttp import web
 from aiogram import Bot
 from sqlalchemy import delete, select
@@ -59,8 +61,12 @@ def _auth_secret() -> str:
 
 async def _json(request: web.Request) -> dict:
     try:
-        payload = await request.json()
-    except (TypeError, ValueError):
+        # Decode the wire bytes explicitly.  Some clients/proxies omit the
+        # charset on application/json; relying on aiohttp's text inference
+        # can replace non-ASCII request content before it reaches the model.
+        raw = await request.read()
+        payload = json.loads(raw.decode("utf-8"))
+    except (TypeError, ValueError, UnicodeDecodeError):
         raise web.HTTPBadRequest(text="JSON body required")
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="JSON object required")
