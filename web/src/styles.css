@@ -268,3 +268,7 @@ button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
 .notification-drawer { border-left:0; }
 .main-area > .content-panel:has(+ .content-panel),
 .main-area > .content-panel + .content-panel { border:0; }
+.diagnostics-payments { margin-top: 1.5rem; }
+.diagnostics-payment { display: grid; grid-template-columns: auto 1fr auto; gap: .75rem; align-items: center; padding: .7rem 0; border-bottom: 1px solid var(--line, #292929); }
+.payment-status { font-size: .72rem; text-transform: uppercase; }
+.status-succeeded, .status-paid, .status-completed { color: #9cffb0; }
