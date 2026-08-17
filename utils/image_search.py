@@ -1,6 +1,9 @@
 """Small safe image-search adapter for explicit 'send me a picture' requests."""
 from __future__ import annotations
 
+import html
+import re
+
 import aiohttp
 
 from config import config
@@ -27,6 +30,20 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
                 pages = (await response.json()).get("pages", []) if response.status == 200 else []
         return [{"title": item.get("title", "Изображение"), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
                 for item in pages if (item.get("thumbnail") or {}).get("url")]
+    except Exception:
+        pass
+    # Last-resort public search page fallback when API providers are absent or blocked.
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://www.google.com/search", params={"tbm": "isch", "q": query}, headers={"User-Agent": "Mozilla/5.0"}) as response:
+                page = await response.text() if response.status == 200 else ""
+        urls = []
+        for raw in re.findall(r"https?://[^\"'\\ ]+", html.unescape(page)):
+            url = raw.replace("\\u003d", "=").replace("\\u0026", "&")
+            if any(ext in url.casefold() for ext in (".jpg", ".jpeg", ".png", ".webp")) and "google.com" not in url:
+                if url not in urls:
+                    urls.append(url)
+        return [{"title": "Изображение", "url": url, "mime": ""} for url in urls[:limit]]
     except Exception:
         return []
 
