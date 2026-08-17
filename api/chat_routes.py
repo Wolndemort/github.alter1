@@ -32,6 +32,7 @@ from utils.ap_logic import plan_audio_request
 from utils.audio_search import download_audio, remove_audio
 from utils.video_search import download_video, remove_video
 from utils.image_search import download_image, search_images
+from utils.web_search import search_web
 from utils.youtube_search import search_youtube
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer
@@ -409,6 +410,12 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                         payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "media_base64": base64.b64encode(data).decode("ascii"), "media_filename": name, "media_mime": mime}
                         await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                         return response
+            if route.kind == "web" and re.search(r"\b(?:видео|ролик|клип)\b", text.casefold()):
+                results = await search_web(text, max_results=5)
+                if results:
+                    links = "\n".join(f"• {item.get('title', 'Видео')}: {item.get('url')}" for item in results[:5] if item.get("url"))
+                    await response.write(("data: " + json.dumps({"type": "done", "reply": "Нашёл видео в web-поиске. Прямой файл источник не отдал, поэтому отправляю ссылки:\n" + links}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                    return response
             if generation in {"image", "video"} and route.kind != "youtube":
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating_media", "kind": generation}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 if generation == "video":
@@ -452,6 +459,10 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                                 remove_video(video_file)
                             await response.write(("data: " + json.dumps(video_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                             return response
+                    if results:
+                        fallback = {"type": "done", "reply": f"Нашёл видео, но YouTube не разрешил скачать его в MP4. Открой ролик: {results[0]['url']}"}
+                        await response.write(("data: " + json.dumps(fallback, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                        return response
             if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", text.casefold()):
                 query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", text, flags=re.I).strip(" ,.!?:;")
                 for candidate in await search_images(query):

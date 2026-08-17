@@ -1711,6 +1711,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                             return
                     finally:
                         remove_video(video_file)
+            if results:
+                await message.answer(f"Нашёл видео, но YouTube не разрешил скачать его в MP4. Открой ролик: {results[0]['url']}")
+                return
     extracted_facts = extract_user_facts(message.text)
     if extracted_facts:
         user.memory = merge_memory_facts(dict(user.memory or {}), extracted_facts)
