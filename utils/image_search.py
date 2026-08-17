@@ -13,20 +13,20 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
         try:
             async with aiohttp.ClientSession() as session:
                 params = {"key": config.GOOGLE_CSE_API_KEY.get_secret_value(), "cx": config.GOOGLE_CSE_ID, "q": query, "searchType": "image", "num": limit, "safe": "active"}
-                async with session.get("https://www.googleapis.com/customsearch/v1", params=params) as response:
+            async with session.get("https://www.googleapis.com/customsearch/v1", params=params, headers={"User-Agent": "ALTER/1.0 (image search)"}) as response:
                     if response.status == 200:
                         return [{"title": item.get("title", "Изображение"), "url": item.get("link", ""), "mime": item.get("mime", "")}
                                 for item in (await response.json()).get("items", []) if item.get("link")]
         except Exception:
             pass
-    # Wikimedia Commons is keyless and gives us a stable, openly licensed fallback.
+    # Wikimedia's REST search is keyless and is more reliable than the legacy API.
     try:
         async with aiohttp.ClientSession() as session:
-            params = {"action": "query", "generator": "search", "gsrsearch": query, "gsrnamespace": 6, "gsrlimit": limit, "prop": "imageinfo", "iiprop": "url|mime", "iiurlwidth": 1600, "format": "json"}
-            async with session.get("https://commons.wikimedia.org/w/api.php", params=params) as response:
-                pages = (await response.json()).get("query", {}).get("pages", {}) if response.status == 200 else {}
-        return [{"title": item.get("title", "Изображение"), "url": (item.get("imageinfo") or [{}])[0].get("thumburl") or (item.get("imageinfo") or [{}])[0].get("url", ""), "mime": (item.get("imageinfo") or [{}])[0].get("mime", "")}
-                for item in pages.values() if (item.get("imageinfo") or [{}])[0].get("url")]
+            params = {"q": query, "limit": limit}
+            async with session.get("https://commons.wikimedia.org/w/rest.php/v1/search/page", params=params, headers={"User-Agent": "Mozilla/5.0 ALTER/1.0"}) as response:
+                pages = (await response.json()).get("pages", []) if response.status == 200 else []
+        return [{"title": item.get("title", "Изображение"), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
+                for item in pages if (item.get("thumbnail") or {}).get("url")]
     except Exception:
         return []
 
@@ -34,7 +34,7 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
 async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[bytes, str, str] | None:
     try:
         safe_url = validate_public_url(url)
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15), headers={"User-Agent": "ALTER/1.0 (media fetch)"}) as session:
             async with session.get(safe_url, allow_redirects=True) as response:
                 mime = (response.headers.get("Content-Type") or "").split(";", 1)[0].casefold()
                 if response.status != 200 or not mime.startswith("image/"):
