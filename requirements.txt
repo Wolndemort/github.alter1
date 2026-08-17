@@ -21,4 +21,5 @@ python-pptx~=1.0.2
 odfpy~=1.4.1
 pymupdf~=1.26.3
 pillow~=11.3.0
+yandex-ai-studio-sdk~=0.22.1
 pytesseract~=0.3.13

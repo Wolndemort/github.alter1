@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import re
+import asyncio
 
 import aiohttp
 
@@ -10,8 +11,31 @@ from config import config
 from utils.url_safety import validate_public_url
 
 
+async def _yandex_images(query: str, limit: int) -> list[dict]:
+    if not config.YANDEX_SEARCH_API_KEY:
+        return []
+    def run() -> list[dict]:
+        from yandex_ai_studio_sdk import AIStudio
+        sdk = AIStudio(folder_id=config.YANDEX_SEARCH_FOLDER_ID, auth=config.YANDEX_SEARCH_API_KEY.get_secret_value())
+        search = sdk.search_api.image("SEARCH_TYPE_RU").configure(
+            search_type="SEARCH_TYPE_RU", family_mode="FAMILY_MODE_MODERATE",
+            fix_typo_mode="FIX_TYPO_MODE_ON", docs_on_page=max(10, limit),
+            user_agent="Mozilla/5.0 ALTER/1.0",
+        )
+        result = search.run(query, format="parsed", page=0)
+        return [{"title": "Изображение", "url": doc.url or "", "mime": doc.format or ""}
+                for doc in result.docs if doc.url]
+    try:
+        return (await asyncio.to_thread(run))[:limit]
+    except Exception:
+        return []
+
+
 async def search_images(query: str, limit: int = 5) -> list[dict]:
     limit = max(1, min(limit, 5))
+    yandex = await _yandex_images(query, limit)
+    if yandex:
+        return yandex
     if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
         try:
             async with aiohttp.ClientSession() as session:
