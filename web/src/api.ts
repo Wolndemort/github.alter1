@@ -111,7 +111,7 @@ export class AlterApi {
       if (!line) return;
        const payload = JSON.parse(line.slice(6)) as { type?: string; text?: string; reply?: string; artifact_id?: string; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string };
        if (payload.type === "done" && typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
-       if (payload.type === "done" && typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
+       if (payload.type === "done" && (typeof payload.media_base64 === "string" || typeof payload.media_mime === "string" || typeof payload.media_filename === "string")) completedMedia = { ...completedMedia, ...(typeof payload.media_base64 === "string" ? { media_base64: payload.media_base64 } : {}), media_filename: payload.media_filename, media_mime: payload.media_mime };
        if (payload.type === "done" && typeof payload.artifact_id === "string") completedMedia.artifact_id = payload.artifact_id;
       if (payload.type === "delta" && typeof payload.text === "string") { reply += payload.text; onDelta(reply); }
       if (payload.type === "done" && typeof payload.reply === "string" && !reply) { reply = payload.reply; onDelta(reply); }

@@ -178,7 +178,7 @@ export class AlterApi {
           completed = true;
           if (typeof payload.reply === "string") completedReply = payload.reply;
           if (typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
-          if (typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
+          if (typeof payload.media_base64 === "string" || typeof payload.media_mime === "string" || typeof payload.media_filename === "string") completedMedia = { ...completedMedia, ...(typeof payload.media_base64 === "string" ? { media_base64: payload.media_base64 } : {}), media_filename: payload.media_filename, media_mime: payload.media_mime };
           if (typeof payload.artifact_id === "string") completedArtifactId = payload.artifact_id;
           if (typeof payload.media_job_id === "string") completedJobId = payload.media_job_id;
         }

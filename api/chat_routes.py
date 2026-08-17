@@ -432,10 +432,12 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     return response
                 artifact = await (generate_video(text) if generation == "video" else generate_image(text))
                 media_payload = {"type": "done", "reply": "Изображение создано в ALTER." if generation == "image" else "Видео создано в ALTER.", "media_base64": base64.b64encode(artifact.data).decode("ascii"), "media_filename": artifact.filename, "media_mime": artifact.media_type}
-                if media_payload.get("media_base64"):
+                if media_payload.get("media_base64") and (generation != "image" or len(artifact.data) > 5 * 1024 * 1024):
                     artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind=generation, operation="media_generation")
                     media_payload["artifact_id"] = artifact_id
                     media_payload.pop("media_base64", None)
+                elif not media_payload.get("artifact_id"):
+                    media_payload["artifact_id"] = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind=generation, operation="media_generation")
                 await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
             creation = document_creation_format(text)
