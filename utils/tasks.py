@@ -57,6 +57,9 @@ async def _send_checkin_to_telegram(bot: Bot, user: User, message: str) -> bool:
         if account is not None:
             # The user may still use the web app; allow a future relink.
             account.telegram_user_id = None
+            # SQLAlchemy applies the model default on INSERT, not when a
+            # transient User is instantiated in tests or in repair scripts.
+            user.checkins_enabled = True
         else:
             # Legacy Telegram-only accounts have no other delivery channel.
             user.checkins_enabled = False
