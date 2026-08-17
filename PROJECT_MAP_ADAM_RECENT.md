@@ -17,3 +17,14 @@
 - Added private mode, full personal-data deletion, workflow progress, safe action-log with tool attribution, p50/p95 latency diagnostics and token telemetry.
 - Russian eval v1 and benchmark helpers live in `evals/`, `utils/benchmark.py`, `scripts/collect_alter_benchmark.py` and `scripts/score_benchmark.py`.
 - Production is served through `api.alterai.ru` / `77.73.131.175`; deploy only after batching changes and running the full local suite.
+
+## 2026-08-17
+
+- SEO production layer is live on `alterai.ru`. Public crawlable pages: `/`, `/vozmozhnosti`, `/faq`, `/privacy`, and `/offer`.
+- `web/public/robots.txt` allows public pages, blocks `/api/`, and points crawlers to `https://alterai.ru/sitemap.xml`.
+- `web/public/sitemap.xml` lists the public SEO pages. `web/index.html` contains the canonical URL, Russian title/description, Open Graph/Twitter metadata, `SoftwareApplication` JSON-LD, and a no-JavaScript text fallback.
+- Nginx serves `/faq` and `/vozmozhnosti` as real static HTML pages; `/features` redirects to `/vozmozhnosti`. Do not replace these routes with the authenticated SPA shell.
+- Yandex Webmaster ownership is confirmed through `web/public/yandex_c3c352c871be8803.html`; Yandex sitemap submission is complete. Google Search Console ownership is confirmed through DNS TXT and the same sitemap is submitted there.
+- SEO verification commands: `Invoke-WebRequest https://alterai.ru/robots.txt`, `Invoke-WebRequest https://alterai.ru/sitemap.xml`, and `Invoke-WebRequest https://alterai.ru/faq` must return 200 with `text/plain`, `text/xml`, and HTML respectively.
+- Image search sends a real image preview (up to 5 MB), normalizes provider WebP/error responses to JPEG, keeps image search separate from image generation, and falls back beyond failed Yandex candidates.
+- Current repository/deployment rule: commit and push to `master`; production path is `/root/alter`; nginx/other project `/root/github.io-test` must not be changed. Mobile checks remain `cd mobile; npx tsc --noEmit; npm test -- --runInBand`.
