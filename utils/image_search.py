@@ -50,12 +50,22 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
             pass
     # Wikimedia's REST search is keyless and is more reliable than the legacy API.
     try:
+        # Commons has much better coverage for English medical terminology;
+        # retry common Russian anatomy wording with an English equivalent.
+        queries = [query]
+        lowered = query.casefold()
+        if "триггер" in lowered and "зон" in lowered:
+            queries.append("trigger points anatomy")
         async with aiohttp.ClientSession() as session:
-            params = {"q": query, "limit": limit}
-            async with session.get("https://commons.wikimedia.org/w/rest.php/v1/search/page", params=params, headers={"User-Agent": "Mozilla/5.0 ALTER/1.0"}) as response:
-                pages = (await response.json()).get("pages", []) if response.status == 200 else []
-        return [{"title": item.get("title", "Изображение"), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
-                for item in pages if (item.get("thumbnail") or {}).get("url")]
+            for search_query in queries:
+                params = {"q": search_query, "limit": limit}
+                async with session.get("https://commons.wikimedia.org/w/rest.php/v1/search/page", params=params, headers={"User-Agent": "Mozilla/5.0 ALTER/1.0"}) as response:
+                    pages = (await response.json()).get("pages", []) if response.status == 200 else []
+                results = [{"title": item.get("title", "Изображение"), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
+                           for item in pages if (item.get("thumbnail") or {}).get("url")]
+                if results:
+                    return results
+        return []
     except Exception:
         pass
     # Last-resort public search page fallback when API providers are absent or blocked.
