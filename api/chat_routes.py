@@ -400,7 +400,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 done_payload = {"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated), **_voice_preview_audio(generated)}
                 await response.write(("data: " + json.dumps(done_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
-            if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", text.casefold()):
+            if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карт\w*)\b", text.casefold()):
                 query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", text, flags=re.I).strip(" ,.!?:;")
                 for candidate in await search_images(query):
                     downloaded = await download_image(candidate["url"])

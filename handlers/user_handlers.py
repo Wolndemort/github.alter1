@@ -1646,7 +1646,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             logging.exception("Voice generation failed")
             await message.answer(f"Не удалось создать голос: {exc}")
         return
-    if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", message.text.casefold()):
+    if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карт\w*)\b", message.text.casefold()):
         query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", message.text, flags=re.I).strip(" ,.!?:;")
         for candidate in await search_images(query):
             downloaded = await download_image(candidate["url"])
