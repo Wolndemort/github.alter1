@@ -5,6 +5,7 @@ import pytest
 
 from data.models import Session, User, WebAccount
 from utils import tasks
+from aiogram.exceptions import TelegramForbiddenError
 
 
 class StopLoop(Exception):
@@ -60,6 +61,35 @@ def test_telegram_chat_id_never_uses_app_database_id():
 
     legacy = User(id=777, first_name="Telegram", memory={}, tech_stack={})
     assert tasks.telegram_chat_id(legacy) == 777
+
+
+@pytest.mark.asyncio
+async def test_checkin_delivery_handles_blocked_legacy_user():
+    user = User(id=777, first_name="Telegram", memory={}, tech_stack={})
+
+    class Bot:
+        async def send_message(self, *_args, **_kwargs):
+            raise TelegramForbiddenError(method="sendMessage", message="bot was blocked by the user")
+
+    assert await tasks._send_checkin_to_telegram(Bot(), user, "hello") is False
+    assert user.checkins_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_checkin_delivery_unlinks_blocked_web_chat():
+    user = User(id=101, first_name="App", memory={}, tech_stack={})
+    user.web_account = WebAccount(
+        id="account", user_id=101, email="app@example.com", password_hash="hash",
+        telegram_user_id=777,
+    )
+
+    class Bot:
+        async def send_message(self, *_args, **_kwargs):
+            raise TelegramForbiddenError(method="sendMessage", message="bot was blocked by the user")
+
+    assert await tasks._send_checkin_to_telegram(Bot(), user, "hello") is False
+    assert user.web_account.telegram_user_id is None
+    assert user.checkins_enabled is True
 
 
 @pytest.mark.asyncio

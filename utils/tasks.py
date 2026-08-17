@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from aiogram import Bot
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import config
@@ -42,6 +43,26 @@ def telegram_chat_id(user: User) -> int | None:
     if account is not None:
         return account.telegram_user_id
     return user.id
+
+
+async def _send_checkin_to_telegram(bot: Bot, user: User, message: str) -> bool:
+    """Deliver a proactive check-in without stopping the monitor on stale chats."""
+    chat_id = telegram_chat_id(user)
+    if chat_id is None:
+        return True
+    try:
+        await bot.send_message(chat_id, message)
+    except TelegramForbiddenError:
+        account = user.web_account
+        if account is not None:
+            # The user may still use the web app; allow a future relink.
+            account.telegram_user_id = None
+        else:
+            # Legacy Telegram-only accounts have no other delivery channel.
+            user.checkins_enabled = False
+        logging.warning("Telegram check-in delivery disabled for user %s: chat unavailable", user.id)
+        return False
+    return True
 
 
 async def monitor_metrics():
@@ -375,9 +396,7 @@ async def monitor_checkins(bot: Bot):
                         if proactive_allowed(user, now, session, 20):
                             _, message = onboarding
                             await db.commit()
-                            chat_id = telegram_chat_id(user)
-                            if chat_id is not None:
-                                await bot.send_message(chat_id, message)
+                            await _send_checkin_to_telegram(bot, user, message)
                             await send_push(user, "ALTER · Пробный доступ", message)
                             settings = dict(user.tech_stack or {})
                             sent = dict(settings.get("trial_onboarding_sent") or {})
@@ -427,9 +446,7 @@ async def monitor_checkins(bot: Bot):
                         session.raw_messages if session else [],
                         memory,
                     )
-                    chat_id = telegram_chat_id(user)
-                    if chat_id is not None:
-                        await bot.send_message(chat_id, question)
+                    await _send_checkin_to_telegram(bot, user, question)
                     await send_push(user, "ALTER · Check-in", question)
                     user.last_checkin_at = now
                 await db.commit()
