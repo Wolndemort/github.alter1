@@ -40,11 +40,11 @@ from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
 from utils.media_edit import DEFAULT_IMAGE_EDIT_PROMPT
-from services.document_ingestion import edit_document, extract_document, start_document_agent
+from services.document_ingestion import create_document, edit_document, extract_document, start_document_agent
 from services.vision_quality import compare_documents
 from utils.agent_engine import agent_view
 from utils.generation_intent import generation_kind
-from utils.document_commands import document_edit_instruction, is_document_edit_request, is_document_save_request
+from utils.document_commands import document_creation_format, document_edit_instruction, is_document_edit_request, is_document_save_request
 from utils.multimodal_context import attachment_context_message
 from services.artifact_store import get_artifact, latest_artifact, save_artifact
 from utils.artifact_intent import reuses_previous_artifact
@@ -407,7 +407,14 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     downloaded = await download_image(candidate["url"])
                     if downloaded:
                         data, mime, name = downloaded
-                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "media_base64": base64.b64encode(data).decode("ascii"), "media_filename": name, "media_mime": mime}
+                        artifact_id = await save_artifact(user_id, data, name, mime, kind="image", operation="image_search")
+                        # Image search results are small previews. Return the bytes in
+                        # the SSE event as well as saving the artifact, so web/mobile
+                        # can render the image immediately instead of relying on a
+                        # second authenticated download request.
+                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "artifact_id": artifact_id, "media_filename": name, "media_mime": mime}
+                        if len(data) <= 5 * 1024 * 1024:
+                            payload["media_base64"] = base64.b64encode(data).decode("ascii")
                         await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                         return response
             if route.kind == "web" and re.search(r"\b(?:видео|ролик|клип)\b", text.casefold()):
@@ -425,7 +432,22 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     return response
                 artifact = await (generate_video(text) if generation == "video" else generate_image(text))
                 media_payload = {"type": "done", "reply": "Изображение создано в ALTER." if generation == "image" else "Видео создано в ALTER.", "media_base64": base64.b64encode(artifact.data).decode("ascii"), "media_filename": artifact.filename, "media_mime": artifact.media_type}
+                if media_payload.get("media_base64"):
+                    artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind=generation, operation="media_generation")
+                    media_payload["artifact_id"] = artifact_id
+                    media_payload.pop("media_base64", None)
                 await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
+            creation = document_creation_format(text)
+            if creation:
+                filename, media_type = creation
+                await response.write(("data: " + json.dumps({"type": "status", "status": "creating_document", "format": filename.rsplit(".", 1)[-1]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                result = await ChatService().reply(session, user_id, text)
+                artifact = create_document(filename, result.reply, media_type)
+                artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
+                if not artifact_id:
+                    raise web.HTTPServiceUnavailable(text="Не удалось сохранить созданный документ")
+                await response.write(("data: " + json.dumps({"type": "done", "reply": f"Готово — создал файл {artifact.filename}. Нажми «Скачать файл».", "artifact_id": artifact_id, "media_filename": artifact.filename, "media_mime": artifact.media_type}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
             if route.kind == "youtube":
                 audio_plan = await plan_audio_request(text)
@@ -469,7 +491,10 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     downloaded = await download_image(candidate["url"])
                     if downloaded:
                         data, mime, name = downloaded
-                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "media_base64": base64.b64encode(data).decode("ascii"), "media_filename": name, "media_mime": mime}
+                        artifact_id = await save_artifact(user_id, data, name, mime, kind="image", operation="image_search")
+                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "artifact_id": artifact_id, "media_filename": name, "media_mime": mime}
+                        if len(data) <= 5 * 1024 * 1024:
+                            payload["media_base64"] = base64.b64encode(data).decode("ascii")
                         await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                         return response
             pending_reminder = dict(user.pending_reminder or {})

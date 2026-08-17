@@ -303,12 +303,26 @@ GET /api/v1/faq/text для mobile.
 FAQ_LATEST_APPENDIX = FAQ_LATEST_APPENDIX.replace("\ufffd\ufffd", "п")
 
 
+FAQ_DOCUMENT_CREATION_APPENDIX = """
+
+Создание документов с нуля
+
+ALTER умеет не только читать и исправлять загруженные документы, но и создавать настоящий скачиваемый файл по описанию. Это работает из текста и из голосовой команды после расшифровки.
+
+Поддерживаемые форматы создания: DOCX/Word, PDF, XLSX/Excel, PPTX/PowerPoint, ODT, RTF, TXT, Markdown, CSV и JSON.
+
+Примеры: «создай договор в DOCX»; «сделай отчёт в PDF»; «подготовь таблицу расходов в Excel»; «собери презентацию PPTX»; «оформи резюме и сохрани как Word»; «напиши письмо клиенту и выгрузи в DOCX»; «сформируй JSON со структурой проекта»; «экспортируй этот ответ в PDF»; «преврати последний план в файл Markdown»; «голосом: подготовь акт в PDF».
+
+После создания ALTER возвращает файл в чат. Его можно скачать и затем попросить изменить, например: «измени последний документ: draft => ready».
+"""
+
+
 def faq_text() -> str:
     # Keep the public copy canonical even while older constants remain
     # available to integrations that import them directly.
     appendix = FAQ_APPENDIX.replace("\n15.", "\n16.", 1)
     latest = FAQ_LATEST_APPENDIX.replace("\n16.", "\n17.", 1)
-    return FAQ_TEXT + appendix + latest
+    return FAQ_TEXT + appendix + latest + FAQ_DOCUMENT_CREATION_APPENDIX
 
 
 def faq_html() -> str:

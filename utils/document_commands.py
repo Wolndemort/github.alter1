@@ -129,3 +129,41 @@ def is_document_save_request(prompt: str) -> bool:
         value,
         flags=re.I,
     ))
+
+
+_CREATE_FORMATS = {
+    "docx": ("alter-document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "word": ("alter-document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "pdf": ("alter-document.pdf", "application/pdf"),
+    "xlsx": ("alter-document.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "excel": ("alter-document.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "pptx": ("alter-document.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    "powerpoint": ("alter-document.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    "odt": ("alter-document.odt", "application/vnd.oasis.opendocument.text"),
+    "rtf": ("alter-document.rtf", "application/rtf"),
+    "txt": ("alter-document.txt", "text/plain"),
+    "text": ("alter-document.txt", "text/plain"),
+    "md": ("alter-document.md", "text/markdown"),
+    "markdown": ("alter-document.md", "text/markdown"),
+    "csv": ("alter-document.csv", "text/csv"),
+    "json": ("alter-document.json", "application/json"),
+    "ворд": ("alter-document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "док": ("alter-document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "пдф": ("alter-document.pdf", "application/pdf"),
+    "эксель": ("alter-document.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "таблица": ("alter-document.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "презентация": ("alter-document.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+}
+
+
+def document_creation_format(prompt: str) -> tuple[str, str] | None:
+    """Return a default filename and MIME type for a create-file command."""
+    value = _text(prompt).casefold()
+    if not re.search(r"\b(?:создай|создать|сделай|подготовь|сформируй|сгенерируй|собери|оформи|напиши|сверстай|экспортируй|выгрузи|сохрани|преврати|generate|create|make|prepare|build|export|draft|write|turn)\b", value):
+        return None
+    if not re.search(r"(?:\b(?:документ\w*|файл\w*|отч[её]т\w*|договор\w*|таблиц\w*|презентац\w*|шаблон\w*|акт\w*|счет\w*|резюме|письмо|document|file|report|contract|table|presentation|template|invoice|resume|letter)\b|\.(?:docx?|pdf|xlsx?|pptx?|odt|rtf|txt|md|csv|json)\b|\b(?:docx?|pdf|xlsx?|pptx?|odt|rtf|txt|md|csv|json|markdown|word|excel|powerpoint|ворд|пдф|эксель|таблица|презентация)\b)", value):
+        return None
+    for name, result in _CREATE_FORMATS.items():
+        if re.search(rf"\b{name}\b", value):
+            return result
+    return _CREATE_FORMATS["docx"]

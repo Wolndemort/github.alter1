@@ -9,7 +9,8 @@ CAPABILITY_CATALOG = {
     "documents": [
         "PDF_read", "DOCX_read", "XLSX_read", "PPTX_read", "ODT_read", "RTF_read",
         "TXT_MD_CSV_JSON_read", "OCR", "document_profile", "document_agent",
-        "document_edit_export", "document_edit_export_all_supported_formats", "version_compare",
+        "document_create_from_scratch", "document_create_DOCX_PDF_XLSX_PPTX_ODT_RTF_TXT_MD_CSV_JSON",
+        "document_edit_export", "document_edit_export_all_supported_formats", "artifact_download", "version_compare",
     ],
     "vision": ["image_analysis", "OCR", "structured_visual_audit", "object_geometry", "chart_data", "confidence_gate", "image_editing"],
     "video": ["frame_sampling", "audio_extraction", "transcription", "timestamped_events", "video_search_and_delivery", "video_download", "video_generation", "image_to_video"],
@@ -18,7 +19,7 @@ CAPABILITY_CATALOG = {
     "operations": ["fallback_models", "quality_gate", "latency_metrics", "owner_diagnostics", "quotas", "backup_scripts", "production_smoke"],
 }
 
-CAPABILITY_CATALOG_VERSION = "2026-08-15"
+CAPABILITY_CATALOG_VERSION = "2026-08-17"
 
 
 def capability_catalog_text() -> str:

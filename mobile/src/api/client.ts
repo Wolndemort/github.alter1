@@ -165,6 +165,7 @@ export class AlterApi {
     let completedAudio: Pick<ChatResponse, "audio_base64" | "audio_filename" | "audio_mime"> = {};
     let completedMedia: Pick<ChatResponse, "media_base64" | "media_filename" | "media_mime"> = {};
     let completedJobId: string | undefined;
+    let completedArtifactId: string | undefined;
     let completed = false;
     const consume = (raw: string) => {
       const events = raw.split(/\r?\n\r?\n/);
@@ -178,6 +179,7 @@ export class AlterApi {
           if (typeof payload.reply === "string") completedReply = payload.reply;
           if (typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
           if (typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
+          if (typeof payload.artifact_id === "string") completedArtifactId = payload.artifact_id;
           if (typeof payload.media_job_id === "string") completedJobId = payload.media_job_id;
         }
         if (payload.type === "status" && typeof payload.status === "string") onStatus?.(payload.status);
@@ -208,10 +210,10 @@ export class AlterApi {
     } catch (error) {
       // The server can finish successfully while mobile closes the socket
       // during the final SSE chunk. Keep the answer already received.
-      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId };
+      if (completed || full.trim() || completedReply.trim()) return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId, artifact_id: completedArtifactId };
       throw error;
     }
-    return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId };
+    return { reply: full || completedReply, session_id: 0, ...completedAudio, ...completedMedia, media_job_id: completedJobId, artifact_id: completedArtifactId };
   }
   newSession(token: string) { return this.request<{ ok: boolean }>("/api/v1/chat/new", { method: "POST" }, token); }
   history(token: string) { return this.request<ChatHistoryResponse>("/api/v1/chat/history", {}, token); }

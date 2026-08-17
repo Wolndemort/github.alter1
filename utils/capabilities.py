@@ -89,8 +89,14 @@ def is_capabilities_request(text: str) -> bool:
     return any(re.search(pattern, value) for pattern in _CAPABILITY_PATTERNS)
 
 
+DOCUMENT_CAPABILITY_NOTE = """
+Создание документов с нуля: ALTER может подготовить содержимое и вернуть настоящий файл DOCX, PDF, XLSX, PPTX, ODT, RTF, TXT, Markdown, CSV или JSON. Команда может прийти текстом или голосом после расшифровки. Примеры: «создай договор в DOCX», «сформируй отчёт PDF», «собери таблицу XLSX», «оформи презентацию», «экспортируй этот ответ в Word», «сделай файл JSON». После создания файл доступен для скачивания и дальнейшего редактирования.
+"""
+CAPABILITIES_PROMPT += DOCUMENT_CAPABILITY_NOTE
+
+
 def capabilities_reply() -> str:
-    return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE + "\n\nПолный технический каталог:\n" + capability_catalog_text()
+    return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE + DOCUMENT_CAPABILITY_NOTE + "\n\nПолный технический каталог:\n" + capability_catalog_text()
 
 
 # Legacy readable inventory retained only for compatibility with old imports;

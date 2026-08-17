@@ -18,13 +18,14 @@ from utils.generation_intent import generation_kind
 from services.media_generation import generate_image, generate_video
 from utils.vector_memory import recall, remember
 from services.elevenlabs_media import ElevenLabsError, design_voice, speech_to_speech
+from services.document_ingestion import create_document
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.feedback_memory import feedback_context
 from utils.quality import sanitize_public_reply
 from utils.intent import should_recall_context
 from utils.multimodal_context import attachment_context_message
 from services.artifact_store import latest_artifact, save_artifact
-from utils.document_commands import is_document_save_request
+from utils.document_commands import document_creation_format, is_document_save_request
 import re
 
 
@@ -130,6 +131,23 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
         if not transcript:
             raise ValueError("voice message could not be transcribed")
         prompt = transcript
+        creation = document_creation_format(prompt)
+        if creation:
+            filename, media_type = creation
+            from services.chat_service import ChatService
+            content = await ChatService().reply(db, user_id, prompt)
+            artifact = create_document(filename, content.reply, media_type)
+            artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
+            reply = f"Готово — создал {artifact.filename} по голосовой команде. Файл можно скачать из чата."
+            _append(session, "user", prompt)
+            _append(session, "assistant", reply)
+            _record_attachment_context(session, kind=kind, filename=filename, media_type=content_type,
+                                       operation="document_creation", transcript=transcript,
+                                       artifact_filename=artifact.filename, artifact_media_type=artifact.media_type, artifact_id=artifact_id)
+            await db.commit()
+            return MediaChatResult(reply=reply, session_id=session.id, transcript=transcript,
+                                   media_data=artifact.data, media_filename=artifact.filename,
+                                   media_type=artifact.media_type, artifact_id=artifact_id)
         if is_document_save_request(prompt):
             artifact = await latest_artifact(user_id, kind="document")
             artifact_data = b""

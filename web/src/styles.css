@@ -274,3 +274,10 @@ button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
 .diagnostics-payment { display: grid; grid-template-columns: auto 1fr auto; gap: .75rem; align-items: center; padding: .7rem 0; border-bottom: 1px solid var(--line, #292929); }
 .payment-status { font-size: .72rem; text-transform: uppercase; }
 .status-succeeded, .status-paid, .status-completed { color: #9cffb0; }
+
+/* Final monochrome pass: all surfaces, states and affordances share the mobile black/white language. */
+:root { --accent:#fff; --purple:#fff; }
+.markdown-text code,.markdown-text a,.message-download,.message-download:hover,.status-succeeded,.status-paid,.status-completed { color:#fff; }
+.message-download:hover { background:#fff; color:#111; }
+.focus-list i.priority-high { background:#fff; box-shadow:0 0 9px #fff; }
+.audit-card,.memory-intro,.billing-status,.agent-summary { background:#151515; border-color:#444; }

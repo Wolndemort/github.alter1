@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from services.document_ingestion import MAX_DOCUMENT_BYTES, document_chunks, document_profile, edit_document, extract_document, ocr_image_text, start_document_agent
+from services.document_ingestion import MAX_DOCUMENT_BYTES, create_document, document_chunks, document_profile, edit_document, extract_document, ocr_image_text, start_document_agent
+from utils.document_commands import document_creation_format
 from utils.external_content import audit_external_content
 
 
@@ -16,6 +17,28 @@ def test_text_document_is_normalized_and_chunked():
 def test_json_document_is_pretty_printed():
     document = extract_document("data.json", json.dumps({"name": "Alter"}).encode(), "application/json")
     assert '"name": "Alter"' in document.text
+
+
+@pytest.mark.parametrize("prompt, extension", [
+    ("создай договор в DOCX", ".docx"),
+    ("сделай отчёт в PDF", ".pdf"),
+    ("подготовь таблицу расходов в Excel", ".xlsx"),
+    ("собери презентацию PPTX", ".pptx"),
+    ("экспортируй этот ответ в Markdown", ".md"),
+    ("сформируй JSON со структурой проекта", ".json"),
+    ("prepare a contract as Word", ".docx"),
+    ("turn this plan into a PDF file", ".pdf"),
+])
+def test_document_creation_intent_accepts_natural_text_variants(prompt, extension):
+    result = document_creation_format(prompt)
+    assert result is not None
+    assert result[0].endswith(extension)
+
+
+def test_text_document_can_be_created_from_scratch():
+    result = create_document("plan.md", "# ALTER\n\nNext step", "text/markdown")
+    assert result.filename == "plan.md"
+    assert result.data == b"# ALTER\n\nNext step"
 
 
 def test_rtf_document_is_read_and_returned_as_rtf():

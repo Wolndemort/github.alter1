@@ -20,6 +20,10 @@ SUPPORTED_EXTENSIONS = {
 }
 EDITABLE_EXTENSIONS = set(SUPPORTED_EXTENSIONS)
 OCR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp"}
+CREATABLE_EXTENSIONS = {
+    ".txt", ".md", ".markdown", ".json", ".csv", ".rtf",
+    ".pdf", ".docx", ".xlsx", ".pptx", ".odt",
+}
 
 DEFAULT_MEDIA_TYPES = {
     ".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown",
@@ -50,6 +54,96 @@ class EditedDocument:
     filename: str
     media_type: str
     data: bytes
+
+
+def create_document(filename: str, text: str, media_type: str = "") -> EditedDocument:
+    """Create a real document from bounded plain text.
+
+    The content is intentionally text-first: the assistant produces the
+    content, while this function owns deterministic file serialization.
+    """
+    safe_name = Path(filename or "alter-document.txt").name[:180]
+    extension = _extension(safe_name)
+    if extension not in CREATABLE_EXTENSIONS:
+        raise ValueError("unsupported document format for creation")
+    content = str(text or "").strip()
+    if not content:
+        raise ValueError("document content is empty")
+    if extension in {".txt", ".md", ".markdown", ".csv"}:
+        output = content.encode("utf-8")
+    elif extension == ".json":
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError:
+            value = {"content": content}
+        output = json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8")
+    elif extension == ".rtf":
+        output = _encode_rtf(content)
+    elif extension == ".docx":
+        try:
+            from docx import Document as DocxDocument
+            document = DocxDocument()
+            for paragraph in re.split(r"\n\s*\n", content):
+                document.add_paragraph(paragraph.strip())
+            buffer = io.BytesIO(); document.save(buffer); output = buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("DOCX support is not installed") from exc
+    elif extension == ".xlsx":
+        try:
+            from openpyxl import Workbook
+            workbook = Workbook(); sheet = workbook.active; sheet.title = "ALTER"
+            for row_index, line in enumerate(content.splitlines() or [content], 1):
+                for column_index, value in enumerate(line.split(","), 1):
+                    sheet.cell(row=row_index, column=column_index, value=value.strip())
+            buffer = io.BytesIO(); workbook.save(buffer); output = buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("XLSX support is not installed") from exc
+    elif extension == ".pptx":
+        try:
+            from pptx import Presentation
+            from pptx.util import Inches
+            presentation = Presentation()
+            for index, paragraph in enumerate(re.split(r"\n\s*\n", content)):
+                slide = presentation.slides.add_slide(presentation.slide_layouts[1 if index == 0 else 5])
+                if index == 0:
+                    slide.shapes.title.text = paragraph[:180]
+                    slide.placeholders[1].text = paragraph
+                else:
+                    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(5))
+                    box.text_frame.text = paragraph
+            buffer = io.BytesIO(); presentation.save(buffer); output = buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("PPTX support is not installed") from exc
+    elif extension == ".odt":
+        try:
+            from odf.opendocument import OpenDocumentText
+            from odf.text import P
+            document = OpenDocumentText()
+            for paragraph in re.split(r"\n\s*\n", content):
+                document.text.addElement(P(text=paragraph.strip()))
+            buffer = io.BytesIO(); document.save(buffer); output = buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("ODT support is not installed") from exc
+    else:  # PDF
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfbase.pdfmetrics import stringWidth
+            from reportlab.pdfgen.canvas import Canvas
+            buffer = io.BytesIO(); canvas = Canvas(buffer, pagesize=A4)
+            width, height = A4; x, y = 48, height - 56
+            for line in content.splitlines() or [content]:
+                words = line.split() or [""]; current = ""
+                for word in words:
+                    candidate = f"{current} {word}".strip()
+                    if stringWidth(candidate, "Helvetica", 11) > width - 96 and current:
+                        canvas.drawString(x, y, current); y -= 16; current = word
+                    else: current = candidate
+                    if y < 48: canvas.showPage(); y = height - 56
+                canvas.drawString(x, y, current); y -= 16
+            canvas.save(); output = buffer.getvalue()
+        except ImportError as exc:
+            raise ValueError("PDF support is not installed") from exc
+    return EditedDocument(safe_name, _media_type(extension, media_type), output)
 
 
 def _clean(text: str) -> str:

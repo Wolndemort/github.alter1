@@ -28,3 +28,5 @@ def test_inventory_does_not_advertise_unavailable_audio_products_as_available():
     assert "звук дождя" in reply
     assert "Dubbing сейчас не подключены" in reply
     assert "Music Generation и Dubbing" in CAPABILITIES_PROMPT
+    assert "Создание документов с нуля" in capabilities_reply()
+    assert "DOCX, PDF, XLSX, PPTX" in capabilities_reply()

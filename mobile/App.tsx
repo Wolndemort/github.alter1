@@ -11,7 +11,7 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, InteractionManager, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image as RNImage, InteractionManager, Keyboard, KeyboardAvoidingView, LayoutAnimation, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AccountResponse, AlterNotification, LocationContext, MediaJob, MemoryResponse, MyDayResponse, SubscriptionResponse, api } from "./src/api/client";
 
@@ -633,6 +633,20 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
     });
     player.play();
   };
+  const [fullscreenImage, setFullscreenImage] = useState<{ uri: string; name?: string } | null>(null);
+  const Image = (props: React.ComponentProps<typeof RNImage>) => {
+    const source = props.source as { uri?: string };
+    return <Pressable onPress={() => source?.uri && setFullscreenImage({ uri: source.uri })}><RNImage {...props} /></Pressable>;
+  };
+  const saveBlobToFile = async (blob: Blob, filename: string) => {
+    if (!FileSystem.documentDirectory) throw new Error("Не удалось открыть хранилище устройства");
+    const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+    const comma = dataUrl.indexOf(",");
+    const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const uri = `${FileSystem.documentDirectory}${safe}`;
+    await FileSystem.writeAsStringAsync(uri, comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, { encoding: FileSystem.EncodingType.Base64 });
+    return uri;
+  };
   const downloadMedia = async (item: ChatItem, kind: "media" | "audio" = "media") => {
     const uriValue = kind === "audio" ? item.audioUri : item.mediaUri;
     const mime = kind === "audio" ? item.audioMime : item.mediaMime;
@@ -642,6 +656,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
       const comma = uriValue.indexOf(",");
       const base64 = comma >= 0 ? uriValue.slice(comma + 1) : uriValue;
       const filename = itemFilename || `alter-${Date.now()}.${(mime || "application/octet-stream").split("/")[1] || "bin"}`;
+      if (uriValue.startsWith("file://")) { await Share.share({ url: uriValue, title: filename, message: Platform.OS === "android" ? uriValue : undefined }); return; }
       const uri = `${FileSystem.documentDirectory}${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
       await Share.share({ url: uri, title: filename, message: Platform.OS === "android" ? uri : undefined });
@@ -740,7 +755,7 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
         } catch (error) { console.warn("ALTER media metadata unavailable", { type: currentAttachment.type, error: String(error) }); }
       }
        const result = currentImages.length ? await api.sendMedia(token, text, currentImages.map((image) => ({ uri: image.uri, mediaType: "image" as const, mimeType: image.mimeType, filename: image.filename }))) : currentAttachment?.type === "document" ? await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentAttachment.uri, currentAttachment.filename || "alter-document", currentAttachment.mimeType) : currentAttachment ? await api.sendMedia(token, text, currentAttachment.uri, currentAttachment.type, currentAttachment.mimeType, currentAttachment.filename) : await api.sendMessageStream(token, text, location, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial, streaming: true } : item)), controller.signal);
-      if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; const outputMedia = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; const documentArtifactId = currentAttachment?.type === "document" && result.artifact_id ? result.artifact_id : undefined; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia, documentArtifactId }]);
+      if (currentAttachment?.type === "audio" && result.transcript) setItems((old) => old.map((item) => item.id === userMessageId ? { ...item, text: result.transcript! } : item)); autoScrollAfterUpdate.current = true; const answerId = `${Date.now()}a`; const outputAudio = result.audio_base64 ? { audioUri: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime || "audio/mpeg", audioFilename: result.audio_filename || "alter-audio.mp3" } : {}; let outputMedia: { mediaUri?: string; mediaMime?: string; mediaFilename?: string } = result.media_base64 ? { mediaUri: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, mediaFilename: result.media_filename } : {}; if (!result.media_base64 && result.artifact_id) { const blob = await api.downloadArtifact(token, result.artifact_id); const filename = result.media_filename || `alter-${Date.now()}.${(result.media_mime || blob.type || "application/octet-stream").split("/")[1] || "bin"}`; outputMedia = { mediaUri: await saveBlobToFile(blob, filename), mediaMime: result.media_mime || blob.type || "application/octet-stream", mediaFilename: filename }; } const documentArtifactId = result.artifact_id || undefined; setItems((old) => [...old.filter((item) => item.id !== pendingId), { id: answerId, role: "assistant", text: result.reply, ...outputAudio, ...outputMedia, documentArtifactId }]);
       // The API decides what is durable. Compare the actual memory projection,
       // so the acknowledgement also appears for inferred important facts.
       try {
@@ -1212,7 +1227,9 @@ export function ChatScreen({ token, onLogout }: { token: string; onLogout: () =>
   <Modal visible={faqVisible} animationType="slide" onRequestClose={() => setFaqVisible(false)}>
     <SafeAreaView style={styles.faqScreen}><View style={styles.memoryHeader}><Text style={styles.memoryTitle}>FAQ</Text><Pressable style={premiumStyles.menuAction} onPress={() => setFaqVisible(false)}><Text style={premiumStyles.menuActionText}>Назад</Text><Text style={premiumStyles.menuActionArrow}>→</Text></Pressable></View><ScrollView contentContainerStyle={styles.faqContent}><Text style={styles.faqText}>{faqText}</Text></ScrollView></SafeAreaView>
   </Modal>
+  <Pressable onPress={() => { loadNotifications(); setNotificationsVisible(true); }} accessibilityLabel="Открыть уведомления" style={{ position: "absolute", top: 48, right: 12, zIndex: 12, width: 34, height: 34, alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#fff", fontSize: 20 }}>◷</Text>{notificationUnread > 0 ? <View style={{ position: "absolute", top: 2, right: 1, minWidth: 14, height: 14, borderRadius: 7, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#000", fontSize: 9, fontWeight: "800" }}>{notificationUnread > 9 ? "9+" : notificationUnread}</Text></View> : null}</Pressable>
   <NotificationModal visible={notificationsVisible} items={notifications} unread={notificationUnread} onClose={() => setNotificationsVisible(false)} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} />
+  <Modal visible={Boolean(fullscreenImage)} transparent animationType="fade" onRequestClose={() => setFullscreenImage(null)}><Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.98)", justifyContent: "center", alignItems: "center" }} onPress={() => setFullscreenImage(null)}>{fullscreenImage ? <RNImage source={{ uri: fullscreenImage.uri }} resizeMode="contain" style={{ width: "100%", height: "82%" }} /> : null}<Pressable onPress={() => fullscreenImage && downloadMedia({ id: "fullscreen", role: "assistant", text: "", mediaUri: fullscreenImage.uri, mediaFilename: fullscreenImage.name, mediaMime: "image/jpeg" })} style={{ position: "absolute", bottom: 42, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, backgroundColor: "#fff" }}><Text style={{ color: "#000", fontWeight: "700" }}>Скачать изображение ↓</Text></Pressable></Pressable></Modal>
   <StatusBar style="light" /></SafeAreaView>;
 }
 
@@ -1445,3 +1462,11 @@ const mediaStyles = StyleSheet.create({
 (styles as Record<string, unknown>).notificationDot = { width: 7, height: 7, borderRadius: 4, backgroundColor: "#777", marginTop: 6 };
 (styles as Record<string, unknown>).notificationBody = { color: "#aaa", fontSize: 13, lineHeight: 19, marginTop: 5, marginBottom: 5 };
 (styles as Record<string, unknown>).notificationCheck = { color: "#fff", fontSize: 18 };
+(styles as Record<string, unknown>).workflowCard = { ...StyleSheet.flatten(styles.workflowCard), backgroundColor: "#151515", borderColor: "#444" };
+(styles as Record<string, unknown>).workflowKicker = { ...StyleSheet.flatten(styles.workflowKicker), color: "#aaa" };
+(styles as Record<string, unknown>).workflowAction = { ...StyleSheet.flatten(styles.workflowAction), color: "#fff" };
+(styles as Record<string, unknown>).memoryAuditCard = { ...StyleSheet.flatten(styles.memoryAuditCard), backgroundColor: "#151515", borderColor: "#555" };
+(styles as Record<string, unknown>).memoryAuditTitle = { ...StyleSheet.flatten(styles.memoryAuditTitle), color: "#eee" };
+(styles as Record<string, unknown>).memoryAuditItem = { ...StyleSheet.flatten(styles.memoryAuditItem), color: "#ccc" };
+(premiumStyles as Record<string, unknown>).sectionLabel = { ...StyleSheet.flatten(premiumStyles.sectionLabel), color: "#fff" };
+(linkStyles as Record<string, unknown>).link = { ...StyleSheet.flatten(linkStyles.link), color: "#fff" };

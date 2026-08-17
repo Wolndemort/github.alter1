@@ -85,6 +85,19 @@ async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[b
                 data = await response.content.read(max_bytes + 1)
                 if len(data) > max_bytes:
                     return None
-                return data, mime, safe_url.rsplit("/", 1)[-1].split("?", 1)[0][:80] or "alter-image"
+                # Search providers occasionally label an HTML/error body as an
+                # image or return a browser-unfriendly WebP variant. Decode and
+                # normalize it before sending it to web, mobile, and Telegram.
+                try:
+                    from io import BytesIO
+                    from PIL import Image
+
+                    with Image.open(BytesIO(data)) as image:
+                        image.load()
+                        normalized = BytesIO()
+                        image.convert("RGB").save(normalized, format="JPEG", quality=92, optimize=True)
+                    return normalized.getvalue(), "image/jpeg", "alter-image.jpg"
+                except Exception:
+                    return None
     except Exception:
         return None

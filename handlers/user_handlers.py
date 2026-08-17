@@ -54,10 +54,11 @@ from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
-from services.document_ingestion import edit_document, extract_document, document_profile
+from services.document_ingestion import create_document, edit_document, extract_document, document_profile
+from services.chat_service import ChatService
 from services.artifact_store import latest_artifact, save_artifact
 from services.chat_service import record_document_turn
-from utils.document_commands import document_edit_instruction as shared_document_edit_instruction, is_document_edit_request as shared_document_edit_requested
+from utils.document_commands import document_creation_format, document_edit_instruction as shared_document_edit_instruction, is_document_edit_request as shared_document_edit_requested
 from services.media_jobs import cancel_job, get_job, history as media_history, submit_job
 import logging
 
@@ -1624,6 +1625,19 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     if is_capabilities_request(message.text):
         await message.answer(capabilities_reply())
         await db_session.commit()
+        return
+    creation = document_creation_format(message.text)
+    if creation:
+        try:
+            filename, media_type = creation
+            result = await ChatService().reply(db_session, user.id, message.text)
+            artifact = create_document(filename, result.reply, media_type)
+            artifact_id = await save_artifact(user.id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
+            await db_session.commit()
+            await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption=f"Готово — создал {artifact.filename}. Можно скачать и продолжить редактирование.")
+        except Exception:
+            logging.exception("Telegram document creation failed")
+            await message.answer("Не удалось создать документ сейчас. Попробуй уточнить формат: DOCX, PDF, XLSX, PPTX, ODT, RTF, TXT, Markdown, CSV или JSON.")
         return
     if is_voice_generation_request(message.text):
         description = voice_description(message.text)
