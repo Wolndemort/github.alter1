@@ -417,6 +417,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                             payload["media_base64"] = base64.b64encode(data).decode("ascii")
                         await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                         return response
+                await response.write(("data: " + json.dumps({"type": "done", "reply": f"Не нашёл доступное изображение по запросу «{query}»."}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
             if route.kind == "web" and re.search(r"\b(?:видео|ролик|клип)\b", text.casefold()):
                 results = await search_web(text, max_results=5)
                 if results:
@@ -499,6 +501,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                             payload["media_base64"] = base64.b64encode(data).decode("ascii")
                         await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                         return response
+                await response.write(("data: " + json.dumps({"type": "done", "reply": f"Не нашёл доступное изображение по запросу «{query}»."}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
             pending_reminder = dict(user.pending_reminder or {})
             reminder_result = None
             if pending_reminder and looks_like_time_answer(text):
