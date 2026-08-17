@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 import asyncio
 
@@ -28,6 +29,7 @@ async def _yandex_images(query: str, limit: int) -> list[dict]:
     try:
         return (await asyncio.to_thread(run))[:limit]
     except Exception:
+        logging.exception("Yandex image search failed")
         return []
 
 
