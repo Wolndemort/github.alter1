@@ -596,6 +596,7 @@ class ChatService:
         # placing the mode marker after memory used to cut off identity and
         # family facts, making the model claim it knew nothing about them.
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
+        system += "\n\nREMINDER SAFETY: Never claim to have created, saved, cancelled, or scheduled a reminder unless the user's latest message explicitly asks for that reminder action. A story, plan, reflection, or mention of a date/time is not a reminder request."
         durable_tail = {
             category: memory[category]
             for category in ("identity", "family", "skills_career", "preferences", "open_loops")

@@ -102,18 +102,22 @@ export class AlterApi {
   mediaCapabilities(token: string) { return this.request<{ provider: string; models: Record<string, { id: string | null; mode: string; requires_source: boolean; options: Record<string, unknown> }> }>("/api/v1/media/capabilities", {}, token); }
   async sendMessageStream(token: string, message: string, onDelta: (text: string) => void, signal?: AbortSignal) {
     const response = await fetch(this.url("/api/v1/chat/stream"), { method: "POST", signal, headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}`, "Idempotency-Key": idempotencyKey() }, body: JSON.stringify({ message }) });
-    if (!response.ok) return parseError(response);
-    let reply = "";
+     if (!response.ok) return parseError(response);
+     let reply = "";
+     let completedAudio: { audio_base64?: string; audio_filename?: string; audio_mime?: string } = {};
+     let completedMedia: { media_base64?: string; media_filename?: string; media_mime?: string } = {};
     const consume = (raw: string) => raw.split(/\r?\n\r?\n/).forEach((event) => {
       const line = event.split(/\r?\n/).find((item) => item.startsWith("data: "));
       if (!line) return;
-      const payload = JSON.parse(line.slice(6)) as { type?: string; text?: string; reply?: string };
+       const payload = JSON.parse(line.slice(6)) as { type?: string; text?: string; reply?: string; audio_base64?: string; audio_filename?: string; audio_mime?: string; media_base64?: string; media_filename?: string; media_mime?: string };
+       if (payload.type === "done" && typeof payload.audio_base64 === "string") completedAudio = { audio_base64: payload.audio_base64, audio_filename: payload.audio_filename, audio_mime: payload.audio_mime };
+       if (payload.type === "done" && typeof payload.media_base64 === "string") completedMedia = { media_base64: payload.media_base64, media_filename: payload.media_filename, media_mime: payload.media_mime };
       if (payload.type === "delta" && typeof payload.text === "string") { reply += payload.text; onDelta(reply); }
       if (payload.type === "done" && typeof payload.reply === "string" && !reply) { reply = payload.reply; onDelta(reply); }
     });
     if (!response.body) consume(await response.text());
     else { const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; while (true) { const part = await reader.read(); if (part.done) break; buffer += decoder.decode(part.value, { stream: true }); const events = buffer.split(/\r?\n\r?\n/); buffer = events.pop() || ""; consume(events.join("\n\n")); } buffer += decoder.decode(); if (buffer.trim()) consume(buffer); }
-    return { reply };
+     return { reply, ...completedAudio, ...completedMedia };
   }
   async upload(token: string, path: string, fields: Record<string, string>, file: File, fileField = "file") {
     const form = new FormData(); Object.entries(fields).forEach(([key, value]) => form.append(key, value)); form.append(fileField, file);

@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+from datetime import timedelta
 
 from aiohttp import web
 from sqlalchemy import select
@@ -27,8 +28,13 @@ from services.media_jobs import cancel_job, get_job, history, submit_job
 from services.elevenlabs_media import ElevenLabsError, design_voice, list_voices, speech_to_speech
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.audio_actions import detect_audio_action, process_audio_action
+from utils.ap_logic import plan_audio_request
+from utils.audio_search import download_audio, remove_audio
+from utils.video_search import download_video, remove_video
+from utils.image_search import download_image, search_images
+from utils.youtube_search import search_youtube
 from utils.capabilities import capabilities_reply, is_capabilities_request
-from utils.reminders import is_reminder_request
+from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer
 from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
@@ -394,7 +400,16 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 done_payload = {"type": "done", "reply": reply, "voice_id": voice_id or None, "voice_generation": _voice_generation_summary(generated), **_voice_preview_audio(generated)}
                 await response.write(("data: " + json.dumps(done_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
-            if generation in {"image", "video"}:
+            if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", text.casefold()):
+                query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", text, flags=re.I).strip(" ,.!?:;")
+                for candidate in await search_images(query):
+                    downloaded = await download_image(candidate["url"])
+                    if downloaded:
+                        data, mime, name = downloaded
+                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "media_base64": base64.b64encode(data).decode("ascii"), "media_filename": name, "media_mime": mime}
+                        await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                        return response
+            if generation in {"image", "video"} and route.kind != "youtube":
                 await response.write(("data: " + json.dumps({"type": "status", "status": "generating_media", "kind": generation}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 if generation == "video":
                     job_id = await submit_job(user_id, "video", text, None, {})
@@ -404,6 +419,74 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 artifact = await (generate_video(text) if generation == "video" else generate_image(text))
                 media_payload = {"type": "done", "reply": "Изображение создано в ALTER." if generation == "image" else "Видео создано в ALTER.", "media_base64": base64.b64encode(artifact.data).decode("ascii"), "media_filename": artifact.filename, "media_mime": artifact.media_type}
                 await response.write(("data: " + json.dumps(media_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                return response
+            if route.kind == "youtube":
+                audio_plan = await plan_audio_request(text)
+                if audio_plan.get("download_audio"):
+                    results = await search_youtube(audio_plan.get("query") or text)
+                    if results:
+                        downloaded = await download_audio(results[0]["url"])
+                        if downloaded:
+                            audio_file, audio_title = downloaded
+                            try:
+                                audio_payload = {
+                                    "type": "done",
+                                    "reply": f"Нашёл и подготовил аудио: {audio_title}",
+                                    "audio_base64": base64.b64encode(audio_file.read_bytes()).decode("ascii"),
+                                    "audio_filename": f"{audio_title[:80]}.mp3",
+                                    "audio_mime": "audio/mpeg",
+                                }
+                            finally:
+                                remove_audio(audio_file)
+                            await response.write(("data: " + json.dumps(audio_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                            return response
+                if re.search(r"\b(?:видео|ролик|клип)\b", text.casefold()):
+                    results = await search_youtube(text, max_results=3)
+                    if results:
+                        downloaded = await download_video(results[0]["url"])
+                        if downloaded:
+                            video_file, video_title = downloaded
+                            try:
+                                video_payload = {"type": "done", "reply": f"Нашёл и подготовил видео: {video_title}", "media_base64": base64.b64encode(video_file.read_bytes()).decode("ascii"), "media_filename": "alter-youtube-video.mp4", "media_mime": "video/mp4"}
+                            finally:
+                                remove_video(video_file)
+                            await response.write(("data: " + json.dumps(video_payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                            return response
+            if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", text.casefold()):
+                query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", text, flags=re.I).strip(" ,.!?:;")
+                for candidate in await search_images(query):
+                    downloaded = await download_image(candidate["url"])
+                    if downloaded:
+                        data, mime, name = downloaded
+                        payload = {"type": "done", "reply": f"Нашёл изображение по запросу «{query}».", "media_base64": base64.b64encode(data).decode("ascii"), "media_filename": name, "media_mime": mime}
+                        await response.write(("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                        return response
+            pending_reminder = dict(user.pending_reminder or {})
+            reminder_result = None
+            if pending_reminder and looks_like_time_answer(text):
+                remind_at = parse_time_answer(text)
+                if remind_at:
+                    from data.models import Reminder
+                    session.add(Reminder(user_id=user_id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=pending_reminder["text"][:500]))
+                    user.pending_reminder = {}
+                    await session.commit()
+                    reminder_result = f"Хорошо, напомню {remind_at.strftime('%d.%m в %H:%M')}: {pending_reminder['text']}"
+            if reminder_result is None:
+                parsed_reminder = parse_reminder(text)
+                if parsed_reminder:
+                    remind_at, reminder_text = parsed_reminder
+                    from data.models import Reminder
+                    session.add(Reminder(user_id=user_id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
+                    await session.commit()
+                    reminder_result = f"Записал. Напомню {remind_at.strftime('%d.%m в %H:%M')}: {reminder_text}"
+                elif is_reminder_request(text):
+                    reminder_text = extract_reminder_text(text)
+                    if reminder_text:
+                        user.pending_reminder = {"text": reminder_text[:500]}
+                        await session.commit()
+                        reminder_result = f"Хорошо. Во сколько напомнить про «{reminder_text}»?"
+            if reminder_result is not None:
+                await response.write(("data: " + json.dumps({"type": "done", "reply": reminder_result}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
             await response.write(("data: " + json.dumps({"type": "status", "status": route.initial_status}, ensure_ascii=False) + "\n\n").encode("utf-8"))
             if route.streamable:

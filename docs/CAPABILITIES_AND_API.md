@@ -13,8 +13,8 @@
 | Текст в голос | POST /api/v1/voice/reply | Да | /voice | ElevenLabs + fallback OpenRouter |
 | Фото и видео | POST /api/v1/chat/media | Да | Да | OpenRouter vision |
 | Генерация media | POST /api/v1/media/generate | Да | media actions | Fal.ai |
-| Web-поиск | tool web_search | Через чат | Через чат | Tavily |
-| YouTube | POST /api/v1/youtube/search и audio | API | Через чат | YouTube + yt-dlp |
+| Web-поиск | tool web_search, image search | Через чат | Через чат | Tavily/Google CSE/Wikimedia |
+| YouTube | POST /api/v1/youtube/search и audio; видео через чат | API | Через чат | YouTube + yt-dlp |
 | Напоминания | api/v1/reminders | Да | /reminders | PostgreSQL + push |
 | Push | POST /api/v1/push-token | Да | — | Expo Notifications |
 | Геолокация | location в chat payload | С согласием | — | Expo Location |
@@ -31,6 +31,8 @@
 - «Измени это фото в кинематографичном стиле».
 - «Оживи это изображение».
 - «Найди песню и пришли аудио».
+- «Скинь карту из Cyberpunk 2077» — поиск готового изображения.
+- «Найди видео по Cyberpunk и пришли файл» — YouTube MP4, если помещается в лимит.
 - «Озвучь последний ответ».
 - «Включи голосовые ответы» или «Озвучивай ответы автоматически».
 - «Создай звук дождя по стеклу» — ALTER вернёт готовый звуковой эффект.

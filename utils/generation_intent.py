@@ -11,7 +11,7 @@ import re
 
 _IMAGE_WORDS = r"(?:фото\w*|фотографи\w*|изображени\w*|картин\w*|портрет\w*|иллюстраци\w*|image|photo|picture|portrait)"
 _VIDEO_WORDS = r"(?:видео\w*|ролик\w*|клип\w*|анимаци\w*|video|clip|animation|reel)"
-_CREATE = r"(?:создай\w*|сгенерируй\w*|сделай\w*|нарисуй\w*|создать|сгенерировать|сделать|create|generate|make|draw|render)"
+_CREATE = r"(?:создай\w*|сгенерируй\w*|сделай\w*|нарисуй\w*|скинь\w*|пришли\w*|создать|сгенерировать|сделать|create|generate|make|draw|render)"
 _EDIT = r"(?:измени\w*|переделай\w*|отредактируй\w*|редактируй\w*|убери\w*|добавь\w*|замени\w*|преобразуй\w*|стилизуй\w*|оживи\w*|анимируй\w*|edit|change|remove|add|replace|animate|stylize|transform)"
 _ANALYSIS = r"(?:анализируй\w*|проанализируй\w*|опиши\w*|прочитай\w*|разбери\w*|распознай\w*|что\s+на|analy[sz]e|describe|read|extract)"
 

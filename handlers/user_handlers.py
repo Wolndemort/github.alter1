@@ -4,7 +4,7 @@ import binascii
 import re
 
 from aiogram import F, Router, types
-from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BufferedInputFile, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command, CommandStart
 from aiogram.filters.command import CommandObject
 from sqlalchemy import delete
@@ -21,6 +21,8 @@ from services.media_quality import video_context
 from io import BytesIO
 from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
+from utils.video_search import download_video, remove_video
+from utils.image_search import download_image, search_images
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
@@ -1644,6 +1646,16 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             logging.exception("Voice generation failed")
             await message.answer(f"Не удалось создать голос: {exc}")
         return
+    if re.search(r"\b(?:скинь|пришли|найди|покажи)\b.*\b(?:фото|фотку|картин\w*|изображен\w*|скриншот\w*|карту)\b", message.text.casefold()):
+        query = re.sub(r"\b(?:скинь|пришли|найди|покажи)\b", "", message.text, flags=re.I).strip(" ,.!?:;")
+        for candidate in await search_images(query):
+            downloaded = await download_image(candidate["url"])
+            if downloaded:
+                data, _, name = downloaded
+                await message.answer_photo(BufferedInputFile(data, filename=name or "alter-image.jpg"), caption=f"Нашёл изображение по запросу «{query}».")
+                return
+        await message.answer("Не нашёл подходящее изображение по этому запросу.")
+        return
     requested_generation = generation_kind(message.text)
     if requested_generation == "image":
         try:
@@ -1667,6 +1679,38 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             logging.exception("Text video generation failed")
             await message.answer("Не получилось создать видео. Проверь Fal.ai и попробуй ещё раз.")
         return
+    if is_youtube_request(message.text):
+        audio_plan = await plan_audio_request(message.text)
+        if audio_plan.get("download_audio"):
+            results = await search_youtube(audio_plan.get("query") or message.text)
+            if results:
+                downloaded = await download_audio(results[0]["url"])
+                if downloaded:
+                    if not await generation_allowed(user, config.YOUTUBE_AUDIO_CREDITS):
+                        remove_audio(downloaded[0])
+                        await message.answer("Лимит кредитов YouTube-аудио исчерпан.")
+                        return
+                    audio_file, audio_title = downloaded
+                    try:
+                        await message.answer_audio(FSInputFile(str(audio_file)), title=audio_title[:64], performer=results[0].get("channel", ""))
+                    finally:
+                        remove_audio(audio_file)
+                    append_session_message(session, "assistant", f"Отправил аудио: {audio_title}")
+                    await db_session.commit()
+                    return
+        if re.search(r"\b(?:видео|ролик|клип)\b", message.text.casefold()):
+            results = await search_youtube(message.text, max_results=3)
+            if results:
+                downloaded = await download_video(results[0]["url"])
+                if downloaded:
+                    video_file, video_title = downloaded
+                    try:
+                        if video_file.stat().st_size <= config.TELEGRAM_MAX_MEDIA_BYTES:
+                            await message.answer_video(FSInputFile(str(video_file)), caption=f"Нашёл и подготовил видео: {video_title}")
+                            await db_session.commit()
+                            return
+                    finally:
+                        remove_video(video_file)
     extracted_facts = extract_user_facts(message.text)
     if extracted_facts:
         user.memory = merge_memory_facts(dict(user.memory or {}), extracted_facts)
