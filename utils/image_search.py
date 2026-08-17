@@ -36,16 +36,16 @@ async def _yandex_images(query: str, limit: int) -> list[dict]:
 async def search_images(query: str, limit: int = 5) -> list[dict]:
     limit = max(1, min(limit, 5))
     yandex = await _yandex_images(query, limit)
-    if yandex:
-        return yandex
+    # Do not stop at Yandex: its result URLs can be preview pages or expire
+    # before download. Keep them as candidates and continue to public fallbacks.
     if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
         try:
             async with aiohttp.ClientSession() as session:
                 params = {"key": config.GOOGLE_CSE_API_KEY.get_secret_value(), "cx": config.GOOGLE_CSE_ID, "q": query, "searchType": "image", "num": limit, "safe": "active"}
             async with session.get("https://www.googleapis.com/customsearch/v1", params=params, headers={"User-Agent": "ALTER/1.0 (image search)"}) as response:
                     if response.status == 200:
-                        return [{"title": item.get("title", "Изображение"), "url": item.get("link", ""), "mime": item.get("mime", "")}
-                                for item in (await response.json()).get("items", []) if item.get("link")]
+                        return yandex + [{"title": item.get("title", "Изображение"), "url": item.get("link", ""), "mime": item.get("mime", "")}
+                                         for item in (await response.json()).get("items", []) if item.get("link")]
         except Exception:
             pass
     # Wikimedia's REST search is keyless and is more reliable than the legacy API.
@@ -64,7 +64,7 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
                 results = [{"title": item.get("title", "Изображение"), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
                            for item in pages if (item.get("thumbnail") or {}).get("url")]
                 if results:
-                    return results
+                    return yandex + results
         return []
     except Exception:
         pass
@@ -79,9 +79,9 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
             if any(ext in url.casefold() for ext in (".jpg", ".jpeg", ".png", ".webp")) and "google.com" not in url:
                 if url not in urls:
                     urls.append(url)
-        return [{"title": "Изображение", "url": url, "mime": ""} for url in urls[:limit]]
+        return yandex + [{"title": "Изображение", "url": url, "mime": ""} for url in urls[:limit]]
     except Exception:
-        return []
+        return yandex
 
 
 async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[bytes, str, str] | None:
