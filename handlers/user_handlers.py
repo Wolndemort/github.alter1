@@ -1700,8 +1700,8 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
                     return
         if re.search(r"\b(?:видео|ролик|клип)\b", message.text.casefold()):
             results = await search_youtube(message.text, max_results=3)
-            if results:
-                downloaded = await download_video(results[0]["url"])
+            for video_result in results:
+                downloaded = await download_video(video_result["url"])
                 if downloaded:
                     video_file, video_title = downloaded
                     try:

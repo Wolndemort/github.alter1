@@ -442,8 +442,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                             return response
                 if re.search(r"\b(?:видео|ролик|клип)\b", text.casefold()):
                     results = await search_youtube(text, max_results=3)
-                    if results:
-                        downloaded = await download_video(results[0]["url"])
+                    for video_result in results:
+                        downloaded = await download_video(video_result["url"])
                         if downloaded:
                             video_file, video_title = downloaded
                             try:
