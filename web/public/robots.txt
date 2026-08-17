@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /settings
+Disallow: /billing
+Disallow: /diagnostics
+
+Sitemap: https://alterai.ru/sitemap.xml
