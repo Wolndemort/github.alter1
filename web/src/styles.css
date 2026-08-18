@@ -281,3 +281,5 @@ button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
 .message-download:hover { background:#fff; color:#111; }
 .focus-list i.priority-high { background:#fff; box-shadow:0 0 9px #fff; }
 .audit-card,.memory-intro,.billing-status,.agent-summary { background:#151515; border-color:#444; }
+.message-media { width:min(100%,560px); max-height:62vh; object-fit:contain; cursor:zoom-in; background:#090909; }
+.message-media:fullscreen { max-width:100vw; max-height:100vh; width:100vw; height:100vh; border-radius:0; background:#050505; object-fit:contain; cursor:zoom-out; }
