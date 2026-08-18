@@ -10,6 +10,7 @@ import pytest
 from services.document_ingestion import create_document
 from utils.document_commands import document_creation_format
 from utils.reminders import pending_reminder_is_fresh, parse_reminder
+from utils.capabilities import capabilities_reply
 
 
 def test_user_can_request_and_receive_a_filled_txt_document():
@@ -29,6 +30,31 @@ def test_user_can_request_a_filled_docx_document():
 
     assert artifact.filename.endswith(".docx")
     assert artifact.data.startswith(b"PK")  # DOCX is an OOXML zip archive.
+
+
+@pytest.mark.parametrize(
+    ("prompt", "extension", "content"),
+    [
+        ("создай заполненный JSON-файл со структурой проекта", ".json", '{"name":"ALTER"}'),
+        ("сделай заполненный CSV-файл со списком задач", ".csv", "Задача,Статус\nТесты,готово"),
+        ("создай Markdown-файл с планом", ".md", "# План\n\n1. Проверка"),
+        ("создай RTF-файл с заметкой", ".rtf", "Заметка проекта"),
+    ],
+)
+def test_creation_journey_serializes_all_text_first_formats(prompt, extension, content):
+    filename, media_type = document_creation_format(prompt)
+    artifact = create_document(filename, content, media_type)
+
+    assert artifact.filename.endswith(extension)
+    assert artifact.data
+
+
+def test_capabilities_journey_mentions_documents_and_reminders():
+    reply = capabilities_reply().casefold()
+
+    assert "docx" in reply
+    assert "напомин" in reply
+    assert "созда" in reply
 
 
 def test_reminder_journey_accepts_explicit_time_but_not_ambiguous_chat():
