@@ -1,5 +1,6 @@
 import pytest
 from types import SimpleNamespace
+from datetime import datetime, timezone
 
 from data.models import Session, User
 from services.chat_service import ChatService, _refresh_active_context, _stream_system_prompt, validate_message
@@ -125,7 +126,7 @@ async def test_chat_service_rejects_missing_user():
 
 @pytest.mark.asyncio
 async def test_chat_service_completes_pending_reminder_without_hijacking_unrelated_text():
-    user = User(id=21, first_name="Adam", memory={}, tech_stack={}, pending_reminder={"text": "проверить отчёт"})
+    user = User(id=21, first_name="Adam", memory={}, tech_stack={}, pending_reminder={"text": "проверить отчёт", "created_at": datetime.now(timezone.utc).isoformat()})
     db = Db(user, active=None)
     result = await ChatService().reply(db, 21, "завтра в 10:00")
     assert result.reply.startswith("Записал. Напомню")

@@ -6,6 +6,21 @@ from datetime import datetime, timedelta, timezone
 
 
 MOSCOW = timezone(timedelta(hours=3))
+PENDING_REMINDER_TTL = timedelta(hours=1)
+
+
+def pending_reminder_is_fresh(value: dict | None, now: datetime | None = None) -> bool:
+    """Do not let an unfinished reminder capture a message hours later."""
+    if not isinstance(value, dict) or not value.get("text") or not value.get("created_at"):
+        return False
+    try:
+        created = datetime.fromisoformat(str(value["created_at"]).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    current = now or datetime.now(timezone.utc)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return current - created <= PENDING_REMINDER_TTL
 _WEEKDAYS = {
     "понедельник": 0, "вторник": 1, "среду": 2, "среда": 2,
     "четверг": 3, "пятницу": 4, "пятница": 4, "субботу": 5,

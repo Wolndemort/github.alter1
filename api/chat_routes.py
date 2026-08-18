@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from aiohttp import web
 from sqlalchemy import select
@@ -35,7 +35,7 @@ from utils.image_search import download_image, search_images
 from utils.web_search import search_web
 from utils.youtube_search import search_youtube
 from utils.capabilities import capabilities_reply, is_capabilities_request
-from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer
+from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, pending_reminder_is_fresh
 from utils.request_routing import classify_request
 from utils.metrics import increment
 from utils.action_log import append_action
@@ -503,7 +503,9 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                         return response
                 await response.write(("data: " + json.dumps({"type": "done", "reply": f"Не нашёл доступное изображение по запросу «{query}»."}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 return response
-            pending_reminder = dict(user.pending_reminder or {})
+            pending_reminder = dict(user.pending_reminder or {}) if pending_reminder_is_fresh(user.pending_reminder) else {}
+            if user.pending_reminder and not pending_reminder:
+                user.pending_reminder = {}
             reminder_result = None
             if pending_reminder and looks_like_time_answer(text):
                 remind_at = parse_time_answer(text)
@@ -524,7 +526,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 elif is_reminder_request(text):
                     reminder_text = extract_reminder_text(text)
                     if reminder_text:
-                        user.pending_reminder = {"text": reminder_text[:500]}
+                        user.pending_reminder = {"text": reminder_text[:500], "created_at": datetime.now(timezone.utc).isoformat()}
                         await session.commit()
                         reminder_result = f"Хорошо. Во сколько напомнить про «{reminder_text}»?"
             if reminder_result is not None:

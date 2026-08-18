@@ -26,7 +26,7 @@ from utils.image_search import download_image, search_images
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
-from utils.reminders import extract_reminder_text, is_reminder_request, looks_like_time_answer, parse_reminder, parse_time_answer
+from utils.reminders import extract_reminder_text, is_reminder_request, looks_like_time_answer, parse_reminder, parse_time_answer, pending_reminder_is_fresh
 from utils.voice import transcribe_voice
 from utils.audio_actions import detect_audio_action, process_audio_action
 from utils.tts import synthesize_speech
@@ -1742,7 +1742,9 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
     if False:  # billing is handled by RedisBillingMiddleware
         await message.answer("Дневной лимит запросов исчерпан. Попробуй завтра.")
         return
-    pending = user.pending_reminder or {}
+    pending = user.pending_reminder if pending_reminder_is_fresh(user.pending_reminder) else {}
+    if user.pending_reminder and not pending:
+        user.pending_reminder = {}
     if pending:
         remind_at = parse_time_answer(message.text)
         if remind_at and looks_like_time_answer(message.text):
@@ -1771,7 +1773,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             await message.answer("Что именно напомнить и во сколько?")
             return
         reminder_text = await contextualize_reminder_text(reminder_text, user.id, db_session)
-        user.pending_reminder = {"text": reminder_text[:500]}
+        user.pending_reminder = {"text": reminder_text[:500], "created_at": datetime.now(timezone.utc).isoformat()}
         await db_session.commit()
         await message.answer(f"Хорошо. Во сколько напомнить про «{reminder_text}»?")
         return
