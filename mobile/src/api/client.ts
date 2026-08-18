@@ -325,6 +325,8 @@ export class AlterApi {
   startTelegramLink(token: string) { return this.request<{ url: string }>("/api/v1/telegram/link", { method: "POST" }, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
+  submitFeedback(token: string, payload: { rating: "positive" | "negative"; question?: string; answer: string; source?: string }) { return this.request<{ ok: boolean }>("/api/v1/feedback", { method: "POST", body: JSON.stringify(payload) }, token); }
+  feedbackPoll(token: string) { return this.request<{ due: boolean; question: string }>("/api/v1/feedback/poll", {}, token); }
   actionLog(token: string) { return this.request<{ items: Array<Record<string, string>>; private_mode: boolean }>("/api/v1/action-log", {}, token); }
   scenarios(token: string) { return this.request<{ items: Array<{ id: string; title: string; prompt: string; mode: string }> }>("/api/v1/scenarios", {}, token); }
   startWorkflow(token: string, workflowId: string, goal: string) { return this.request<{ workflow: Record<string, unknown> }>("/api/v1/workflow/start", { method: "POST", body: JSON.stringify({ workflow_id: workflowId, goal }) }, token); }

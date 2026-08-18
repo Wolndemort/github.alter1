@@ -38,6 +38,7 @@ from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
 from utils.memory_facts import extract_user_facts
 from utils.feedback_memory import feedback_context
+from services.feedback_learning import record_feedback
 from utils.memory_store import merge_memory_facts
 from utils.media_options import parse_media_options
 from sqlalchemy.orm.attributes import flag_modified
@@ -144,7 +145,8 @@ async def handle_reply_feedback(callback: types.CallbackQuery, db_session: Async
         feedback = list(settings.get("reply_feedback") or [])
         answer = str(getattr(getattr(callback, "message", None), "text", "") or "").strip()
         question = str(settings.pop("last_feedback_question", "") or "").strip()
-        feedback.append({"rating": rating, "answer": answer[:700], "question": question[:300], "at": datetime.now(timezone.utc).isoformat()})
+        record_feedback(user, rating, answer=answer, question=question, source="telegram")
+        feedback = list((user.tech_stack or {}).get("reply_feedback") or [])
         settings["reply_feedback"] = feedback[-100:]
         user.tech_stack = settings
         await db_session.commit()

@@ -17,6 +17,7 @@ from utils.workflow_state import advance_workflow, start_workflow, workflow_view
 from utils.agent_engine import agent_view, block_task, claim_next_task, complete_task, replan_agent, start_agent
 from services.agent_executor import model_agent_executor, run_agent_steps
 from config import config
+from services.feedback_learning import feedback_learning_context, feedback_poll_due, record_feedback
 from utils.config_audit import configuration_snapshot
 from utils.metrics_persistence import persist_metrics_snapshot, recent_metrics_snapshots
 
@@ -37,6 +38,29 @@ async def settings_route(request: web.Request) -> web.Response:
         user = await session.get(User, user_id)
         if user is None: raise web.HTTPUnauthorized(text="account not found")
         return web.json_response({"settings": user.tech_stack or {}, "checkins_enabled": user.checkins_enabled})
+
+
+async def feedback_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    payload = await _json(request)
+    try:
+        rating = str(payload.get("rating") or "")
+        async with async_session() as session:
+            user = await session.get(User, user_id)
+            if user is None: raise web.HTTPUnauthorized(text="account not found")
+            record_feedback(user, rating, question=str(payload.get("question") or ""), answer=str(payload.get("answer") or ""), source=str(payload.get("source") or "api"))
+            await session.commit()
+            return web.json_response({"ok": True, "feedback": feedback_learning_context(user)})
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+
+
+async def feedback_poll_route(request: web.Request) -> web.Response:
+    user_id = _bearer(request)
+    async with async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None: raise web.HTTPUnauthorized(text="account not found")
+        return web.json_response({"due": feedback_poll_due(user), "question": "Насколько ALTER сейчас помогает тебе? Оцени последний ответ: 👍 или 👎"})
 
 
 async def update_settings_route(request: web.Request) -> web.Response:
@@ -434,6 +458,8 @@ async def delete_reminder_route(request: web.Request) -> web.Response:
 def setup_user_features_routes(app: web.Application) -> None:
     app.router.add_get("/api/v1/settings", settings_route)
     app.router.add_patch("/api/v1/settings", update_settings_route)
+    app.router.add_post("/api/v1/feedback", feedback_route)
+    app.router.add_get("/api/v1/feedback/poll", feedback_poll_route)
     app.router.add_get("/api/v1/action-log", action_log_route)
     app.router.add_get("/api/v1/scenarios", scenarios_route)
     app.router.add_get("/api/v1/diagnostics/latency", latency_diagnostics_route)

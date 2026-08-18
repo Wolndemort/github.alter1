@@ -64,6 +64,8 @@ export class AlterApi {
   capabilities(token: string) { return this.request<{ version: string; categories: Record<string, string[]>; text: string; reply: string }>("/api/v1/capabilities", {}, token); }
   settings(token: string) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", {}, token); }
   updateSettings(token: string, settings: Record<string, unknown>) { return this.request<{ settings: Record<string, unknown>; checkins_enabled: boolean }>("/api/v1/settings", { method: "PATCH", body: JSON.stringify(settings) }, token); }
+  submitFeedback(token: string, payload: { rating: "positive" | "negative"; question?: string; answer: string; source?: string }) { return this.request<{ ok: boolean }>("/api/v1/feedback", { method: "POST", body: JSON.stringify(payload) }, token); }
+  feedbackPoll(token: string) { return this.request<{ due: boolean; question: string }>("/api/v1/feedback/poll", {}, token); }
   reminders(token: string) { return this.request<{ reminders: Reminder[] }>("/api/v1/reminders", {}, token); }
   notifications(token: string) { return this.request<{ unread: number; notifications: AlterNotification[] }>("/api/v1/notifications", {}, token); }
   markNotificationRead(token: string, id: string) { return this.request<{ ok: boolean }>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }, token); }

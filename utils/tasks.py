@@ -29,6 +29,7 @@ from utils.weather import get_weather
 from services.agent_executor import model_agent_executor, run_agent_steps
 from utils.metrics_persistence import persist_metrics_snapshot
 from utils.personal_notifications import deliver_reminder, quota_reminder_text, subscription_reminder_text
+from services.feedback_learning import feedback_poll_due, mark_feedback_poll_sent
 from utils.redis_store import close_redis, create_redis, credits_used
 
 
@@ -424,6 +425,12 @@ async def monitor_checkins(bot: Bot):
                     # Do not interrupt a fresh conversation. The active chat
                     # itself is more important than a background nudge.
                     if not proactive_allowed(user, now, session, interval):
+                        continue
+                    if feedback_poll_due(user, now):
+                        poll = "Мини-опрос ALTER: насколько мой последний ответ был полезен? Ответь 👍 или 👎 — это поможет мне точнее подстраиваться под тебя."
+                        await _send_checkin_to_telegram(bot, user, poll)
+                        await send_push(user, "ALTER · мини-опрос", poll)
+                        mark_feedback_poll_sent(user, now)
                         continue
                     # Сначала возвращаемся к конкретным незавершённым темам и событиям,
                     # а не к общему настроению: так не теряются обещанные follow-up.
