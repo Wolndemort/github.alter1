@@ -1696,7 +1696,9 @@ function NotificationsPanel({
       if (!item.read) await api.markNotificationRead(token, item.id);
       reload();
       window.dispatchEvent(
-        new CustomEvent("alter:open-chat", { detail: { prompt: item.body } }),
+        // Opening a check-in is navigation only.  The notification body is
+        // ALTER's question, not a message the user should send back.
+        new CustomEvent("alter:open-chat", { detail: { prompt: "" } }),
       );
     } catch (err) {
       setError(friendlyError(err));

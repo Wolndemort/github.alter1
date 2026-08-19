@@ -233,7 +233,13 @@ async def my_day_route(request: web.Request) -> web.Response:
         loops = memory.get("open_loops") or []
         if isinstance(loops, dict):
             loops = [loops]
-        for loop_index, item in enumerate(loops[:5] if isinstance(loops, list) else []):
+        active_loops = []
+        for loop_index, item in enumerate(loops if isinstance(loops, list) else []):
+            if isinstance(item, dict) and item.get("status", "active") not in {"active", "snoozed"}:
+                continue
+            active_loops.append(item)
+            if len(active_loops) > 5:
+                break
             if isinstance(item, dict):
                 title = str(item.get("title") or item.get("description") or "Незавершённая тема").strip()
                 detail = str(item.get("follow_up_question") or item.get("description") or "Вернуться к этому").strip()
@@ -254,7 +260,7 @@ async def my_day_route(request: web.Request) -> web.Response:
             "date": now.date().isoformat(),
             "focus": focus,
             "next_step": ({"title": next_item["title"], "prompt": f"Помоги мне сделать следующий шаг по теме: {next_item['title']}"} if next_item else {"title": "Выбрать главное на сегодня", "prompt": "Помоги мне выбрать одно главное дело на сегодня"}),
-            "counts": {"reminders": len(reminders), "open_loops": len(loops) if isinstance(loops, list) else 0, "goals": len(goals) if isinstance(goals, dict) else 0},
+            "counts": {"reminders": len(reminders), "open_loops": len(active_loops), "goals": len(goals) if isinstance(goals, dict) else 0},
             "memory_permanent": True,
         })
 
