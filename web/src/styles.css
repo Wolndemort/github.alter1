@@ -10,6 +10,10 @@
 
 /* ALTER palette: interaction states stay monochrome across every web panel. */
 .is-streaming { border-color:#777; }
+.memory-notice { align-self:center; margin:0 auto 8px; padding:8px 13px; border:1px solid #4a4a4a; border-radius:10px; background:#151515; color:#fff; font-size:12px; cursor:pointer; }
+.chat-panel { width:100%; max-width:none; min-height:100dvh; padding:54px clamp(24px,7vw,120px) 28px; display:flex; flex-direction:column; }
+.chat-panel .messages { flex:1 1 auto; height:auto; min-height:0; }
+@media (max-width:760px) { .chat-panel { min-height:calc(100dvh - 56px); padding:20px 10px calc(12px + env(safe-area-inset-bottom)); } }
 .send-button.stop { background:#333; color:#fff; }
 .audit-card { border-color:#666; background:#1a1a1a; }
 .audit-card strong,.audit-card button { color:#eee; }

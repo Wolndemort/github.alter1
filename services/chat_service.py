@@ -232,21 +232,12 @@ def _stream_system_prompt(text: str, memory: dict, *, use_tools: bool = False) -
             ALTER_SYSTEM_PROMPT, ALTER_CHARACTER_PROMPT, ALTER_INTELLIGENCE_PROMPT,
             CHAT_BEHAVIOR_PROMPT, MEMORY_POLICY_PROMPT, PUBLIC_RESPONSE_POLICY, RELIABILITY_PROMPT,
         )
-    memory_block = "Релевантная память пользователя:\n<user_memory>\n" + json.dumps(memory, ensure_ascii=False) + "\n</user_memory>"
-    # Keep core durable facts in a compact tail so prompt truncation cannot
-    # hide identity and family behind episodic context or reminders.
-    priority = {
-        category: memory[category]
-        for category in ("identity", "family", "skills_career")
-        if memory.get(category)
-    }
-    if priority:
-        memory_block += (
-            "\n\nКлючевые долговременные факты пользователя:\n"
-            "<priority_user_memory>\n"
-            + json.dumps(priority, ensure_ascii=False)
-            + "\n</priority_user_memory>"
-        )
+    # Structured memory is storage, not prompt context. The model receives
+    # only semantic retrieval results for the current turn, plus operational
+    # state that must always be visible.
+    category_names = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops"}
+    retrieved_memory = {key: value for key, value in memory.items() if key not in category_names}
+    memory_block = "Релевантная память пользователя:\n<user_memory>\n" + json.dumps(retrieved_memory, ensure_ascii=False) + "\n</user_memory>"
     return "\n\n".join((*parts, memory_block))
 
 
@@ -292,7 +283,7 @@ class ChatService:
         pending_reminder = dict(user.pending_reminder or {}) if pending_reminder_is_fresh(user.pending_reminder) else {}
         if user.pending_reminder and not pending_reminder:
             user.pending_reminder = {}
-        if pending_reminder and looks_like_time_answer(text):
+        if pending_reminder and looks_like_time_answer(text) and not explicit_memory_fact(text):
             remind_at = parse_time_answer(text)
             if remind_at and not private_mode:
                 reminder_text = str(pending_reminder.get("text") or "").strip()
@@ -504,7 +495,7 @@ class ChatService:
         pending_reminder = dict(user.pending_reminder or {}) if pending_reminder_is_fresh(user.pending_reminder) else {}
         if user.pending_reminder and not pending_reminder:
             user.pending_reminder = {}
-        if pending_reminder and looks_like_time_answer(text):
+        if pending_reminder and looks_like_time_answer(text) and not explicit_memory_fact(text):
             remind_at = parse_time_answer(text)
             if remind_at and not private_mode:
                 reminder_text = str(pending_reminder.get("text") or "").strip()
@@ -580,11 +571,13 @@ class ChatService:
         # Persist the user turn before any embedding/provider call so the
         # database transaction does not stay open while recall is running.
         await db.commit()
-        if should_recall_context(text):
-            recalled = await recall(db, user_id, text)
-            if recalled:
-                memory["related_previous_context"] = recalled
-                memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
+        # Memory retrieval is semantic, not category-driven. Search on every
+        # turn so an explicit entity (academy, project, address, etc.) can
+        # retrieve the fact even when the user does not say "remember" again.
+        recalled = await recall(db, user_id, text)
+        if recalled:
+            memory["related_previous_context"] = recalled
+            memory["historical_context_policy"] = "These are historical hints; current message and durable memory override conflicts."
         if should_prefetch_web(text):
             results = await search_web(text, max_results=6)
             if results:
@@ -601,13 +594,6 @@ class ChatService:
         # family facts, making the model claim it knew nothing about them.
         system = "\nINTERNAL RESPONSE MODE (do not mention it): " + conversation_mode(text) + "\n\n" + _stream_system_prompt(text, memory, use_tools=use_tools)
         system += "\n\nREMINDER SAFETY: Never claim to have created, saved, cancelled, or scheduled a reminder unless the user's latest message explicitly asks for that reminder action. A story, plan, reflection, or mention of a date/time is not a reminder request."
-        durable_tail = {
-            category: memory[category]
-            for category in ("identity", "family", "skills_career", "preferences", "open_loops")
-            if memory.get(category)
-        }
-        if durable_tail:
-            system += "\n\nDURABLE USER MEMORY (authoritative):\n" + json.dumps(durable_tail, ensure_ascii=False)[:1800]
         if session.context_summary:
             system += "\n\nACTIVE CONVERSATION SUMMARY (authoritative for the current topic):\n" + session.context_summary[:1200]
         live_state = getattr(session, "conversation_state", None) or {}
@@ -650,7 +636,7 @@ class ChatService:
             _append(session, "assistant", reply)
             _update_conversation_state(session, text)
             if not ephemeral_request:
-                await remember(db, user_id, text, source="user_message", categories=list(new_facts))
+                await remember(db, user_id, explicit_fact or text, source="explicit_memory" if explicit_fact else "user_message", categories=list(new_facts))
             trace = tool_trace()
             append_action(user, "chat", "ok", route=conversation_mode(text), count=len(trace))
             for item in trace:
