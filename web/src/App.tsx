@@ -1,226 +1,3459 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "./api";
-import type { Account, Agent, AlterNotification, ChatItem, DiagnosticsQuality, MediaJob, MemoryResponse, MyDay, Reminder, Scenario, Subscription, Workflow } from "./types";
+import type {
+  Account,
+  Agent,
+  AlterNotification,
+  ChatItem,
+  DiagnosticsQuality,
+  MediaJob,
+  MemoryResponse,
+  MyDay,
+  Reminder,
+  Scenario,
+  Subscription,
+  Workflow,
+} from "./types";
 
 type AuthMode = "login" | "register" | "verify";
-type Panel = "chat" | "my-day" | "memory" | "reminders" | "notifications" | "agent" | "media" | "tools" | "calendar" | "scenarios" | "action-log" | "diagnostics" | "settings" | "billing" | "faq" | "support";
+type Panel =
+  | "chat"
+  | "my-day"
+  | "memory"
+  | "reminders"
+  | "notifications"
+  | "agent"
+  | "media"
+  | "tools"
+  | "calendar"
+  | "scenarios"
+  | "action-log"
+  | "diagnostics"
+  | "settings"
+  | "billing"
+  | "faq"
+  | "support";
 
 const STORAGE_KEY = "alter_web_access_token";
-const labelMap: Record<string, string> = { identity: "О тебе", preferences: "Предпочтения", goals_habits: "Цели и привычки", important_events: "Важные события", episodic_context: "Контекст прошлых разговоров", current_context: "Текущий разговор" };
-const friendlyError = (error: unknown) => error instanceof ApiError ? error.message : "Не удалось выполнить действие. Проверь соединение и попробуй ещё раз.";
+const labelMap: Record<string, string> = {
+  identity: "О тебе",
+  preferences: "Предпочтения",
+  goals_habits: "Цели и привычки",
+  important_events: "Важные события",
+  episodic_context: "Контекст прошлых разговоров",
+  current_context: "Текущий разговор",
+};
+const friendlyError = (error: unknown) =>
+  error instanceof ApiError
+    ? error.message
+    : "Не удалось выполнить действие. Проверь соединение и попробуй ещё раз.";
 
-function MemoryPanel({ token, data, reload }: { token: string; data: MemoryResponse | null; reload: () => void }) { const [notice, setNotice] = useState(""); const [error, setError] = useState(""); const confirm = async (category: string, key: string) => { try { await api.confirmMemory(token, category, key); setNotice("Сохранено в постоянной памяти ALTER"); reload(); } catch (err) { setError(friendlyError(err)); } }; const forget = async (category: string) => { try { await api.forgetMemory(token, category); setNotice("Удалено из памяти"); reload(); } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ПАМЯТЬ ALTER" title="То, что остаётся важным" subtitle="Постоянные факты, цели и контекст. Управляй ими в любой момент." />{notice && <div className="success-banner" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}{error && <div className="error-banner">{error}</div>}<div className="memory-intro"><span className="memory-glyph">∞</span><div><strong>Бессрочная память</strong><p>{data?.description || "ALTER хранит важные факты и стиль общения, пока ты сам не попросишь их удалить."}</p></div></div>{data?.audit?.some((item) => !item.confirmed) && <div className="audit-card"><strong>Проверь, что это всё ещё верно</strong>{data.audit.filter((item) => !item.confirmed).slice(0, 5).map((item) => <button key={`${item.category}-${item.key}`} onClick={() => void confirm(item.category, item.key)}>{labelMap[item.category] || item.category} · подтвердить ✓</button>)}</div>}<div className="memory-grid">{data?.sections?.length ? data.sections.map((section) => <article className="memory-card" key={section.category}><header><span>{labelMap[section.category] || section.title}</span><button onClick={() => void forget(section.category)}>Забыть</button></header>{section.items.map((item, index) => <p key={`${item.label}-${index}`}><b>{item.label}</b>{item.value}</p>)}</article>) : <div className="empty-state">Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</div>}</div></section>; }
-
-function SettingsPanel({ token, account, setAccount }: { token: string; account: Account | null; setAccount: (value: Account) => void }) { const [settings, setSettings] = useState<Record<string, unknown>>({}); const [error, setError] = useState(""); const [saved, setSaved] = useState(""); const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "elevenlabs"]; useEffect(() => { api.settings(token).then((result) => setSettings(result.settings)).catch((err) => setError(friendlyError(err))); }, [token]); const update = async (key: string, value: unknown) => { setSettings((current) => ({ ...current, [key]: value })); setSaved(""); try { await api.updateSettings(token, { [key]: value }); setSaved("Настройки сохранены"); } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / НАСТРОЙКИ" title="Твоё пространство." subtitle={account?.email || "Общие настройки ALTER"} />{error && <div className="error-banner">{error}</div>}{saved && <div className="success-banner" role="status">{saved}</div>}<div className="settings-list"><button onClick={() => void update("proactive_enabled", settings.proactive_enabled === false)}><div><strong>Проактивный ALTER</strong><p>Мягкие check-in и важные напоминания, когда это уместно.</p></div><span className={settings.proactive_enabled !== false ? "toggle on" : "toggle"} /></button><button onClick={() => void update("voice_replies", settings.voice_replies !== true)}><div><strong>Голосовые ответы</strong><p>Разрешить озвучивать ответы ALTER.</p></div><span className={settings.voice_replies === true ? "toggle on" : "toggle"} /></button><label className="voice-setting"><span>Голос ALTER</span><select value={typeof settings.tts_voice === "string" ? settings.tts_voice : "alloy"} onChange={(event) => void update("tts_voice", event.target.value)}>{voices.map((voice) => <option value={voice} key={voice}>{voice === "elevenlabs" ? "ElevenLabs Premium" : voice}</option>)}</select></label><button onClick={() => void update("private_mode", settings.private_mode !== true)}><div><strong>Приватный режим</strong><p>Не сохранять сообщения, память и действия.</p></div><span className={settings.private_mode === true ? "toggle on" : "toggle"} /></button><button onClick={() => void api.startTelegramLink(token).then((result) => { window.location.href = result.url; }).catch((err) => setError(friendlyError(err)))}><div><strong>Связать Telegram</strong><p>{account?.telegram_linked ? "Telegram уже подключён." : "Продолжить разговор в Telegram."}</p></div><span>→</span></button></div></section>; }
-
-function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
-  const [mode, setMode] = useState<AuthMode>("login");
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [code, setCode] = useState("");
-  const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault(); setError(""); setBusy(true);
+function MemoryPanel({
+  token,
+  data,
+  reload,
+}: {
+  token: string;
+  data: MemoryResponse | null;
+  reload: () => void;
+}) {
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const confirm = async (category: string, key: string) => {
     try {
-      if (mode === "login") { const result = await api.login(email, password); onAuthenticated(result.access_token); }
-      else if (mode === "register") { await api.register(email, password); setMode("verify"); }
-      else { const result = await api.verifyEmail(email, code); onAuthenticated(result.access_token); }
-    } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); }
+      await api.confirmMemory(token, category, key);
+      setNotice("Сохранено в постоянной памяти ALTER");
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
   };
-  return <main className="auth-page"><div className="auth-orbit orbit-one" /><div className="auth-orbit orbit-two" /><section className="auth-card">
-    <div className="brand-lockup"><div><div className="brand-name">ALTER</div><div className="brand-caption">PERSONAL INTELLIGENCE</div></div></div>
-    <div className="auth-copy"><p className="eyebrow">{mode === "verify" ? "ПРОВЕРКА ПОЧТЫ" : "ВОЗВРАЩАЙСЯ К СЕБЕ"}</p><h1>{mode === "verify" ? "Введи код" : "Твой контекст\nвсегда рядом."}</h1><p>{mode === "verify" ? "Мы отправили код подтверждения на твою почту." : "Чат, память, цели и действия — в одном спокойном пространстве."}</p></div>
-    <form onSubmit={submit} className="auth-form">
-      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required placeholder="you@example.com" /></label>
-      {mode !== "verify" && <label>Пароль<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} placeholder="Минимум 8 символов" /></label>}
-      {mode === "verify" && <label>Код подтверждения<input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" required placeholder="123456" /></label>}
+  const forget = async (category: string) => {
+    try {
+      await api.forgetMemory(token, category);
+      setNotice("Удалено из памяти");
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ПАМЯТЬ ALTER"
+        title="То, что остаётся важным"
+        subtitle="Постоянные факты, цели и контекст. Управляй ими в любой момент."
+      />
+      {notice && (
+        <div className="success-banner" role="status">
+          {notice}
+          <button onClick={() => setNotice("")}>×</button>
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
-      <button className="primary-button" disabled={busy}>{busy ? "Подключаем…" : mode === "login" ? "Войти в ALTER →" : mode === "register" ? "Создать аккаунт →" : "Подтвердить →"}</button>
-    </form>
-    {mode === "login" ? <button className="text-button" onClick={() => setMode("register")}>Создать новый аккаунт</button> : mode === "register" ? <button className="text-button" onClick={() => setMode("login")}>У меня уже есть аккаунт</button> : <button className="text-button" onClick={() => setMode("register")}>Изменить email</button>}
-    <div className="auth-footnote"><span className="status-dot" /> Единый аккаунт ALTER · Telegram · mobile · web</div>
-  </section></main>;
+      <div className="memory-intro">
+        <span className="memory-glyph">∞</span>
+        <div>
+          <strong>Бессрочная память</strong>
+          <p>
+            {data?.description ||
+              "ALTER хранит важные факты и стиль общения, пока ты сам не попросишь их удалить."}
+          </p>
+        </div>
+      </div>
+      {data?.audit?.some((item) => !item.confirmed) && (
+        <div className="audit-card">
+          <strong>Проверь, что это всё ещё верно</strong>
+          {data.audit
+            .filter((item) => !item.confirmed)
+            .slice(0, 5)
+            .map((item) => (
+              <button
+                key={`${item.category}-${item.key}`}
+                onClick={() => void confirm(item.category, item.key)}
+              >
+                {labelMap[item.category] || item.category} · подтвердить ✓
+              </button>
+            ))}
+        </div>
+      )}
+      <div className="memory-grid">
+        {data?.sections?.length ? (
+          data.sections.map((section) => (
+            <article className="memory-card" key={section.category}>
+              <header>
+                <span>{labelMap[section.category] || section.title}</span>
+                <button onClick={() => void forget(section.category)}>
+                  Забыть
+                </button>
+              </header>
+              {section.items.map((item, index) => (
+                <p key={`${item.label}-${index}`}>
+                  <b>{item.label}</b>
+                  {item.value}
+                </p>
+              ))}
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SettingsPanel({
+  token,
+  account,
+  setAccount,
+}: {
+  token: string;
+  account: Account | null;
+  setAccount: (value: Account) => void;
+}) {
+  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
+  const voices = [
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+    "elevenlabs",
+  ];
+  useEffect(() => {
+    api
+      .settings(token)
+      .then((result) => setSettings(result.settings))
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  const update = async (key: string, value: unknown) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+    setSaved("");
+    try {
+      await api.updateSettings(token, { [key]: value });
+      setSaved("Настройки сохранены");
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / НАСТРОЙКИ"
+        title="Твоё пространство."
+        subtitle={account?.email || "Общие настройки ALTER"}
+      />
+      {error && <div className="error-banner">{error}</div>}
+      {saved && (
+        <div className="success-banner" role="status">
+          {saved}
+        </div>
+      )}
+      <div className="settings-list">
+        <button
+          onClick={() =>
+            void update(
+              "proactive_enabled",
+              settings.proactive_enabled === false,
+            )
+          }
+        >
+          <div>
+            <strong>Проактивный ALTER</strong>
+            <p>Мягкие check-in и важные напоминания, когда это уместно.</p>
+          </div>
+          <span
+            className={
+              settings.proactive_enabled !== false ? "toggle on" : "toggle"
+            }
+          />
+        </button>
+        <button
+          onClick={() =>
+            void update("voice_replies", settings.voice_replies !== true)
+          }
+        >
+          <div>
+            <strong>Голосовые ответы</strong>
+            <p>Разрешить озвучивать ответы ALTER.</p>
+          </div>
+          <span
+            className={settings.voice_replies === true ? "toggle on" : "toggle"}
+          />
+        </button>
+        <label className="voice-setting">
+          <span>Голос ALTER</span>
+          <select
+            value={
+              typeof settings.tts_voice === "string"
+                ? settings.tts_voice
+                : "alloy"
+            }
+            onChange={(event) => void update("tts_voice", event.target.value)}
+          >
+            {voices.map((voice) => (
+              <option value={voice} key={voice}>
+                {voice === "elevenlabs" ? "ElevenLabs Premium" : voice}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={() =>
+            void update("private_mode", settings.private_mode !== true)
+          }
+        >
+          <div>
+            <strong>Приватный режим</strong>
+            <p>Не сохранять сообщения, память и действия.</p>
+          </div>
+          <span
+            className={settings.private_mode === true ? "toggle on" : "toggle"}
+          />
+        </button>
+        <button
+          onClick={() =>
+            void api
+              .startTelegramLink(token)
+              .then((result) => {
+                window.location.href = result.url;
+              })
+              .catch((err) => setError(friendlyError(err)))
+          }
+        >
+          <div>
+            <strong>Связать Telegram</strong>
+            <p>
+              {account?.telegram_linked
+                ? "Telegram уже подключён."
+                : "Продолжить разговор в Telegram."}
+            </p>
+          </div>
+          <span>→</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AuthScreen({
+  onAuthenticated,
+}: {
+  onAuthenticated: (token: string) => void;
+}) {
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      if (mode === "login") {
+        const result = await api.login(email, password);
+        onAuthenticated(result.access_token);
+      } else if (mode === "register") {
+        await api.register(email, password);
+        setMode("verify");
+      } else {
+        const result = await api.verifyEmail(email, code);
+        onAuthenticated(result.access_token);
+      }
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="auth-page">
+      <div className="auth-orbit orbit-one" />
+      <div className="auth-orbit orbit-two" />
+      <section className="auth-card">
+        <div className="brand-lockup">
+          <div>
+            <div className="brand-name">ALTER</div>
+            <div className="brand-caption">PERSONAL INTELLIGENCE</div>
+          </div>
+        </div>
+        <div className="auth-copy">
+          <p className="eyebrow">
+            {mode === "verify" ? "ПРОВЕРКА ПОЧТЫ" : "ВОЗВРАЩАЙСЯ К СЕБЕ"}
+          </p>
+          <h1>
+            {mode === "verify" ? "Введи код" : "Твой контекст\nвсегда рядом."}
+          </h1>
+          <p>
+            {mode === "verify"
+              ? "Мы отправили код подтверждения на твою почту."
+              : "Чат, память, цели и действия — в одном спокойном пространстве."}
+          </p>
+        </div>
+        <form onSubmit={submit} className="auth-form">
+          <label>
+            Email
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="you@example.com"
+            />
+          </label>
+          {mode !== "verify" && (
+            <label>
+              Пароль
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                required
+                minLength={8}
+                placeholder="Минимум 8 символов"
+              />
+            </label>
+          )}
+          {mode === "verify" && (
+            <label>
+              Код подтверждения
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                required
+                placeholder="123456"
+              />
+            </label>
+          )}
+          {error && <div className="error-banner">{error}</div>}
+          <button className="primary-button" disabled={busy}>
+            {busy
+              ? "Подключаем…"
+              : mode === "login"
+                ? "Войти в ALTER →"
+                : mode === "register"
+                  ? "Создать аккаунт →"
+                  : "Подтвердить →"}
+          </button>
+        </form>
+        {mode === "login" ? (
+          <button className="text-button" onClick={() => setMode("register")}>
+            Создать новый аккаунт
+          </button>
+        ) : mode === "register" ? (
+          <button className="text-button" onClick={() => setMode("login")}>
+            У меня уже есть аккаунт
+          </button>
+        ) : (
+          <button className="text-button" onClick={() => setMode("register")}>
+            Изменить email
+          </button>
+        )}
+        <div className="auth-footnote">
+          <span className="status-dot" /> Единый аккаунт ALTER · Telegram ·
+          mobile · web
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function InlineMarkdown({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`|https?:\/\/[^\s]+)/g);
-  return <>{parts.map((part, index) => part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part.startsWith("`") && part.endsWith("`") ? <code key={index}>{part.slice(1, -1)}</code> : part.match(/^https?:\/\//) ? <a key={index} href={part.replace(/[),.!?]+$/, "")} target="_blank" rel="noreferrer">{part}</a> : <span key={index}>{part}</span>)}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={index}>{part.slice(2, -2)}</strong>
+        ) : part.startsWith("`") && part.endsWith("`") ? (
+          <code key={index}>{part.slice(1, -1)}</code>
+        ) : part.match(/^https?:\/\//) ? (
+          <a
+            key={index}
+            href={part.replace(/[),.!?]+$/, "")}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
 }
 
 export function MarkdownText({ text }: { text: string }) {
-  return <div className="markdown-text">{text.split("\n").map((line, index) => { const heading = line.match(/^#{1,3}\s+(.+)/); const ordered = line.match(/^\s*(\d+)\.\s+(.+)/); const bullet = line.match(/^\s*[-*]\s+(.+)/); if (!line.trim()) return <br key={index} />; if (heading) return <h3 key={index}><InlineMarkdown text={heading[1]} /></h3>; if (ordered) return <div className="markdown-list-item" key={index}><span>{ordered[1]}.</span><span className="markdown-list-content"><InlineMarkdown text={ordered[2]} /></span></div>; if (bullet) return <div className="markdown-list-item" key={index}><span>•</span><span className="markdown-list-content"><InlineMarkdown text={bullet[1]} /></span></div>; return <p key={index}><InlineMarkdown text={line} /></p>; })}</div>;
+  return (
+    <div className="markdown-text">
+      {text.split("\n").map((line, index) => {
+        const heading = line.match(/^#{1,3}\s+(.+)/);
+        const ordered = line.match(/^\s*(\d+)\.\s+(.+)/);
+        const bullet = line.match(/^\s*[-*]\s+(.+)/);
+        if (!line.trim()) return <br key={index} />;
+        if (heading)
+          return (
+            <h3 key={index}>
+              <InlineMarkdown text={heading[1]} />
+            </h3>
+          );
+        if (ordered)
+          return (
+            <div className="markdown-list-item" key={index}>
+              <span>{ordered[1]}.</span>
+              <span className="markdown-list-content">
+                <InlineMarkdown text={ordered[2]} />
+              </span>
+            </div>
+          );
+        if (bullet)
+          return (
+            <div className="markdown-list-item" key={index}>
+              <span>•</span>
+              <span className="markdown-list-content">
+                <InlineMarkdown text={bullet[1]} />
+              </span>
+            </div>
+          );
+        return (
+          <p key={index}>
+            <InlineMarkdown text={line} />
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 function LegacyMessage({ item }: { item: ChatItem }) {
-  return <article className={`message-row ${item.role}`}><div className="message-avatar">{item.role === "assistant" ? "A" : "Ты"}</div><div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>{item.text ? <MarkdownText text={item.text} /> : <span className="thinking"><i /><i /><i /></span>}{item.mediaUrl && <img className="message-media" src={item.mediaUrl} alt={item.filename || "Медиа ALTER"} />}</div></article>;
+  return (
+    <article className={`message-row ${item.role}`}>
+      <div className="message-avatar">
+        {item.role === "assistant" ? "A" : "Ты"}
+      </div>
+      <div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>
+        {item.text ? (
+          <MarkdownText text={item.text} />
+        ) : (
+          <span className="thinking">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
+        {item.mediaUrl && (
+          <img
+            className="message-media"
+            src={item.mediaUrl}
+            alt={item.filename || "Медиа ALTER"}
+          />
+        )}
+      </div>
+    </article>
+  );
 }
 
-function emitMessageAction(kind: string, item: ChatItem) { window.dispatchEvent(new CustomEvent("alter:message-action", { detail: { kind, item } })); }
+function emitMessageAction(kind: string, item: ChatItem) {
+  window.dispatchEvent(
+    new CustomEvent("alter:message-action", { detail: { kind, item } }),
+  );
+}
 
 export function LegacyActionMessage({ item }: { item: ChatItem }) {
-  return <article className={`message-row ${item.role}`}><div className="message-avatar">{item.role === "assistant" ? "A" : "Ты"}</div><div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>{item.text ? <MarkdownText text={item.text} /> : <span className="thinking"><i /><i /><i /></span>}{item.mediaUrl && item.mediaMime?.startsWith("image/") && <img className="message-media" src={item.mediaUrl} alt={item.filename || "Медиа ALTER"} />}{item.audioUrl && <audio className="message-audio" controls autoPlay={item.audioAutoplay} src={item.audioUrl} />}{(item.mediaUrl || item.audioUrl || item.artifactId) && <button className="message-download" onClick={() => emitMessageAction("download", item)}>↓&nbsp; Скачать {item.filename || "файл"}</button>}{item.role === "assistant" && item.text && !item.streaming && <div className="answer-actions"><button onClick={() => emitMessageAction("repeat", item)} title="Повторить запрос">↻</button><button onClick={() => emitMessageAction("continue", item)} title="Продолжить ответ">→</button><button onClick={() => emitMessageAction("copy", item)} title="Скопировать ответ">⧉</button><button onClick={() => emitMessageAction("voice", item)} title="Озвучить ответ">◖))</button><button onClick={() => emitMessageAction("positive", item)} title="Полезно">👍</button><button onClick={() => emitMessageAction("negative", item)} title="Не полезно">👎</button></div>}</div></article>;
+  return (
+    <article className={`message-row ${item.role}`}>
+      <div className="message-avatar">
+        {item.role === "assistant" ? "A" : "Ты"}
+      </div>
+      <div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>
+        {item.text ? (
+          <MarkdownText text={item.text} />
+        ) : (
+          <span className="thinking">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
+        {item.mediaUrl && item.mediaMime?.startsWith("image/") && (
+          <img
+            className="message-media"
+            src={item.mediaUrl}
+            alt={item.filename || "Медиа ALTER"}
+          />
+        )}
+        {item.audioUrl && (
+          <audio
+            className="message-audio"
+            controls
+            autoPlay={item.audioAutoplay}
+            src={item.audioUrl}
+          />
+        )}
+        {(item.mediaUrl || item.audioUrl || item.artifactId) && (
+          <button
+            className="message-download"
+            onClick={() => emitMessageAction("download", item)}
+          >
+            ↓&nbsp; Скачать {item.filename || "файл"}
+          </button>
+        )}
+        {item.role === "assistant" && item.text && !item.streaming && (
+          <div className="answer-actions">
+            <button
+              onClick={() => emitMessageAction("repeat", item)}
+              title="Повторить запрос"
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => emitMessageAction("continue", item)}
+              title="Продолжить ответ"
+            >
+              →
+            </button>
+            <button
+              onClick={() => emitMessageAction("copy", item)}
+              title="Скопировать ответ"
+            >
+              ⧉
+            </button>
+            <button
+              onClick={() => emitMessageAction("voice", item)}
+              title="Озвучить ответ"
+            >
+              ◖))
+            </button>
+            <button
+              onClick={() => emitMessageAction("positive", item)}
+              title="Полезно"
+            >
+              👍
+            </button>
+            <button
+              onClick={() => emitMessageAction("negative", item)}
+              title="Не полезно"
+            >
+              👎
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export function Message({ item }: { item: ChatItem }) {
-  return <article className={`message-row ${item.role}`}><div className="message-avatar">{item.role === "assistant" ? "A" : "Ты"}</div><div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>{item.text ? <MarkdownText text={item.text} /> : <span className="thinking"><i /><i /><i /></span>}{item.mediaUrls?.map((media) => <img className="message-media" src={media.url} alt={media.name || "Медиа ALTER"} key={`${media.name}-${media.url.slice(-16)}`} />)}{item.mediaUrl && item.mediaMime?.startsWith("image/") && !item.mediaUrls?.length && <img className="message-media" src={item.mediaUrl} alt={item.filename || "Медиа ALTER"} />}{item.mediaUrl && item.mediaMime?.startsWith("video/") && <video className="message-video" controls src={item.mediaUrl} />}{item.audioUrl && <audio className="message-audio" controls autoPlay src={item.audioUrl} />}{(item.mediaUrl || item.mediaUrls?.length || item.audioUrl || item.artifactId) && <button className="message-download" onClick={() => emitMessageAction("download", item)}>↓&nbsp; Скачать {item.filename || "файл"}</button>}{item.role === "assistant" && item.text && !item.streaming && <div className="answer-actions"><button onClick={() => emitMessageAction("repeat", item)} title="Повторить запрос">↻</button><button onClick={() => emitMessageAction("continue", item)} title="Продолжить ответ">→</button><button onClick={() => emitMessageAction("copy", item)} title="Скопировать ответ">⧉</button><button onClick={() => emitMessageAction("voice", item)} title="Озвучить ответ">◖))</button><button onClick={() => emitMessageAction("positive", item)} className={item.feedback === "positive" ? "selected" : ""} title="Полезно">👍</button><button onClick={() => emitMessageAction("negative", item)} className={item.feedback === "negative" ? "selected" : ""} title="Не полезно">👎</button></div>}{item.actionNotice && <small className="action-notice">{item.actionNotice}</small>}</div></article>;
+  return (
+    <article className={`message-row ${item.role}`}>
+      <div className="message-avatar">
+        {item.role === "assistant" ? "A" : "Ты"}
+      </div>
+      <div className={`message-bubble ${item.streaming ? "is-streaming" : ""}`}>
+        {item.text ? (
+          <MarkdownText text={item.text} />
+        ) : (
+          <span className="thinking">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
+        {item.mediaUrls?.map((media) => (
+          <img
+            className="message-media"
+            src={media.url}
+            alt={media.name || "Медиа ALTER"}
+            key={`${media.name}-${media.url.slice(-16)}`}
+          />
+        ))}
+        {item.mediaUrl &&
+          item.mediaMime?.startsWith("image/") &&
+          !item.mediaUrls?.length && (
+            <img
+              className="message-media"
+              src={item.mediaUrl}
+              alt={item.filename || "Медиа ALTER"}
+            />
+          )}
+        {item.mediaUrl && item.mediaMime?.startsWith("video/") && (
+          <video className="message-video" controls src={item.mediaUrl} />
+        )}
+        {item.audioUrl && (
+          <audio
+            className="message-audio"
+            controls
+            autoPlay
+            src={item.audioUrl}
+          />
+        )}
+        {(item.mediaUrl ||
+          item.mediaUrls?.length ||
+          item.audioUrl ||
+          item.artifactId) && (
+          <button
+            className="message-download"
+            onClick={() => emitMessageAction("download", item)}
+          >
+            ↓&nbsp; Скачать {item.filename || "файл"}
+          </button>
+        )}
+        {item.role === "assistant" && item.text && !item.streaming && (
+          <div className="answer-actions">
+            <button
+              onClick={() => emitMessageAction("repeat", item)}
+              title="Повторить запрос"
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => emitMessageAction("continue", item)}
+              title="Продолжить ответ"
+            >
+              →
+            </button>
+            <button
+              onClick={() => emitMessageAction("copy", item)}
+              title="Скопировать ответ"
+            >
+              ⧉
+            </button>
+            <button
+              onClick={() => emitMessageAction("voice", item)}
+              title="Озвучить ответ"
+            >
+              ◖))
+            </button>
+            <button
+              onClick={() => emitMessageAction("positive", item)}
+              className={item.feedback === "positive" ? "selected" : ""}
+              title="Полезно"
+            >
+              👍
+            </button>
+            <button
+              onClick={() => emitMessageAction("negative", item)}
+              className={item.feedback === "negative" ? "selected" : ""}
+              title="Не полезно"
+            >
+              👎
+            </button>
+          </div>
+        )}
+        {item.actionNotice && (
+          <small className="action-notice">{item.actionNotice}</small>
+        )}
+      </div>
+    </article>
+  );
 }
 
-function ChatPanel({ token, account, onMemoryChanged }: { token: string; account: Account | null; onMemoryChanged: () => void }) {
-  useEffect(() => { const openChat = (event: Event) => { const detail = (event as CustomEvent<{ prompt?: string; autoSend?: boolean }>).detail; const prompt = detail?.prompt; if (prompt) { if (detail?.autoSend) void send(prompt); else setDraft(prompt); } }; window.addEventListener("alter:open-chat", openChat); return () => window.removeEventListener("alter:open-chat", openChat); }, []);
-  useEffect(() => { const openImage = (event: Event) => { const target = event.target; if (target instanceof HTMLImageElement && target.classList.contains("message-media")) void target.requestFullscreen?.(); }; document.addEventListener("click", openImage); return () => document.removeEventListener("click", openImage); }, []);
-  useEffect(() => { const handler = (event: Event) => { const detail = (event as CustomEvent<{ kind: string; item: ChatItem }>).detail; if (!["copy", "positive", "negative", "download"].includes(detail.kind)) return; setItems((old) => old.map((current) => current.id === detail.item.id ? { ...current, actionNotice: detail.kind === "copy" ? "Скопировано" : detail.kind === "positive" ? "Спасибо, учту" : detail.kind === "negative" ? "Понял, буду точнее" : "Файл подготовлен" } : current)); }; window.addEventListener("alter:message-action", handler); return () => window.removeEventListener("alter:message-action", handler); }, []);
-  const [items, setItems] = useState<ChatItem[]>([]); const [draft, setDraft] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [memoryNotice, setMemoryNotice] = useState(false); const [files, setFiles] = useState<File[]>([]); const [copiedId, setCopiedId] = useState<string | null>(null); const [documentFile, setDocumentFile] = useState<File | null>(null); const [documentArtifactId, setDocumentArtifactId] = useState(""); const [documentInstruction, setDocumentInstruction] = useState(""); const [audioBusy, setAudioBusy] = useState(false); const [audioVoiceId, setAudioVoiceId] = useState("");
-  useEffect(() => { const handler = (event: Event) => { const detail = (event as CustomEvent<string | { prompt?: string; autoSend?: boolean }>).detail; const prompt = typeof detail === "string" ? detail : detail?.prompt || ""; if (prompt && typeof detail !== "string" && detail.autoSend) void send(prompt); else setDraft(prompt); }; window.addEventListener("alter:prefill-chat", handler); return () => window.removeEventListener("alter:prefill-chat", handler); }, []);
-  const filePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
-  useEffect(() => () => filePreviews.forEach(({ url }) => URL.revokeObjectURL(url)), [filePreviews]);
-  const listRef = useRef<HTMLDivElement>(null); const abortRef = useRef<AbortController | null>(null); const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const [recording, setRecording] = useState(false);
-  useEffect(() => { api.history(token).then((result) => setItems(result.messages.filter((item) => item.role === "user" || item.role === "assistant").map((item, index) => ({ id: `history-${index}`, role: item.role as "user" | "assistant", text: item.content, createdAt: Date.now() })))).catch((err) => setError(friendlyError(err))); }, [token]);
-  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); }, [items]);
-  useEffect(() => { const handler = (event: Event) => { const detail = (event as CustomEvent<{ kind: string; item: ChatItem }>).detail; const index = items.findIndex((current) => current.id === detail.item.id); if (detail.kind === "repeat") { const question = index >= 0 ? [...items.slice(0, index)].reverse().find((current) => current.role === "user") : undefined; if (question) void send(question.text); } else if (detail.kind === "continue") void send("Продолжи последний ответ, добавив следующий практический шаг."); else if (detail.kind === "copy") void navigator.clipboard.writeText(detail.item.text).then(() => { setCopiedId(detail.item.id); window.setTimeout(() => setCopiedId(null), 1600); }).catch(() => setError("Не удалось скопировать ответ.")); else if (detail.kind === "voice") void api.voiceReply(token, detail.item.text).then((result) => { if (result.audio_base64) setItems((old) => old.map((current) => current.id === detail.item.id ? { ...current, audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime } : current)); }).catch((err) => setError(friendlyError(err))); else if (detail.kind === "positive" || detail.kind === "negative") { setItems((old) => old.map((current) => current.id === detail.item.id ? { ...current, feedback: detail.kind } : current)); void api.settings(token).then((settings) => { const question = index >= 0 ? [...items.slice(0, index)].reverse().find((current) => current.role === "user") : undefined; const previous = Array.isArray(settings.settings.reply_feedback) ? settings.settings.reply_feedback : []; return api.updateSettings(token, { reply_feedback: [...previous, { rating: detail.kind, answer: detail.item.text.slice(0, 700), question: question?.text?.slice(0, 300), at: new Date().toISOString() }].slice(-100) }); }).catch((err) => setError(friendlyError(err))); } else if (detail.kind === "download") { const source = detail.item.artifactId ? api.downloadArtifact(token, detail.item.artifactId).then((blob) => URL.createObjectURL(blob)) : Promise.resolve(detail.item.mediaUrl || detail.item.audioUrl); void source.then((url) => { if (!url) return; const link = document.createElement("a"); link.href = url; link.download = detail.item.filename || "alter-file"; link.click(); }); } }; window.addEventListener("alter:message-action", handler); return () => window.removeEventListener("alter:message-action", handler); }, [items, token]);
+function ChatPanel({
+  token,
+  account,
+  onMemoryChanged,
+}: {
+  token: string;
+  account: Account | null;
+  onMemoryChanged: () => void;
+}) {
+  useEffect(() => {
+    const openChat = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ prompt?: string; autoSend?: boolean }>
+      ).detail;
+      const prompt = detail?.prompt;
+      if (prompt) {
+        if (detail?.autoSend) void send(prompt);
+        else setDraft(prompt);
+      }
+    };
+    window.addEventListener("alter:open-chat", openChat);
+    return () => window.removeEventListener("alter:open-chat", openChat);
+  }, []);
+  useEffect(() => {
+    const openImage = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLImageElement &&
+        target.classList.contains("message-media")
+      )
+        void target.requestFullscreen?.();
+    };
+    document.addEventListener("click", openImage);
+    return () => document.removeEventListener("click", openImage);
+  }, []);
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind: string; item: ChatItem }>)
+        .detail;
+      if (!["copy", "positive", "negative", "download"].includes(detail.kind))
+        return;
+      setItems((old) =>
+        old.map((current) =>
+          current.id === detail.item.id
+            ? {
+                ...current,
+                actionNotice:
+                  detail.kind === "copy"
+                    ? "Скопировано"
+                    : detail.kind === "positive"
+                      ? "Спасибо, учту"
+                      : detail.kind === "negative"
+                        ? "Понял, буду точнее"
+                        : "Файл подготовлен",
+              }
+            : current,
+        ),
+      );
+    };
+    window.addEventListener("alter:message-action", handler);
+    return () => window.removeEventListener("alter:message-action", handler);
+  }, []);
+  const [items, setItems] = useState<ChatItem[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [memoryNotice, setMemoryNotice] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentArtifactId, setDocumentArtifactId] = useState("");
+  const [documentInstruction, setDocumentInstruction] = useState("");
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [audioVoiceId, setAudioVoiceId] = useState("");
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (
+        event as CustomEvent<string | { prompt?: string; autoSend?: boolean }>
+      ).detail;
+      const prompt = typeof detail === "string" ? detail : detail?.prompt || "";
+      if (prompt && typeof detail !== "string" && detail.autoSend)
+        void send(prompt);
+      else setDraft(prompt);
+    };
+    window.addEventListener("alter:prefill-chat", handler);
+    return () => window.removeEventListener("alter:prefill-chat", handler);
+  }, []);
+  const filePreviews = useMemo(
+    () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [files],
+  );
+  useEffect(
+    () => () => filePreviews.forEach(({ url }) => URL.revokeObjectURL(url)),
+    [filePreviews],
+  );
+  const listRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  useEffect(() => {
+    api
+      .history(token)
+      .then((result) =>
+        setItems(
+          result.messages
+            .filter((item) => item.role === "user" || item.role === "assistant")
+            .map((item, index) => ({
+              id: `history-${index}`,
+              role: item.role as "user" | "assistant",
+              text: item.content,
+              createdAt: Date.now(),
+            })),
+        ),
+      )
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  useEffect(() => {
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [items]);
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind: string; item: ChatItem }>)
+        .detail;
+      const index = items.findIndex((current) => current.id === detail.item.id);
+      if (detail.kind === "repeat") {
+        const question =
+          index >= 0
+            ? [...items.slice(0, index)]
+                .reverse()
+                .find((current) => current.role === "user")
+            : undefined;
+        if (question) void send(question.text);
+      } else if (detail.kind === "continue")
+        void send(
+          "Продолжи последний ответ, добавив следующий практический шаг.",
+        );
+      else if (detail.kind === "copy")
+        void navigator.clipboard
+          .writeText(detail.item.text)
+          .then(() => {
+            setCopiedId(detail.item.id);
+            window.setTimeout(() => setCopiedId(null), 1600);
+          })
+          .catch(() => setError("Не удалось скопировать ответ."));
+      else if (detail.kind === "voice")
+        void api
+          .voiceReply(token, detail.item.text)
+          .then((result) => {
+            if (result.audio_base64)
+              setItems((old) =>
+                old.map((current) =>
+                  current.id === detail.item.id
+                    ? {
+                        ...current,
+                        audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`,
+                        audioMime: result.audio_mime,
+                      }
+                    : current,
+                ),
+              );
+          })
+          .catch((err) => setError(friendlyError(err)));
+      else if (detail.kind === "positive" || detail.kind === "negative") {
+        setItems((old) =>
+          old.map((current) =>
+            current.id === detail.item.id
+              ? { ...current, feedback: detail.kind }
+              : current,
+          ),
+        );
+        void api
+          .settings(token)
+          .then((settings) => {
+            const question =
+              index >= 0
+                ? [...items.slice(0, index)]
+                    .reverse()
+                    .find((current) => current.role === "user")
+                : undefined;
+            const previous = Array.isArray(settings.settings.reply_feedback)
+              ? settings.settings.reply_feedback
+              : [];
+            return api.updateSettings(token, {
+              reply_feedback: [
+                ...previous,
+                {
+                  rating: detail.kind,
+                  answer: detail.item.text.slice(0, 700),
+                  question: question?.text?.slice(0, 300),
+                  at: new Date().toISOString(),
+                },
+              ].slice(-100),
+            });
+          })
+          .catch((err) => setError(friendlyError(err)));
+      } else if (detail.kind === "download") {
+        const source = detail.item.artifactId
+          ? api
+              .downloadArtifact(token, detail.item.artifactId)
+              .then((blob) => URL.createObjectURL(blob))
+          : Promise.resolve(detail.item.mediaUrl || detail.item.audioUrl);
+        void source.then((url) => {
+          if (!url) return;
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = detail.item.filename || "alter-file";
+          link.click();
+        });
+      }
+    };
+    window.addEventListener("alter:message-action", handler);
+    return () => window.removeEventListener("alter:message-action", handler);
+  }, [items, token]);
   const send = async (presetText?: string) => {
-    const text = (presetText ?? draft).trim(); if ((!text && !files.length) || busy) return;
-    const currentFiles = files; setDraft(""); setFiles([]); setError(""); if (currentFiles.length === 1 && !currentFiles[0].type.startsWith("image/") && !currentFiles[0].type.startsWith("audio/") && !currentFiles[0].type.startsWith("video/")) setDocumentFile(currentFiles[0]); setBusy(true); abortRef.current = new AbortController();
-    const attachmentLabel = currentFiles.length === 1
-      ? currentFiles[0].type.startsWith("audio/") ? "Голосовое сообщение"
-        : currentFiles[0].type.startsWith("video/") ? "Видео"
-          : currentFiles[0].type.startsWith("image/") ? "Изображение" : "Вложение"
-      : `${currentFiles.length} вложения`;
-    const userItem: ChatItem = { id: `${Date.now()}-u`, role: "user", text: currentFiles.length ? `${attachmentLabel}${text ? ` · ${text}` : ""}` : text, createdAt: Date.now(), mediaUrls: currentFiles.filter((file) => file.type.startsWith("image/")).map((file) => ({ url: URL.createObjectURL(file), mime: file.type, name: file.name })) };
-    const pendingId = `${Date.now()}-a`; setItems((old) => [...old, userItem, { id: pendingId, role: "assistant", text: "", createdAt: Date.now(), streaming: true }]);
+    const text = (presetText ?? draft).trim();
+    if ((!text && !files.length) || busy) return;
+    const currentFiles = files;
+    setDraft("");
+    setFiles([]);
+    setError("");
+    if (
+      currentFiles.length === 1 &&
+      !currentFiles[0].type.startsWith("image/") &&
+      !currentFiles[0].type.startsWith("audio/") &&
+      !currentFiles[0].type.startsWith("video/")
+    )
+      setDocumentFile(currentFiles[0]);
+    setBusy(true);
+    abortRef.current = new AbortController();
+    const attachmentLabel =
+      currentFiles.length === 1
+        ? currentFiles[0].type.startsWith("audio/")
+          ? "Голосовое сообщение"
+          : currentFiles[0].type.startsWith("video/")
+            ? "Видео"
+            : currentFiles[0].type.startsWith("image/")
+              ? "Изображение"
+              : "Вложение"
+        : `${currentFiles.length} вложения`;
+    const userItem: ChatItem = {
+      id: `${Date.now()}-u`,
+      role: "user",
+      text: currentFiles.length
+        ? `${attachmentLabel}${text ? ` · ${text}` : ""}`
+        : text,
+      createdAt: Date.now(),
+      mediaUrls: currentFiles
+        .filter((file) => file.type.startsWith("image/"))
+        .map((file) => ({
+          url: URL.createObjectURL(file),
+          mime: file.type,
+          name: file.name,
+        })),
+    };
+    const pendingId = `${Date.now()}-a`;
+    setItems((old) => [
+      ...old,
+      userItem,
+      {
+        id: pendingId,
+        role: "assistant",
+        text: "",
+        createdAt: Date.now(),
+        streaming: true,
+      },
+    ]);
     try {
       if (currentFiles.length) {
         const currentFile = currentFiles[0];
-        const result = currentFiles.every((file) => file.type.startsWith("image/")) ? await api.sendMedia(token, text, currentFiles) : currentFile.type.startsWith("audio/") || currentFile.type.startsWith("video/") ? await api.sendMedia(token, text, currentFile) : await api.sendDocument(token, text || "Проанализируй документ и выдели главное.", currentFile);
-        if (result.artifact_id && currentFiles.length === 1 && !currentFiles[0].type.startsWith("image/") && !currentFiles[0].type.startsWith("audio/") && !currentFiles[0].type.startsWith("video/")) setDocumentArtifactId(result.artifact_id);
-        setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: result.reply, streaming: false, artifactId: result.artifact_id, ...(result.media_base64 ? { mediaUrl: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, filename: result.media_filename } : {}), ...(result.audio_base64 ? { audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime, filename: result.audio_filename } : {}) } : item));
+        const result = currentFiles.every((file) =>
+          file.type.startsWith("image/"),
+        )
+          ? await api.sendMedia(token, text, currentFiles)
+          : currentFile.type.startsWith("audio/") ||
+              currentFile.type.startsWith("video/")
+            ? await api.sendMedia(token, text, currentFile)
+            : await api.sendDocument(
+                token,
+                text || "Проанализируй документ и выдели главное.",
+                currentFile,
+              );
+        if (
+          result.artifact_id &&
+          currentFiles.length === 1 &&
+          !currentFiles[0].type.startsWith("image/") &&
+          !currentFiles[0].type.startsWith("audio/") &&
+          !currentFiles[0].type.startsWith("video/")
+        )
+          setDocumentArtifactId(result.artifact_id);
+        setItems((old) =>
+          old.map((item) =>
+            item.id === pendingId
+              ? {
+                  ...item,
+                  text: result.reply,
+                  streaming: false,
+                  artifactId: result.artifact_id,
+                  ...(result.media_base64
+                    ? {
+                        mediaUrl: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`,
+                        mediaMime: result.media_mime,
+                        filename: result.media_filename,
+                      }
+                    : {}),
+                  ...(result.audio_base64
+                    ? {
+                        audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`,
+                        audioMime: result.audio_mime,
+                        filename: result.audio_filename,
+                      }
+                    : {}),
+                }
+              : item,
+          ),
+        );
       } else {
-        const beforeMemory = await api.memory(token).catch(() => null); const result = await api.sendMessageStream(token, text, (partial) => setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: partial } : item)), abortRef.current.signal);
-        const artifactBlob = result.artifact_id ? await api.downloadArtifact(token, result.artifact_id) : undefined;
-        const artifactUrl = artifactBlob ? URL.createObjectURL(artifactBlob) : undefined;
-        const artifactMime = result.media_mime || artifactBlob?.type || "application/octet-stream";
-        setItems((old) => old.map((item) => item.id === pendingId ? { ...item, text: result.reply, streaming: false, artifactId: result.artifact_id, ...(result.media_base64 ? { mediaUrl: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`, mediaMime: result.media_mime, filename: result.media_filename } : artifactUrl ? { mediaUrl: artifactUrl, mediaMime: artifactMime, filename: result.media_filename } : {}), ...(result.audio_base64 ? { audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`, audioMime: result.audio_mime, filename: result.audio_filename } : {}) } : item)); const afterMemory = await api.memory(token).catch(() => null); if (beforeMemory && afterMemory && JSON.stringify(beforeMemory) !== JSON.stringify(afterMemory)) { setMemoryNotice(true); window.setTimeout(() => setMemoryNotice(false), 6000); } onMemoryChanged();
+        const beforeMemory = await api.memory(token).catch(() => null);
+        const result = await api.sendMessageStream(
+          token,
+          text,
+          (partial) =>
+            setItems((old) =>
+              old.map((item) =>
+                item.id === pendingId ? { ...item, text: partial } : item,
+              ),
+            ),
+          abortRef.current.signal,
+        );
+        const artifactBlob = result.artifact_id
+          ? await api.downloadArtifact(token, result.artifact_id)
+          : undefined;
+        const artifactUrl = artifactBlob
+          ? URL.createObjectURL(artifactBlob)
+          : undefined;
+        const artifactMime =
+          result.media_mime || artifactBlob?.type || "application/octet-stream";
+        setItems((old) =>
+          old.map((item) =>
+            item.id === pendingId
+              ? {
+                  ...item,
+                  text: result.reply,
+                  streaming: false,
+                  artifactId: result.artifact_id,
+                  ...(result.media_base64
+                    ? {
+                        mediaUrl: `data:${result.media_mime || "application/octet-stream"};base64,${result.media_base64}`,
+                        mediaMime: result.media_mime,
+                        filename: result.media_filename,
+                      }
+                    : artifactUrl
+                      ? {
+                          mediaUrl: artifactUrl,
+                          mediaMime: artifactMime,
+                          filename: result.media_filename,
+                        }
+                      : {}),
+                  ...(result.audio_base64
+                    ? {
+                        audioUrl: `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`,
+                        audioMime: result.audio_mime,
+                        filename: result.audio_filename,
+                      }
+                    : {}),
+                }
+              : item,
+          ),
+        );
+        const afterMemory = await api.memory(token).catch(() => null);
+        if (
+          beforeMemory &&
+          afterMemory &&
+          JSON.stringify(beforeMemory) !== JSON.stringify(afterMemory)
+        ) {
+          setMemoryNotice(true);
+          window.setTimeout(() => setMemoryNotice(false), 6000);
+        }
+        onMemoryChanged();
       }
-    } catch (err) { setError(friendlyError(err)); setItems((old) => old.filter((item) => item.id !== pendingId)); } finally { setBusy(false); abortRef.current = null; }
+    } catch (err) {
+      setError(friendlyError(err));
+      setItems((old) => old.filter((item) => item.id !== pendingId));
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+    }
   };
-  const editDocument = async () => { if ((!documentArtifactId && !documentFile) || !documentInstruction.trim() || busy) return; setBusy(true); setError(""); try { const result = documentArtifactId ? await api.editArtifact(token, documentArtifactId, documentInstruction.trim()) : await api.editDocumentFile(token, documentFile!, documentInstruction.trim()); const url = URL.createObjectURL(result.blob); const filename = result.filename.match(/filename\*?=(?:UTF-8'')?["']?([^;"']+)/i)?.[1] || result.filename; setDocumentArtifactId(result.artifactId || documentArtifactId); setItems((old) => [...old, { id: `${Date.now()}-document-edit`, role: "assistant", text: "Готово — последняя версия документа подготовлена.", createdAt: Date.now(), mediaUrl: url, mediaMime: result.blob.type || "application/octet-stream", filename, artifactId: result.artifactId || documentArtifactId }]); setDocumentInstruction(""); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const runAudioAction = async (action: "transcribe" | "process" | "speech-to-speech") => { const file = files[0]; if (!file || !file.type.startsWith("audio/") || audioBusy || (action === "speech-to-speech" && !audioVoiceId.trim())) return; setAudioBusy(true); try { if (action === "transcribe") { const result = await api.transcribeAudio(token, file); setItems((old) => [...old, { id: `${Date.now()}-transcript`, role: "assistant", text: result.text || result.transcript || "Не удалось получить расшифровку.", createdAt: Date.now() }]); } else { const blob = await api.audioAction(token, action, file, action === "process" ? "Улучши качество записи и убери лишний шум" : "", action === "speech-to-speech" ? audioVoiceId.trim() : undefined); const url = URL.createObjectURL(blob); setItems((old) => [...old, { id: `${Date.now()}-audio-edit`, role: "assistant", text: action === "process" ? "Готово — обработанная запись подготовлена." : "Готово — голос записи изменён.", createdAt: Date.now(), audioUrl: url, audioMime: blob.type || "audio/mpeg", filename: action === "process" ? "alter-processed.mp3" : "alter-voice-changed.mp3" }]); } setFiles([]); } catch (err) { setError(friendlyError(err)); } finally { setAudioBusy(false); } };
-  const stop = () => { abortRef.current?.abort(); setBusy(false); setItems((old) => old.map((item) => item.streaming ? { ...item, streaming: false, text: item.text || "Ответ остановлен." } : item)); };
-  const toggleRecording = async () => { if (recording) { recorderRef.current?.stop(); setRecording(false); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); const recorder = new MediaRecorder(stream); chunksRef.current = []; recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); }; recorder.onstop = () => { stream.getTracks().forEach((track) => track.stop()); setFiles([new File(chunksRef.current, "alter-voice.webm", { type: "audio/webm" })]); }; recorder.start(); recorderRef.current = recorder; setRecording(true); } catch { setError("Не удалось получить доступ к микрофону."); } };
-  return <section className="chat-panel"><div className="chat-heading"><div><p className="eyebrow">ЖИВОЙ ДИАЛОГ</p><h1>ALTER</h1></div><div className="chat-state"><span className="status-dot" /> онлайн</div></div>
-    <div ref={listRef} className="messages">{items.length === 0 ? <div className="empty-chat"><div className="empty-logo">ALTER</div><h2>С чего начнём?</h2><p>Расскажи, что происходит, или выбери направление. Контекст останется с тобой.</p><div className="prompt-grid">{["Разложи мою главную задачу на шаги", "Что ты обо мне помнишь?", "Помоги спланировать сегодняшний день", "Найди актуальную информацию"].map((prompt) => <button key={prompt} onClick={() => setDraft(prompt)}>{prompt}<span>↗</span></button>)}</div></div> : items.map((item) => <Message item={item} key={item.id} />)}</div>
-    {memoryNotice && <button className="memory-notice" onClick={() => window.dispatchEvent(new CustomEvent("alter:open-memory"))}>✓ Запомнил важное. Управлять памятью →</button>}{error && <div className="error-banner composer-error">{error}<button onClick={() => setError("")}>×</button></div>}
-    {files.length > 0 && <div className="attachment-strip">{filePreviews.map(({ file, url }, index) => <div className="attachment-thumb" key={`${file.name}-${index}`}>{file.type.startsWith("image/") ? <img src={url} alt={file.name} /> : <span>♫</span>}<button onClick={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Удалить ${file.name}`}>×</button></div>)}</div>}
-    {documentFile && <div className="document-edit-bar"><div><strong>Последний документ</strong><small>{documentArtifactId ? "Последняя версия сохранена в чате" : documentFile.name}</small></div><input value={documentInstruction} onChange={(event) => setDocumentInstruction(event.target.value)} placeholder="Например: замени дату на 1 сентября" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void editDocument(); } }} /><button className="primary-button" disabled={busy || !documentInstruction.trim()} onClick={() => void editDocument()}>{busy ? "Сохраняю…" : "Изменить"}</button></div>}
-    {files.length === 1 && files[0].type.startsWith("audio/") && <div className="audio-action-bar"><strong>Аудио готово</strong><button onClick={() => void runAudioAction("transcribe")} disabled={audioBusy}>Расшифровать</button><button onClick={() => void runAudioAction("process")} disabled={audioBusy}>Улучшить запись</button><input value={audioVoiceId} onChange={(event) => setAudioVoiceId(event.target.value)} placeholder="voice_id" aria-label="Идентификатор голоса" /><button onClick={() => void runAudioAction("speech-to-speech")} disabled={audioBusy || !audioVoiceId.trim()}>Изменить голос</button></div>}
-    <div className="composer"><label className="attach-button" title="Добавить до 10 изображений"><input type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.docx,.csv,.json" multiple onChange={(e) => { const picked = Array.from(e.target.files || []); if (picked.every((file) => file.type.startsWith("image/"))) setFiles((current) => [...current, ...picked].slice(0, 10)); else if (picked[0]) { setFiles([picked[0]]); setDocumentArtifactId(""); setDocumentFile(null); } e.currentTarget.value = ""; }} />＋</label><textarea value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="Напиши ALTER…" rows={1} /><button className={`voice-button ${recording ? "recording" : ""}`} onClick={() => void toggleRecording()} title="Голосовое сообщение">{recording ? "■" : "◖))"}</button><button className={`send-button ${busy ? "stop" : ""}`} onClick={busy ? stop : () => void send()}>{busy ? "■" : "↑"}</button></div><p className="composer-hint">До 10 изображений · Enter — отправить · Shift + Enter — новая строка</p>
-  </section>;
+  const editDocument = async () => {
+    if (
+      (!documentArtifactId && !documentFile) ||
+      !documentInstruction.trim() ||
+      busy
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = documentArtifactId
+        ? await api.editArtifact(
+            token,
+            documentArtifactId,
+            documentInstruction.trim(),
+          )
+        : await api.editDocumentFile(
+            token,
+            documentFile!,
+            documentInstruction.trim(),
+          );
+      const url = URL.createObjectURL(result.blob);
+      const filename =
+        result.filename.match(/filename\*?=(?:UTF-8'')?["']?([^;"']+)/i)?.[1] ||
+        result.filename;
+      setDocumentArtifactId(result.artifactId || documentArtifactId);
+      setItems((old) => [
+        ...old,
+        {
+          id: `${Date.now()}-document-edit`,
+          role: "assistant",
+          text: "Готово — последняя версия документа подготовлена.",
+          createdAt: Date.now(),
+          mediaUrl: url,
+          mediaMime: result.blob.type || "application/octet-stream",
+          filename,
+          artifactId: result.artifactId || documentArtifactId,
+        },
+      ]);
+      setDocumentInstruction("");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const runAudioAction = async (
+    action: "transcribe" | "process" | "speech-to-speech",
+  ) => {
+    const file = files[0];
+    if (
+      !file ||
+      !file.type.startsWith("audio/") ||
+      audioBusy ||
+      (action === "speech-to-speech" && !audioVoiceId.trim())
+    )
+      return;
+    setAudioBusy(true);
+    try {
+      if (action === "transcribe") {
+        const result = await api.transcribeAudio(token, file);
+        setItems((old) => [
+          ...old,
+          {
+            id: `${Date.now()}-transcript`,
+            role: "assistant",
+            text:
+              result.text ||
+              result.transcript ||
+              "Не удалось получить расшифровку.",
+            createdAt: Date.now(),
+          },
+        ]);
+      } else {
+        const blob = await api.audioAction(
+          token,
+          action,
+          file,
+          action === "process"
+            ? "Улучши качество записи и убери лишний шум"
+            : "",
+          action === "speech-to-speech" ? audioVoiceId.trim() : undefined,
+        );
+        const url = URL.createObjectURL(blob);
+        setItems((old) => [
+          ...old,
+          {
+            id: `${Date.now()}-audio-edit`,
+            role: "assistant",
+            text:
+              action === "process"
+                ? "Готово — обработанная запись подготовлена."
+                : "Готово — голос записи изменён.",
+            createdAt: Date.now(),
+            audioUrl: url,
+            audioMime: blob.type || "audio/mpeg",
+            filename:
+              action === "process"
+                ? "alter-processed.mp3"
+                : "alter-voice-changed.mp3",
+          },
+        ]);
+      }
+      setFiles([]);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setAudioBusy(false);
+    }
+  };
+  const stop = () => {
+    abortRef.current?.abort();
+    setBusy(false);
+    setItems((old) =>
+      old.map((item) =>
+        item.streaming
+          ? {
+              ...item,
+              streaming: false,
+              text: item.text || "Ответ остановлен.",
+            }
+          : item,
+      ),
+    );
+  };
+  const toggleRecording = async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setFiles([
+          new File(chunksRef.current, "alter-voice.webm", {
+            type: "audio/webm",
+          }),
+        ]);
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      setError("Не удалось получить доступ к микрофону.");
+    }
+  };
+  return (
+    <section className="chat-panel">
+      <div className="chat-heading">
+        <div>
+          <p className="eyebrow">ЖИВОЙ ДИАЛОГ</p>
+          <h1>ALTER</h1>
+        </div>
+        <div className="chat-state">
+          <span className="status-dot" /> онлайн
+        </div>
+      </div>
+      <div ref={listRef} className="messages">
+        {items.length === 0 ? (
+          <div className="empty-chat">
+            <div className="empty-logo">ALTER</div>
+            <h2>С чего начнём?</h2>
+            <p>
+              Расскажи, что происходит, или выбери направление. Контекст
+              останется с тобой.
+            </p>
+            <div className="prompt-grid">
+              {[
+                "Разложи мою главную задачу на шаги",
+                "Что ты обо мне помнишь?",
+                "Помоги спланировать сегодняшний день",
+                "Найди актуальную информацию",
+              ].map((prompt) => (
+                <button key={prompt} onClick={() => setDraft(prompt)}>
+                  {prompt}
+                  <span>↗</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          items.map((item) => <Message item={item} key={item.id} />)
+        )}
+      </div>
+      {memoryNotice && (
+        <button
+          className="memory-notice"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("alter:open-memory"))
+          }
+        >
+          ✓ Запомнил важное. Управлять памятью →
+        </button>
+      )}
+      {error && (
+        <div className="error-banner composer-error">
+          {error}
+          <button onClick={() => setError("")}>×</button>
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="attachment-strip">
+          {filePreviews.map(({ file, url }, index) => (
+            <div className="attachment-thumb" key={`${file.name}-${index}`}>
+              {file.type.startsWith("image/") ? (
+                <img src={url} alt={file.name} />
+              ) : (
+                <span>♫</span>
+              )}
+              <button
+                onClick={() =>
+                  setFiles((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
+                aria-label={`Удалить ${file.name}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {documentFile && (
+        <div className="document-edit-bar">
+          <div>
+            <strong>Последний документ</strong>
+            <small>
+              {documentArtifactId
+                ? "Последняя версия сохранена в чате"
+                : documentFile.name}
+            </small>
+          </div>
+          <input
+            value={documentInstruction}
+            onChange={(event) => setDocumentInstruction(event.target.value)}
+            placeholder="Например: замени дату на 1 сентября"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void editDocument();
+              }
+            }}
+          />
+          <button
+            className="primary-button"
+            disabled={busy || !documentInstruction.trim()}
+            onClick={() => void editDocument()}
+          >
+            {busy ? "Сохраняю…" : "Изменить"}
+          </button>
+        </div>
+      )}
+      {files.length === 1 && files[0].type.startsWith("audio/") && (
+        <div className="audio-action-bar">
+          <strong>Аудио готово</strong>
+          <button
+            onClick={() => void runAudioAction("transcribe")}
+            disabled={audioBusy}
+          >
+            Расшифровать
+          </button>
+          <button
+            onClick={() => void runAudioAction("process")}
+            disabled={audioBusy}
+          >
+            Улучшить запись
+          </button>
+          <input
+            value={audioVoiceId}
+            onChange={(event) => setAudioVoiceId(event.target.value)}
+            placeholder="voice_id"
+            aria-label="Идентификатор голоса"
+          />
+          <button
+            onClick={() => void runAudioAction("speech-to-speech")}
+            disabled={audioBusy || !audioVoiceId.trim()}
+          >
+            Изменить голос
+          </button>
+        </div>
+      )}
+      <div className="composer">
+        <label className="attach-button" title="Добавить до 10 изображений">
+          <input
+            type="file"
+            accept="image/*,video/*,audio/*,.pdf,.txt,.docx,.csv,.json"
+            multiple
+            onChange={(e) => {
+              const picked = Array.from(e.target.files || []);
+              if (picked.every((file) => file.type.startsWith("image/")))
+                setFiles((current) => [...current, ...picked].slice(0, 10));
+              else if (picked[0]) {
+                setFiles([picked[0]]);
+                setDocumentArtifactId("");
+                setDocumentFile(null);
+              }
+              e.currentTarget.value = "";
+            }}
+          />
+          ＋
+        </label>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          placeholder="Напиши ALTER…"
+          rows={1}
+        />
+        <button
+          className={`voice-button ${recording ? "recording" : ""}`}
+          onClick={() => void toggleRecording()}
+          title="Голосовое сообщение"
+        >
+          {recording ? "■" : "◖))"}
+        </button>
+        <button
+          className={`send-button ${busy ? "stop" : ""}`}
+          onClick={busy ? stop : () => void send()}
+        >
+          {busy ? "■" : "↑"}
+        </button>
+      </div>
+      <p className="composer-hint">
+        До 10 изображений · Enter — отправить · Shift + Enter — новая строка
+      </p>
+    </section>
+  );
 }
 
-function LegacyMemoryPanel({ token, data, reload }: { token: string; data: MemoryResponse | null; reload: () => void }) {
-  const [error, setError] = useState(""); const [busy, setBusy] = useState("");
-  const forget = async (category: string) => { setBusy(category); try { await api.forgetMemory(token, category); reload(); } catch (err) { setError(friendlyError(err)); } finally { setBusy(""); } };
-  const confirm = async (category: string, key: string) => { try { await api.confirmMemory(token, category, key); reload(); } catch (err) { setError(friendlyError(err)); } };
-  return <section className="content-panel"><PanelHeader eyebrow="ПАМЯТЬ ALTER" title="То, что остаётся важным" subtitle="Постоянные факты, цели и контекст. Управляй ими в любой момент." />{error && <div className="error-banner">{error}</div>}<div className="memory-intro"><span className="memory-glyph">∞</span><div><strong>Бессрочная память</strong><p>{data?.description || "ALTER хранит важные факты и стиль общения, пока ты сам не попросишь их удалить."}</p></div></div>{data?.audit?.some((item) => !item.confirmed) && <div className="audit-card"><strong>Проверь, что это всё ещё верно</strong>{data.audit.filter((item) => !item.confirmed).slice(0, 5).map((item) => <button key={`${item.category}-${item.key}`} onClick={() => void confirm(item.category, item.key)}>{labelMap[item.category] || item.category} · подтвердить ✓</button>)}</div>}<div className="memory-grid">{data?.sections?.length ? data.sections.map((section) => <article className="memory-card" key={section.category}><header><span>{labelMap[section.category] || section.title}</span><button disabled={busy === section.category} onClick={() => void forget(section.category)}>{busy === section.category ? "…" : "Забыть"}</button></header>{section.items.map((item, index) => <p key={`${item.label}-${index}`}><b>{item.label}</b>{item.value}</p>)}</article>) : <div className="empty-state">Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.</div>}</div></section>;
+function LegacyMemoryPanel({
+  token,
+  data,
+  reload,
+}: {
+  token: string;
+  data: MemoryResponse | null;
+  reload: () => void;
+}) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const forget = async (category: string) => {
+    setBusy(category);
+    try {
+      await api.forgetMemory(token, category);
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy("");
+    }
+  };
+  const confirm = async (category: string, key: string) => {
+    try {
+      await api.confirmMemory(token, category, key);
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ПАМЯТЬ ALTER"
+        title="То, что остаётся важным"
+        subtitle="Постоянные факты, цели и контекст. Управляй ими в любой момент."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="memory-intro">
+        <span className="memory-glyph">∞</span>
+        <div>
+          <strong>Бессрочная память</strong>
+          <p>
+            {data?.description ||
+              "ALTER хранит важные факты и стиль общения, пока ты сам не попросишь их удалить."}
+          </p>
+        </div>
+      </div>
+      {data?.audit?.some((item) => !item.confirmed) && (
+        <div className="audit-card">
+          <strong>Проверь, что это всё ещё верно</strong>
+          {data.audit
+            .filter((item) => !item.confirmed)
+            .slice(0, 5)
+            .map((item) => (
+              <button
+                key={`${item.category}-${item.key}`}
+                onClick={() => void confirm(item.category, item.key)}
+              >
+                {labelMap[item.category] || item.category} · подтвердить ✓
+              </button>
+            ))}
+        </div>
+      )}
+      <div className="memory-grid">
+        {data?.sections?.length ? (
+          data.sections.map((section) => (
+            <article className="memory-card" key={section.category}>
+              <header>
+                <span>{labelMap[section.category] || section.title}</span>
+                <button
+                  disabled={busy === section.category}
+                  onClick={() => void forget(section.category)}
+                >
+                  {busy === section.category ? "…" : "Забыть"}
+                </button>
+              </header>
+              {section.items.map((item, index) => (
+                <p key={`${item.label}-${index}`}>
+                  <b>{item.label}</b>
+                  {item.value}
+                </p>
+              ))}
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            Пока здесь пусто. ALTER заполнит память по мере ваших разговоров.
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
-function PanelHeader({ eyebrow, title, subtitle, showBack = false }: { eyebrow: string; title: string; subtitle: string; showBack?: boolean }) { const isBackPanel = showBack || eyebrow.includes("УВЕДОМЛЕНИЯ") || eyebrow.includes("НАПОМИНАНИЯ") || eyebrow.includes("СЦЕНАРИИ") || eyebrow === "ALTER / ДОСТУП"; return <div className="panel-header">{isBackPanel && <button className="back-button" onClick={() => window.dispatchEvent(new CustomEvent("alter:billing-back"))}>← Назад в диалог</button>}<p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="muted">{subtitle}</p></div>; }
+function PanelHeader({
+  eyebrow,
+  title,
+  subtitle,
+  showBack = false,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  showBack?: boolean;
+}) {
+  const isBackPanel =
+    showBack ||
+    eyebrow.includes("УВЕДОМЛЕНИЯ") ||
+    eyebrow.includes("НАПОМИНАНИЯ") ||
+    eyebrow.includes("СЦЕНАРИИ") ||
+    eyebrow === "ALTER / ДОСТУП";
+  return (
+    <div className="panel-header">
+      {isBackPanel && (
+        <button
+          className="back-button"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("alter:billing-back"))
+          }
+        >
+          ← Назад в диалог
+        </button>
+      )}
+      <p className="eyebrow">{eyebrow}</p>
+      <h1>{title}</h1>
+      <p className="muted">{subtitle}</p>
+    </div>
+  );
+}
 
 function SupportPanel({ account }: { account: Account | null }) {
   const openSupport = () => {
     const body = `Опиши проблему подробно.\\n\\nАккаунт: ${account?.email || "не определён"}\\nУстройство: web`;
     window.location.href = `mailto:kid.cudi.1995@mail.ru?subject=${encodeURIComponent("Поддержка ALTER")}&body=${encodeURIComponent(body)}`;
   };
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / ПОДДЕРЖКА" title="Связаться с поддержкой." subtitle="Напиши, что произошло — приложи скриншот или пример диалога, если это связано с ответом ALTER." /><button className="primary-button" onClick={openSupport}>Написать в поддержку →</button><p className="muted">Ответ придёт на почту владельца ALTER.</p></section>;
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / ПОДДЕРЖКА"
+        title="Связаться с поддержкой."
+        subtitle="Напиши, что произошло — приложи скриншот или пример диалога, если это связано с ответом ALTER."
+      />
+      <button className="primary-button" onClick={openSupport}>
+        Написать в поддержку →
+      </button>
+      <p className="muted">Ответ придёт на почту владельца ALTER.</p>
+    </section>
+  );
 }
 
-function CalendarPanel({ token }: { token: string }) { const [status, setStatus] = useState<{ configured: boolean; connected: boolean } | null>(null); const [events, setEvents] = useState<unknown[]>([]); const [error, setError] = useState(""); useEffect(() => { api.calendarStatus(token).then(setStatus).catch((err) => setError(friendlyError(err))); }, [token]); const load = async () => { try { setEvents((await api.calendarEvents(token)).events); } catch (err) { setError(friendlyError(err)); } }; const connect = async () => { try { window.location.href = (await api.calendarConnect(token)).authorization_url; } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / CALENDAR" title="Встречи, которые не теряются." subtitle="Подключи Google Calendar, чтобы ALTER видел твой реальный день." />{error && <div className="error-banner">{error}</div>}{status && !status.connected ? <div className="memory-intro"><span className="memory-glyph">◷</span><div><strong>{status.configured ? "Google Calendar ещё не подключён" : "Calendar пока не настроен на сервере"}</strong><p>После подключения события будут доступны в Мой день и в общем разговоре.</p>{status.configured && <button className="primary-button" onClick={() => void connect()}>Подключить Google →</button>}</div></div> : <><button className="primary-button" onClick={() => void load()}>Загрузить события</button><div className="focus-list">{events.map((event, index) => <article key={index}><i className="priority-normal" /><div><strong>{String((event as Record<string, unknown>).summary || "Событие")}</strong><p>{String((event as Record<string, unknown>).description || "Google Calendar")}</p></div></article>)}</div></>}</section>; }
+function CalendarPanel({ token }: { token: string }) {
+  const [status, setStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+  } | null>(null);
+  const [events, setEvents] = useState<unknown[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api
+      .calendarStatus(token)
+      .then(setStatus)
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  const load = async () => {
+    try {
+      setEvents((await api.calendarEvents(token)).events);
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const connect = async () => {
+    try {
+      window.location.href = (
+        await api.calendarConnect(token)
+      ).authorization_url;
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / CALENDAR"
+        title="Встречи, которые не теряются."
+        subtitle="Подключи Google Calendar, чтобы ALTER видел твой реальный день."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      {status && !status.connected ? (
+        <div className="memory-intro">
+          <span className="memory-glyph">◷</span>
+          <div>
+            <strong>
+              {status.configured
+                ? "Google Calendar ещё не подключён"
+                : "Calendar пока не настроен на сервере"}
+            </strong>
+            <p>
+              После подключения события будут доступны в Мой день и в общем
+              разговоре.
+            </p>
+            {status.configured && (
+              <button className="primary-button" onClick={() => void connect()}>
+                Подключить Google →
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <button className="primary-button" onClick={() => void load()}>
+            Загрузить события
+          </button>
+          <div className="focus-list">
+            {events.map((event, index) => (
+              <article key={index}>
+                <i className="priority-normal" />
+                <div>
+                  <strong>
+                    {String(
+                      (event as Record<string, unknown>).summary || "Событие",
+                    )}
+                  </strong>
+                  <p>
+                    {String(
+                      (event as Record<string, unknown>).description ||
+                        "Google Calendar",
+                    )}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
-function NotificationsPanel({ token, items, unread, reload }: { token: string; items: AlterNotification[]; unread: number; reload: () => void }) { const [error, setError] = useState(""); const openChat = async (item: AlterNotification) => { try { if (!item.read) await api.markNotificationRead(token, item.id); reload(); window.dispatchEvent(new CustomEvent("alter:open-chat", { detail: { prompt: item.body } })); } catch (err) { setError(friendlyError(err)); } }; const read = async (id: string) => { try { await api.markNotificationRead(token, id); reload(); } catch (err) { setError(friendlyError(err)); } }; const readAll = async () => { try { await api.markAllNotificationsRead(token); reload(); } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / УВЕДОМЛЕНИЯ" title="Важное не потеряется." subtitle="Напоминания, check-in и возвращения к темам синхронизированы с твоим аккаунтом." />{error && <div className="error-banner">{error}</div>}<div className="notifications-toolbar"><strong>{unread ? `${unread} непрочитанных` : "Всё прочитано"}</strong>{unread > 0 && <button className="text-button" onClick={() => void readAll()}>Прочитать всё</button>}</div><div className="notification-list">{items.length ? items.map((item) => <article className={`notification-card ${item.read ? "read" : "unread"}`} key={item.id} onClick={() => void openChat(item)}><div className="notification-mark" /><div><strong>{item.title}</strong><p>{item.body}</p><time>{item.created_at ? new Date(item.created_at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</time></div>{!item.read && <button aria-label="Отметить прочитанным" onClick={(event) => { event.stopPropagation(); void read(item.id); }}>✓</button>}</article>) : <div className="empty-state">Пока нет уведомлений. ALTER вернётся к важному, когда это будет уместно.</div>}</div></section>; }
+function NotificationsPanel({
+  token,
+  items,
+  unread,
+  reload,
+}: {
+  token: string;
+  items: AlterNotification[];
+  unread: number;
+  reload: () => void;
+}) {
+  const [error, setError] = useState("");
+  const openChat = async (item: AlterNotification) => {
+    try {
+      if (!item.read) await api.markNotificationRead(token, item.id);
+      reload();
+      window.dispatchEvent(
+        new CustomEvent("alter:open-chat", { detail: { prompt: item.body } }),
+      );
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const read = async (id: string) => {
+    try {
+      await api.markNotificationRead(token, id);
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const readAll = async () => {
+    try {
+      await api.markAllNotificationsRead(token);
+      reload();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / УВЕДОМЛЕНИЯ"
+        title="Важное не потеряется."
+        subtitle="Напоминания, check-in и возвращения к темам синхронизированы с твоим аккаунтом."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="notifications-toolbar">
+        <strong>{unread ? `${unread} непрочитанных` : "Всё прочитано"}</strong>
+        {unread > 0 && (
+          <button className="text-button" onClick={() => void readAll()}>
+            Прочитать всё
+          </button>
+        )}
+      </div>
+      <div className="notification-list">
+        {items.length ? (
+          items.map((item) => (
+            <article
+              className={`notification-card ${item.read ? "read" : "unread"}`}
+              key={item.id}
+              onClick={() => void openChat(item)}
+            >
+              <div className="notification-mark" />
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+                <time>
+                  {item.created_at
+                    ? new Date(item.created_at).toLocaleString("ru-RU", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : ""}
+                </time>
+              </div>
+              {!item.read && (
+                <button
+                  aria-label="Отметить прочитанным"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void read(item.id);
+                  }}
+                >
+                  ✓
+                </button>
+              )}
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            Пока нет уведомлений. ALTER вернётся к важному, когда это будет
+            уместно.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function DiagnosticsPanel({ token }: { token: string }) {
-  const [data, setData] = useState<DiagnosticsQuality | null>(null); const [error, setError] = useState("");
-  const load = async () => { try { setData(await api.diagnosticsQuality(token)); } catch (err) { setError(friendlyError(err)); } };
-  useEffect(() => { void load(); }, [token]);
+  const [data, setData] = useState<DiagnosticsQuality | null>(null);
+  const [error, setError] = useState("");
+  const load = async () => {
+    try {
+      setData(await api.diagnosticsQuality(token));
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, [token]);
   const counter = (name: string) => data?.counters[name] || 0;
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / OWNER" title="Контроль качества контура." subtitle="Только агрегированные production-метрики: без email, user id и текстов переписки." />{error && <div className="error-banner">{error}</div>}<button className="text-button" onClick={() => void load()}>Обновить метрики</button>{data && <><div className="plan-grid diagnostics-grid"><article><p className="eyebrow">AUTH FUNNEL</p><strong>{counter("funnel.register.completed")}</strong><span>регистраций · входов {counter("funnel.login.completed")}</span></article><article><p className="eyebrow">MODEL</p><strong>{Math.round((1 - data.model_reliability.fallback_rate) * 100)}%</strong><span>надёжность · fallback {Math.round(data.model_reliability.fallback_rate * 100)}%</span></article><article><p className="eyebrow">TOOLS</p><strong>{data.tool_failures}</strong><span>ошибок · пустых ответов {data.tool_empty}</span></article><article><p className="eyebrow">QUALITY</p><strong>{data.quality_warnings}</strong><span>предупреждений ответа</span></article><article><p className="eyebrow">BILLING</p><strong>{counter("billing.subscription_payment.created")}</strong><span>подписок · пакетов {counter("billing.credit_payment.created")}</span></article><article><p className="eyebrow">PUSH / VOICE</p><strong>{counter("push.delivery.success")}</strong><span>push доставлено · voice {counter("voice.reply.success")}</span></article></div><div className="focus-list diagnostics-latency">{Object.entries(data.latency).map(([name, value]) => <article key={name}><i className="priority-normal" /><div><strong>{name}</strong><p>p50 {value.p50_ms} ms · p95 {value.p95_ms} ms · выборка {value.count}</p></div></article>)}</div><div className="diagnostics-history"><p className="eyebrow">HISTORY / 30 DAYS</p>{data.history?.slice(0, 12).map((item) => <div key={item.created_at}><span>{item.created_at ? new Date(item.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</span><span>ответов {item.counters["ai.model.success"] || 0} · ошибок {item.counters["ai.model.failure"] || 0} · push {item.counters["push.delivery.success"] || 0}</span></div>)}</div><div className="diagnostics-payments"><p className="eyebrow">PAYMENTS / RECENT</p>{data.payments?.length ? data.payments.map((payment, index) => <div className="diagnostics-payment" key={`${payment.created_at || "payment"}-${index}`}><span className={`payment-status status-${payment.status}`}>{payment.status}</span><span>{payment.amount_rub} ₽</span><time>{payment.paid_at || payment.created_at ? new Date(payment.paid_at || payment.created_at || "").toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</time></div>) : <div className="empty-state">Платежей пока нет.</div>}</div></>}</section>;
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / OWNER"
+        title="Контроль качества контура."
+        subtitle="Только агрегированные production-метрики: без email, user id и текстов переписки."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <button className="text-button" onClick={() => void load()}>
+        Обновить метрики
+      </button>
+      {data && (
+        <>
+          <div className="plan-grid diagnostics-grid">
+            <article>
+              <p className="eyebrow">AUTH FUNNEL</p>
+              <strong>{counter("funnel.register.completed")}</strong>
+              <span>
+                регистраций · входов {counter("funnel.login.completed")}
+              </span>
+            </article>
+            <article>
+              <p className="eyebrow">MODEL</p>
+              <strong>
+                {Math.round((1 - data.model_reliability.fallback_rate) * 100)}%
+              </strong>
+              <span>
+                надёжность · fallback{" "}
+                {Math.round(data.model_reliability.fallback_rate * 100)}%
+              </span>
+            </article>
+            <article>
+              <p className="eyebrow">TOOLS</p>
+              <strong>{data.tool_failures}</strong>
+              <span>ошибок · пустых ответов {data.tool_empty}</span>
+            </article>
+            <article>
+              <p className="eyebrow">QUALITY</p>
+              <strong>{data.quality_warnings}</strong>
+              <span>предупреждений ответа</span>
+            </article>
+            <article>
+              <p className="eyebrow">BILLING</p>
+              <strong>{counter("billing.subscription_payment.created")}</strong>
+              <span>
+                подписок · пакетов {counter("billing.credit_payment.created")}
+              </span>
+            </article>
+            <article>
+              <p className="eyebrow">PUSH / VOICE</p>
+              <strong>{counter("push.delivery.success")}</strong>
+              <span>
+                push доставлено · voice {counter("voice.reply.success")}
+              </span>
+            </article>
+          </div>
+          <div className="focus-list diagnostics-latency">
+            {Object.entries(data.latency).map(([name, value]) => (
+              <article key={name}>
+                <i className="priority-normal" />
+                <div>
+                  <strong>{name}</strong>
+                  <p>
+                    p50 {value.p50_ms} ms · p95 {value.p95_ms} ms · выборка{" "}
+                    {value.count}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="diagnostics-history">
+            <p className="eyebrow">HISTORY / 30 DAYS</p>
+            {data.history?.slice(0, 12).map((item) => (
+              <div key={item.created_at}>
+                <span>
+                  {item.created_at
+                    ? new Date(item.created_at).toLocaleString("ru-RU", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"}
+                </span>
+                <span>
+                  ответов {item.counters["ai.model.success"] || 0} · ошибок{" "}
+                  {item.counters["ai.model.failure"] || 0} · push{" "}
+                  {item.counters["push.delivery.success"] || 0}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="diagnostics-payments">
+            <p className="eyebrow">PAYMENTS / RECENT</p>
+            {data.payments?.length ? (
+              data.payments.map((payment, index) => (
+                <div
+                  className="diagnostics-payment"
+                  key={`${payment.created_at || "payment"}-${index}`}
+                >
+                  <span className={`payment-status status-${payment.status}`}>
+                    {payment.status}
+                  </span>
+                  <span>{payment.amount_rub} ₽</span>
+                  <time>
+                    {payment.paid_at || payment.created_at
+                      ? new Date(
+                          payment.paid_at || payment.created_at || "",
+                        ).toLocaleString("ru-RU", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "—"}
+                  </time>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state">Платежей пока нет.</div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 // Recent payment events are exposed by the diagnostics API for owner review.
 // The compact panel is rendered below the metrics block when the API provides it.
-function LegacyAppShell({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [panel, setPanel] = useState<Panel>(() => new URLSearchParams(window.location.search).get("billing") === "1" ? "billing" : "chat"); const [account, setAccount] = useState<Account | null>(null); const [memory, setMemory] = useState<MemoryResponse | null>(null); const [myDay, setMyDay] = useState<MyDay | null>(null); const [reminders, setReminders] = useState<Reminder[]>([]); const [subscription, setSubscription] = useState<Subscription | null>(null); const [agent, setAgent] = useState<Agent>(null); const [workflow, setWorkflow] = useState<Workflow>(null); const [faq, setFaq] = useState(""); const [error, setError] = useState(""); const [mobileNav, setMobileNav] = useState(false);
-  const loadMemory = () => api.memory(token).then(setMemory).catch((err) => setError(friendlyError(err)));
-  useEffect(() => { api.account(token).then(setAccount).catch((err) => { if (err instanceof ApiError && err.status === 401) onLogout(); else setError(friendlyError(err)); }); loadMemory(); api.subscription(token).then(setSubscription).catch(() => undefined); }, [token]);
-  useEffect(() => { if (panel === "my-day") api.myDay(token).then(setMyDay).catch((err) => setError(friendlyError(err))); if (panel === "reminders") api.reminders(token).then((result) => setReminders(result.reminders)).catch((err) => setError(friendlyError(err))); if (panel === "agent") api.agent(token).then((result) => setAgent(result.agent)).catch((err) => setError(friendlyError(err))); if (panel === "faq") api.faq(token).then(setFaq).catch((err) => setError(friendlyError(err))); }, [panel, token]);
-  const nav = useMemo(() => [{ id: "chat", icon: "◌", title: "Диалог" }, { id: "my-day", icon: "✦", title: "Мой день" }, { id: "memory", icon: "∞", title: "Память" }, { id: "reminders", icon: "◷", title: "Напоминания" }, { id: "notifications", icon: "·", title: "Уведомления" }, { id: "agent", icon: "◇", title: "Агент" }, { id: "scenarios", icon: "✧", title: "Сценарии" }, { id: "media", icon: "▧", title: "Медиа" }, { id: "tools", icon: "⌁", title: "Инструменты" }, { id: "action-log", icon: "≡", title: "Журнал действий" }, { id: "calendar", icon: "□", title: "Календарь" }, { id: "faq", icon: "?", title: "FAQ" }, ...(account?.owner ? [{ id: "diagnostics", icon: "◌", title: "Диагностика" }] : [])] as { id: Panel; icon: string; title: string }[], [account?.owner]);
-  useEffect(() => { const goBack = () => choose("chat"); const openMemory = () => choose("memory"); const openChat = (event: Event) => { const detail = (event as CustomEvent<{ prompt?: string; autoSend?: boolean }>).detail || {}; const prompt = detail.prompt || ""; choose("chat"); window.setTimeout(() => window.dispatchEvent(new CustomEvent("alter:prefill-chat", { detail: { prompt, autoSend: detail.autoSend ?? true } })), 0); }; window.addEventListener("alter:billing-back", goBack); window.addEventListener("alter:open-memory", openMemory); window.addEventListener("alter:open-chat", openChat); return () => { window.removeEventListener("alter:billing-back", goBack); window.removeEventListener("alter:open-memory", openMemory); window.removeEventListener("alter:open-chat", openChat); }; }, []);
-  const choose = (next: Panel) => { setPanel(next); setMobileNav(false); setError(""); };
-  if (panel === "notifications") return <div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><span className="brand-name">ALTER</span></div><button className="text-button" onClick={() => choose("chat")}>← Диалог</button></aside><main className="main-area"><NotificationsPage token={token} /></main></div>;
-  if (panel === "scenarios") return <div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><span className="brand-name">ALTER</span></div><button className="text-button" onClick={() => choose("chat")}>← Диалог</button></aside><main className="main-area"><ScenariosPanel token={token} /></main></div>;
-  if (panel === "action-log") return <div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><span className="brand-name">ALTER</span></div><button className="text-button" onClick={() => choose("chat")}>← Диалог</button></aside><main className="main-area"><ActionLogPanel token={token} /></main></div>;
-  return <div className="app-shell"><aside className={`sidebar ${mobileNav ? "open" : ""}`}><div className="sidebar-brand"><span className="brand-name">ALTER</span><button className="mobile-close" onClick={() => setMobileNav(false)}>×</button></div><div className="sidebar-user"><span className="avatar">{account?.name?.slice(0, 1).toUpperCase() || "A"}</span><div><strong>{account?.name || "Твой аккаунт"}</strong><small>{account?.email || ""}</small></div></div><nav>{nav.map((item) => <button className={panel === item.id ? "active" : ""} key={item.id} onClick={() => choose(item.id)}><span>{item.icon}</span>{item.title}</button>)}</nav><div className="sidebar-bottom"><button onClick={() => choose("billing")} className={panel === "billing" ? "active" : ""}><span>◈</span> Подписка {account?.trial_active && <em>trial</em>}</button><button onClick={() => choose("settings")} className={panel === "settings" ? "active" : ""}><span>⚙</span> Настройки</button><button onClick={() => choose("support")} className={panel === "support" ? "active" : ""}><span>?</span> Поддержка</button><button onClick={onLogout}><span>↪</span> Выйти</button></div><div className="sidebar-footer"><span className="status-dot" /> ALTER online <small>web · stable</small></div></aside><main className="main-area"><header className="mobile-header"><button onClick={() => setMobileNav(true)}>☰</button><span>ALTER</span><button aria-label={panel === "settings" ? "Вернуться в диалог" : "Открыть настройки"} onClick={() => choose(panel === "settings" ? "chat" : "settings")}>{panel === "settings" ? "×" : "◉"}</button></header>{error && <div className="global-error error-banner">{error}<button onClick={() => setError("")}>×</button></div>}{panel === "chat" && <ChatPanel token={token} account={account} onMemoryChanged={loadMemory} />}{panel === "memory" && <MemoryPanel token={token} data={memory} reload={loadMemory} />}{panel === "my-day" && <MyDayPanel data={myDay} />}{panel === "reminders" && <RemindersPanel token={token} items={reminders} setItems={setReminders} />}{panel === "agent" && <AgentPanel token={token} agent={agent} setAgent={setAgent} />}{panel === "media" && <MediaPanel token={token} />}{panel === "tools" && <ToolsPanel token={token} />}{panel === "calendar" && <CalendarPanel token={token} />}{panel === "diagnostics" && <DiagnosticsPanel token={token} />}{panel === "billing" && <><BillingPanel token={token} account={account} subscription={subscription} reload={() => api.subscription(token).then(setSubscription)} /><CreditPackPanel token={token} /></>}{panel === "settings" && <SettingsPanel token={token} account={account} setAccount={setAccount} />}{panel === "support" && <SupportPanel account={account} />}{panel === "faq" && <section className="content-panel"><PanelHeader eyebrow="ALTER / FAQ" title="Возможности рядом" subtitle="Общий контракт для Telegram, mobile и web." /><pre className="faq-copy">{faq}</pre></section>}</main></div>;
+function LegacyAppShell({
+  token,
+  onLogout,
+}: {
+  token: string;
+  onLogout: () => void;
+}) {
+  const [panel, setPanel] = useState<Panel>(() =>
+    new URLSearchParams(window.location.search).get("billing") === "1"
+      ? "billing"
+      : "chat",
+  );
+  const [account, setAccount] = useState<Account | null>(null);
+  const [memory, setMemory] = useState<MemoryResponse | null>(null);
+  const [myDay, setMyDay] = useState<MyDay | null>(null);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [agent, setAgent] = useState<Agent>(null);
+  const [workflow, setWorkflow] = useState<Workflow>(null);
+  const [faq, setFaq] = useState("");
+  const [error, setError] = useState("");
+  const [mobileNav, setMobileNav] = useState(false);
+  const loadMemory = () =>
+    api
+      .memory(token)
+      .then(setMemory)
+      .catch((err) => setError(friendlyError(err)));
+  useEffect(() => {
+    api
+      .account(token)
+      .then(setAccount)
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) onLogout();
+        else setError(friendlyError(err));
+      });
+    loadMemory();
+    api
+      .subscription(token)
+      .then(setSubscription)
+      .catch(() => undefined);
+  }, [token]);
+  useEffect(() => {
+    if (panel === "my-day")
+      api
+        .myDay(token)
+        .then(setMyDay)
+        .catch((err) => setError(friendlyError(err)));
+    if (panel === "reminders")
+      api
+        .reminders(token)
+        .then((result) => setReminders(result.reminders))
+        .catch((err) => setError(friendlyError(err)));
+    if (panel === "agent")
+      api
+        .agent(token)
+        .then((result) => setAgent(result.agent))
+        .catch((err) => setError(friendlyError(err)));
+    if (panel === "faq")
+      api
+        .faq(token)
+        .then(setFaq)
+        .catch((err) => setError(friendlyError(err)));
+  }, [panel, token]);
+  const nav = useMemo(
+    () =>
+      [
+        { id: "chat", icon: "◌", title: "Диалог" },
+        { id: "my-day", icon: "✦", title: "Мой день" },
+        { id: "memory", icon: "∞", title: "Память" },
+        { id: "reminders", icon: "◷", title: "Напоминания" },
+        { id: "notifications", icon: "·", title: "Уведомления" },
+        { id: "agent", icon: "◇", title: "Агент" },
+        { id: "scenarios", icon: "✧", title: "Сценарии" },
+        { id: "media", icon: "▧", title: "Медиа" },
+        { id: "tools", icon: "⌁", title: "Инструменты" },
+        { id: "action-log", icon: "≡", title: "Журнал действий" },
+        { id: "calendar", icon: "□", title: "Календарь" },
+        { id: "faq", icon: "?", title: "FAQ" },
+        ...(account?.owner
+          ? [{ id: "diagnostics", icon: "◌", title: "Диагностика" }]
+          : []),
+      ] as { id: Panel; icon: string; title: string }[],
+    [account?.owner],
+  );
+  useEffect(() => {
+    const goBack = () => choose("chat");
+    const openMemory = () => choose("memory");
+    const openChat = (event: Event) => {
+      const detail =
+        (event as CustomEvent<{ prompt?: string; autoSend?: boolean }>)
+          .detail || {};
+      const prompt = detail.prompt || "";
+      choose("chat");
+      window.setTimeout(
+        () =>
+          window.dispatchEvent(
+            new CustomEvent("alter:prefill-chat", {
+              detail: { prompt, autoSend: detail.autoSend ?? true },
+            }),
+          ),
+        0,
+      );
+    };
+    window.addEventListener("alter:billing-back", goBack);
+    window.addEventListener("alter:open-memory", openMemory);
+    window.addEventListener("alter:open-chat", openChat);
+    return () => {
+      window.removeEventListener("alter:billing-back", goBack);
+      window.removeEventListener("alter:open-memory", openMemory);
+      window.removeEventListener("alter:open-chat", openChat);
+    };
+  }, []);
+  const choose = (next: Panel) => {
+    setPanel(next);
+    setMobileNav(false);
+    setError("");
+  };
+  if (panel === "notifications")
+    return (
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="brand-name">ALTER</span>
+          </div>
+          <button className="text-button" onClick={() => choose("chat")}>
+            ← Диалог
+          </button>
+        </aside>
+        <main className="main-area">
+          <NotificationsPage token={token} />
+        </main>
+      </div>
+    );
+  if (panel === "scenarios")
+    return (
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="brand-name">ALTER</span>
+          </div>
+          <button className="text-button" onClick={() => choose("chat")}>
+            ← Диалог
+          </button>
+        </aside>
+        <main className="main-area">
+          <ScenariosPanel token={token} />
+        </main>
+      </div>
+    );
+  if (panel === "action-log")
+    return (
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="brand-name">ALTER</span>
+          </div>
+          <button className="text-button" onClick={() => choose("chat")}>
+            ← Диалог
+          </button>
+        </aside>
+        <main className="main-area">
+          <ActionLogPanel token={token} />
+        </main>
+      </div>
+    );
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
+        <div className="sidebar-brand">
+          <span className="brand-name">ALTER</span>
+          <button className="mobile-close" onClick={() => setMobileNav(false)}>
+            ×
+          </button>
+        </div>
+        <div className="sidebar-user">
+          <span className="avatar">
+            {account?.name?.slice(0, 1).toUpperCase() || "A"}
+          </span>
+          <div>
+            <strong>{account?.name || "Твой аккаунт"}</strong>
+            <small>{account?.email || ""}</small>
+          </div>
+        </div>
+        <nav>
+          {nav.map((item) => (
+            <button
+              className={panel === item.id ? "active" : ""}
+              key={item.id}
+              onClick={() => choose(item.id)}
+            >
+              <span>{item.icon}</span>
+              {item.title}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <button
+            onClick={() => choose("billing")}
+            className={panel === "billing" ? "active" : ""}
+          >
+            <span>◈</span> Подписка {account?.trial_active && <em>trial</em>}
+          </button>
+          <button
+            onClick={() => choose("settings")}
+            className={panel === "settings" ? "active" : ""}
+          >
+            <span>⚙</span> Настройки
+          </button>
+          <button
+            onClick={() => choose("support")}
+            className={panel === "support" ? "active" : ""}
+          >
+            <span>?</span> Поддержка
+          </button>
+          <button onClick={onLogout}>
+            <span>↪</span> Выйти
+          </button>
+        </div>
+        <div className="sidebar-footer">
+          <span className="status-dot" /> ALTER online{" "}
+          <small>web · stable</small>
+        </div>
+      </aside>
+      <main className="main-area">
+        <header className="mobile-header">
+          <button onClick={() => setMobileNav(true)}>☰</button>
+          <span>ALTER</span>
+          <button
+            aria-label={
+              panel === "settings" ? "Вернуться в диалог" : "Открыть настройки"
+            }
+            onClick={() => choose(panel === "settings" ? "chat" : "settings")}
+          >
+            {panel === "settings" ? "×" : "◉"}
+          </button>
+        </header>
+        {error && (
+          <div className="global-error error-banner">
+            {error}
+            <button onClick={() => setError("")}>×</button>
+          </div>
+        )}
+        {panel === "chat" && (
+          <ChatPanel
+            token={token}
+            account={account}
+            onMemoryChanged={loadMemory}
+          />
+        )}
+        {panel === "memory" && (
+          <MemoryPanel token={token} data={memory} reload={loadMemory} />
+        )}
+        {panel === "my-day" && <MyDayPanel data={myDay} />}
+        {panel === "reminders" && (
+          <RemindersPanel
+            token={token}
+            items={reminders}
+            setItems={setReminders}
+          />
+        )}
+        {panel === "agent" && (
+          <AgentPanel token={token} agent={agent} setAgent={setAgent} />
+        )}
+        {panel === "media" && <MediaPanel token={token} />}
+        {panel === "tools" && <ToolsPanel token={token} />}
+        {panel === "calendar" && <CalendarPanel token={token} />}
+        {panel === "diagnostics" && <DiagnosticsPanel token={token} />}
+        {panel === "billing" && (
+          <>
+            <BillingPanel
+              token={token}
+              account={account}
+              subscription={subscription}
+              reload={() => api.subscription(token).then(setSubscription)}
+            />
+            <CreditPackPanel token={token} />
+          </>
+        )}
+        {panel === "settings" && (
+          <SettingsPanel
+            token={token}
+            account={account}
+            setAccount={setAccount}
+          />
+        )}
+        {panel === "support" && <SupportPanel account={account} />}
+        {panel === "faq" && (
+          <section className="content-panel">
+            <PanelHeader
+              eyebrow="ALTER / FAQ"
+              title="Возможности рядом"
+              subtitle="Общий контракт для Telegram, mobile и web."
+            />
+            <pre className="faq-copy">{faq}</pre>
+          </section>
+        )}
+      </main>
+    </div>
+  );
 }
 
-function OwnerDiagnosticsLauncher({ token }: { token: string }) { const [owner, setOwner] = useState(false); const [open, setOpen] = useState(false); useEffect(() => { api.account(token).then((account) => setOwner(account.owner === true)).catch(() => setOwner(false)); }, [token]); if (!owner) return null; return <>{!open && <button className="diagnostics-launcher text-button" onClick={() => setOpen(true)}>Owner · диагностика</button>}{open && <div className="diagnostics-overlay"><div className="diagnostics-modal"><button className="onboarding-close" onClick={() => setOpen(false)}>×</button><DiagnosticsPanel token={token} /></div></div>}</>; }
+function OwnerDiagnosticsLauncher({ token }: { token: string }) {
+  const [owner, setOwner] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    api
+      .account(token)
+      .then((account) => setOwner(account.owner === true))
+      .catch(() => setOwner(false));
+  }, [token]);
+  if (!owner) return null;
+  return (
+    <>
+      {!open && (
+        <button
+          className="diagnostics-launcher text-button"
+          onClick={() => setOpen(true)}
+        >
+          Owner · диагностика
+        </button>
+      )}
+      {open && (
+        <div className="diagnostics-overlay">
+          <div className="diagnostics-modal">
+            <button className="onboarding-close" onClick={() => setOpen(false)}>
+              ×
+            </button>
+            <DiagnosticsPanel token={token} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
-function AppShell({ token, onLogout }: { token: string; onLogout: () => void }) { return <><LegacyAppShell token={token} onLogout={onLogout} /><NotificationLauncher token={token} /><WebOnboarding token={token} /><PaymentReturnNotice /></>; }
+function AppShell({
+  token,
+  onLogout,
+}: {
+  token: string;
+  onLogout: () => void;
+}) {
+  return (
+    <>
+      <LegacyAppShell token={token} onLogout={onLogout} />
+      <NotificationLauncher token={token} />
+      <WebOnboarding token={token} />
+      <PaymentReturnNotice />
+    </>
+  );
+}
 
-function PaymentReturnNotice() { const [visible, setVisible] = useState(false); useEffect(() => { const params = new URLSearchParams(window.location.search); if (params.get("payment") === "success") { setVisible(true); window.history.replaceState({}, "", window.location.pathname); const timer = window.setTimeout(() => setVisible(false), 9000); return () => window.clearTimeout(timer); } return undefined; }, []); return visible ? <div className="payment-return-notice" role="status"><strong>Платёж отправлен на проверку</strong><span>YooKassa подтвердит оплату, и доступ обновится автоматически.</span><button aria-label="Закрыть уведомление об оплате" onClick={() => setVisible(false)}>×</button></div> : null; }
+function PaymentReturnNotice() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") === "success") {
+      setVisible(true);
+      window.history.replaceState({}, "", window.location.pathname);
+      const timer = window.setTimeout(() => setVisible(false), 9000);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, []);
+  return visible ? (
+    <div className="payment-return-notice" role="status">
+      <strong>Платёж отправлен на проверку</strong>
+      <span>YooKassa подтвердит оплату, и доступ обновится автоматически.</span>
+      <button
+        aria-label="Закрыть уведомление об оплате"
+        onClick={() => setVisible(false)}
+      >
+        ×
+      </button>
+    </div>
+  ) : null;
+}
 
-function WebOnboarding({ token }: { token: string }) { const [account, setAccount] = useState<Account | null>(null); const [step, setStep] = useState(0); const [visible, setVisible] = useState(false); useEffect(() => { api.account(token).then((value) => { setAccount(value); const key = `alter_web_onboarding_seen_${value.id}`; if (!value.owner && value.trial_active && localStorage.getItem(key) !== "1") setVisible(true); }).catch(() => undefined); }, [token]); const close = () => { if (account) localStorage.setItem(`alter_web_onboarding_seen_${account.id}`, "1"); setVisible(false); }; if (!visible) return null; const slides = [{ kicker: "ПЕРВЫЕ 3 ДНЯ", title: "Познакомься с ALTER спокойно.", body: `У тебя ${account?.trial_days || 3} дня trial и ${account?.credit_balance || 40} AI-кредитов, чтобы почувствовать общий контекст.` }, { kicker: "ОДИН КОНТУР", title: "Чат, память, голос и действия.", body: "ALTER помнит действительно важное, помогает с файлами, поиском, напоминаниями и возвращается к незавершённым темам." }, { kicker: "ПЕРВЫЙ ШАГ", title: "Расскажи, что сейчас важно.", body: "Начни с любой задачи. Контекст останется с тобой в web, mobile и Telegram, а trial не превращается в оплату без твоего решения." }]; const slide = slides[step]; return <div className="onboarding-overlay"><section className="onboarding-card"><button className="onboarding-close" aria-label="Закрыть onboarding" onClick={close}>×</button><div className="onboarding-progress">{slides.map((_, index) => <i className={index === step ? "active" : ""} key={index} />)}</div><p className="eyebrow">ALTER / {slide.kicker}</p><h2>{slide.title}</h2><p>{slide.body}</p><div className="onboarding-actions">{step > 0 && <button className="text-button" onClick={() => setStep(step - 1)}>Назад</button>}{step < slides.length - 1 ? <button className="primary-button" onClick={() => setStep(step + 1)}>Дальше →</button> : <button className="primary-button" onClick={close}>Начать диалог →</button>}</div><small>Можно закрыть в любой момент</small></section></div>; }
+function WebOnboarding({ token }: { token: string }) {
+  const [account, setAccount] = useState<Account | null>(null);
+  const [step, setStep] = useState(0);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    api
+      .account(token)
+      .then((value) => {
+        setAccount(value);
+        const key = `alter_web_onboarding_seen_${value.id}`;
+        if (
+          !value.owner &&
+          value.trial_active &&
+          localStorage.getItem(key) !== "1"
+        )
+          setVisible(true);
+      })
+      .catch(() => undefined);
+  }, [token]);
+  const close = () => {
+    if (account)
+      localStorage.setItem(`alter_web_onboarding_seen_${account.id}`, "1");
+    setVisible(false);
+  };
+  if (!visible) return null;
+  const slides = [
+    {
+      kicker: "ПЕРВЫЕ 3 ДНЯ",
+      title: "Познакомься с ALTER спокойно.",
+      body: `У тебя ${account?.trial_days || 3} дня trial и ${account?.credit_balance || 40} AI-кредитов, чтобы почувствовать общий контекст.`,
+    },
+    {
+      kicker: "ОДИН КОНТУР",
+      title: "Чат, память, голос и действия.",
+      body: "ALTER помнит действительно важное, помогает с файлами, поиском, напоминаниями и возвращается к незавершённым темам.",
+    },
+    {
+      kicker: "ПЕРВЫЙ ШАГ",
+      title: "Расскажи, что сейчас важно.",
+      body: "Начни с любой задачи. Контекст останется с тобой в web, mobile и Telegram, а trial не превращается в оплату без твоего решения.",
+    },
+  ];
+  const slide = slides[step];
+  return (
+    <div className="onboarding-overlay">
+      <section className="onboarding-card">
+        <button
+          className="onboarding-close"
+          aria-label="Закрыть onboarding"
+          onClick={close}
+        >
+          ×
+        </button>
+        <div className="onboarding-progress">
+          {slides.map((_, index) => (
+            <i className={index === step ? "active" : ""} key={index} />
+          ))}
+        </div>
+        <p className="eyebrow">ALTER / {slide.kicker}</p>
+        <h2>{slide.title}</h2>
+        <p>{slide.body}</p>
+        <div className="onboarding-actions">
+          {step > 0 && (
+            <button className="text-button" onClick={() => setStep(step - 1)}>
+              Назад
+            </button>
+          )}
+          {step < slides.length - 1 ? (
+            <button
+              className="primary-button"
+              onClick={() => setStep(step + 1)}
+            >
+              Дальше →
+            </button>
+          ) : (
+            <button className="primary-button" onClick={close}>
+              Начать диалог →
+            </button>
+          )}
+        </div>
+        <small>Можно закрыть в любой момент</small>
+      </section>
+    </div>
+  );
+}
 
-function NotificationLauncher({ token }: { token: string }) { const [open, setOpen] = useState(false); const [items, setItems] = useState<AlterNotification[]>([]); const [unread, setUnread] = useState(0); const reload = () => api.notifications(token).then((result) => { setItems(result.notifications); setUnread(result.unread); }).catch(() => undefined); useEffect(() => { reload(); const timer = window.setInterval(reload, 30000); return () => window.clearInterval(timer); }, [token]); useEffect(() => { const handler = () => setOpen(false); window.addEventListener("alter:open-chat", handler); return () => window.removeEventListener("alter:open-chat", handler); }, []); return <><button className="notification-launcher" aria-label="Открыть уведомления" onClick={() => { setOpen(true); reload(); }}><span>◷</span>{unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}</button>{open && <div className="notification-overlay" onClick={() => setOpen(false)}><div className="notification-drawer" onClick={(event) => event.stopPropagation()}><button className="notification-close" aria-label="Закрыть уведомления" onClick={() => setOpen(false)}>×</button><NotificationsPanel token={token} items={items} unread={unread} reload={reload} /></div></div>}</>; }
+function NotificationLauncher({ token }: { token: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<AlterNotification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const reload = () =>
+    api
+      .notifications(token)
+      .then((result) => {
+        setItems(result.notifications);
+        setUnread(result.unread);
+      })
+      .catch(() => undefined);
+  useEffect(() => {
+    reload();
+    const timer = window.setInterval(reload, 30000);
+    return () => window.clearInterval(timer);
+  }, [token]);
+  useEffect(() => {
+    const handler = () => setOpen(false);
+    window.addEventListener("alter:open-chat", handler);
+    return () => window.removeEventListener("alter:open-chat", handler);
+  }, []);
+  return (
+    <>
+      <button
+        className="notification-launcher"
+        aria-label="Открыть уведомления"
+        onClick={() => {
+          setOpen(true);
+          reload();
+        }}
+      >
+        <span>◷</span>
+        {unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
+      </button>
+      {open && (
+        <div className="notification-overlay" onClick={() => setOpen(false)}>
+          <div
+            className="notification-drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="notification-close"
+              aria-label="Закрыть уведомления"
+              onClick={() => setOpen(false)}
+            >
+              ×
+            </button>
+            <NotificationsPanel
+              token={token}
+              items={items}
+              unread={unread}
+              reload={reload}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
-function MyDayPanel({ data }: { data: MyDay | null }) { return <section className="content-panel"><PanelHeader eyebrow="ALTER / СЕГОДНЯ" title="Один спокойный фокус." subtitle="Напоминания, цели и незавершённые темы — в правильном порядке." />{data ? <><div className="next-step"><span>СЛЕДУЮЩИЙ ШАГ</span><strong>{data.next_step.title}</strong><button onClick={() => window.dispatchEvent(new CustomEvent("alter:open-chat", { detail: { prompt: data.next_step.prompt } }))}>Обсудить в диалоге →</button></div><div className="focus-list">{data.focus.map((item, index) => <article key={`${item.kind}-${index}`}><i className={`priority-${item.priority}`} /><div><strong>{item.title}</strong><p>{item.detail}</p></div>{item.at && <time>{new Date(item.at).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</time>}</article>)}</div></> : <div className="loading-state">Собираю твой день…</div>}</section>; }
+function MyDayPanel({ data }: { data: MyDay | null }) {
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / СЕГОДНЯ"
+        title="Один спокойный фокус."
+        subtitle="Напоминания, цели и незавершённые темы — в правильном порядке."
+      />
+      {data ? (
+        <>
+          <div className="next-step">
+            <span>СЛЕДУЮЩИЙ ШАГ</span>
+            <strong>{data.next_step.title}</strong>
+            <button
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("alter:open-chat", {
+                    detail: { prompt: data.next_step.prompt },
+                  }),
+                )
+              }
+            >
+              Обсудить в диалоге →
+            </button>
+          </div>
+          <div className="focus-list">
+            {data.focus.map((item, index) => (
+              <article key={`${item.kind}-${index}`}>
+                <i className={`priority-${item.priority}`} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </div>
+                {item.at && (
+                  <time>
+                    {new Date(item.at).toLocaleString("ru-RU", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                )}
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="loading-state">Собираю твой день…</div>
+      )}
+    </section>
+  );
+}
 
 function ScenariosPanel({ token }: { token: string }) {
-  const [items, setItems] = useState<Scenario[]>([]); const [notice, setNotice] = useState(""); const [error, setError] = useState("");
-  useEffect(() => { api.scenarios(token).then((result) => setItems(result.items)).catch((err) => setError(friendlyError(err))); }, [token]);
-  const start = async (item: Scenario) => { try { await api.startWorkflow(token, item.id, item.title); setNotice(`Сценарий «${item.title}» запущен`); } catch (err) { setError(friendlyError(err)); } };
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / СЦЕНАРИИ" title="Готовые маршруты к результату." subtitle="Выбери направление — ALTER создаст рабочий контур и продолжит его в чате." />{notice && <div className="success-banner" role="status">{notice}</div>}{error && <div className="error-banner">{error}</div>}<div className="focus-list">{items.length ? items.map((item) => <article key={item.id}><div><strong>{item.title}</strong><p>{item.mode}</p></div><button className="text-button" onClick={() => void start(item)}>Запустить →</button></article>) : <div className="loading-state">Загружаю сценарии…</div>}</div></section>;
+  const [items, setItems] = useState<Scenario[]>([]);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api
+      .scenarios(token)
+      .then((result) => setItems(result.items))
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  const start = async (item: Scenario) => {
+    try {
+      await api.startWorkflow(token, item.id, item.title);
+      setNotice(`Сценарий «${item.title}» запущен`);
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / СЦЕНАРИИ"
+        title="Готовые маршруты к результату."
+        subtitle="Выбери направление — ALTER создаст рабочий контур и продолжит его в чате."
+      />
+      {notice && (
+        <div className="success-banner" role="status">
+          {notice}
+        </div>
+      )}
+      {error && <div className="error-banner">{error}</div>}
+      <div className="focus-list">
+        {items.length ? (
+          items.map((item) => (
+            <article key={item.id}>
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.mode}</p>
+              </div>
+              <button className="text-button" onClick={() => void start(item)}>
+                Запустить →
+              </button>
+            </article>
+          ))
+        ) : (
+          <div className="loading-state">Загружаю сценарии…</div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function ActionLogPanel({ token }: { token: string }) {
-  const [items, setItems] = useState<Record<string, string>[]>([]); const [error, setError] = useState("");
-  const load = () => api.actionLog(token).then((result) => setItems(result.items)).catch((err) => setError(friendlyError(err)));
-  useEffect(() => { void load(); }, [token]);
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / ЖУРНАЛ" title="Что ALTER сделал по твоим запросам." subtitle="Прозрачная история действий, инструментов и результатов." />{error && <div className="error-banner">{error}</div>}<button className="text-button" onClick={() => void load()}>Обновить журнал</button><div className="focus-list">{items.length ? items.map((item, index) => <article key={`${item.at || "action"}-${index}`}><div><strong>{item.tool || item.action || "Действие"}</strong><p>{item.status || "выполнено"}</p></div><time>{item.at ? new Date(item.at).toLocaleString("ru-RU") : ""}</time></article>) : <div className="empty-state">Действий пока нет или включён приватный режим.</div>}</div></section>;
+  const [items, setItems] = useState<Record<string, string>[]>([]);
+  const [error, setError] = useState("");
+  const load = () =>
+    api
+      .actionLog(token)
+      .then((result) => setItems(result.items))
+      .catch((err) => setError(friendlyError(err)));
+  useEffect(() => {
+    void load();
+  }, [token]);
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / ЖУРНАЛ"
+        title="Что ALTER сделал по твоим запросам."
+        subtitle="Прозрачная история действий, инструментов и результатов."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <button className="text-button" onClick={() => void load()}>
+        Обновить журнал
+      </button>
+      <div className="focus-list">
+        {items.length ? (
+          items.map((item, index) => (
+            <article key={`${item.at || "action"}-${index}`}>
+              <div>
+                <strong>{item.tool || item.action || "Действие"}</strong>
+                <p>{item.status || "выполнено"}</p>
+              </div>
+              <time>
+                {item.at ? new Date(item.at).toLocaleString("ru-RU") : ""}
+              </time>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            Действий пока нет или включён приватный режим.
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
-function NotificationsPage({ token }: { token: string }) { const [items, setItems] = useState<AlterNotification[]>([]); const [unread, setUnread] = useState(0); const reload = () => api.notifications(token).then((result) => { setItems(result.notifications); setUnread(result.unread); }).catch(() => undefined); useEffect(() => { void reload(); }, [token]); return <NotificationsPanel token={token} items={items} unread={unread} reload={reload} />; }
+function NotificationsPage({ token }: { token: string }) {
+  const [items, setItems] = useState<AlterNotification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const reload = () =>
+    api
+      .notifications(token)
+      .then((result) => {
+        setItems(result.notifications);
+        setUnread(result.unread);
+      })
+      .catch(() => undefined);
+  useEffect(() => {
+    void reload();
+  }, [token]);
+  return (
+    <NotificationsPanel
+      token={token}
+      items={items}
+      unread={unread}
+      reload={reload}
+    />
+  );
+}
 
-function RemindersPanel({ token, items, setItems }: { token: string; items: Reminder[]; setItems: (items: Reminder[]) => void }) { const [text, setText] = useState(""); const [when, setWhen] = useState(""); const [error, setError] = useState(""); const add = async () => { if (!text.trim() || !when) return; try { const item = await api.createReminder(token, text.trim(), new Date(when).toISOString()); setItems([...items, item]); setText(""); setWhen(""); } catch (err) { setError(friendlyError(err)); } }; const remove = async (id: number) => { try { await api.deleteReminder(token, id); setItems(items.filter((item) => item.id !== id)); } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / НАПОМИНАНИЯ" title="Не держи всё в голове." subtitle="Напоминания приходят в web, mobile и Telegram через общий аккаунт." />{error && <div className="error-banner">{error}</div>}<div className="reminder-form"><input value={text} onChange={(e) => setText(e.target.value)} placeholder="О чём напомнить?" /><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /><button className="primary-button" onClick={() => void add()}>Добавить</button></div><div className="reminder-list">{items.length ? items.map((item) => <article key={item.id}><span className="reminder-icon">◷</span><div><strong>{item.text}</strong><time>{new Date(item.remind_at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</time></div><button onClick={() => void remove(item.id)}>×</button></article>) : <div className="empty-state">Здесь появятся активные напоминания.</div>}</div></section>; }
+function RemindersPanel({
+  token,
+  items,
+  setItems,
+}: {
+  token: string;
+  items: Reminder[];
+  setItems: (items: Reminder[]) => void;
+}) {
+  const [text, setText] = useState("");
+  const [when, setWhen] = useState("");
+  const [error, setError] = useState("");
+  const add = async () => {
+    if (!text.trim() || !when) return;
+    try {
+      const item = await api.createReminder(
+        token,
+        text.trim(),
+        new Date(when).toISOString(),
+      );
+      setItems([...items, item]);
+      setText("");
+      setWhen("");
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const remove = async (id: number) => {
+    try {
+      await api.deleteReminder(token, id);
+      setItems(items.filter((item) => item.id !== id));
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / НАПОМИНАНИЯ"
+        title="Не держи всё в голове."
+        subtitle="Напоминания приходят в web, mobile и Telegram через общий аккаунт."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="reminder-form">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="О чём напомнить?"
+        />
+        <input
+          type="datetime-local"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+        />
+        <button className="primary-button" onClick={() => void add()}>
+          Добавить
+        </button>
+      </div>
+      <div className="reminder-list">
+        {items.length ? (
+          items.map((item) => (
+            <article key={item.id}>
+              <span className="reminder-icon">◷</span>
+              <div>
+                <strong>{item.text}</strong>
+                <time>
+                  {new Date(item.remind_at).toLocaleString("ru-RU", {
+                    day: "numeric",
+                    month: "long",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </div>
+              <button onClick={() => void remove(item.id)}>×</button>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            Здесь появятся активные напоминания.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
-function AgentPanel({ token, agent, setAgent }: { token: string; agent: Agent; setAgent: (agent: Agent) => void }) {
-  const [goal, setGoal] = useState(""); const [draft, setDraft] = useState(""); const [reply, setReply] = useState("");
-  const [busy, setBusy] = useState(false); const [recording, setRecording] = useState(false); const [error, setError] = useState("");
-  const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]);
-  const start = async () => { if (!goal.trim()) return; setBusy(true); setError(""); try { setAgent((await api.startAgent(token, { goal: goal.trim(), horizon_minutes: 60, autonomy_enabled: false })).agent); setGoal(""); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const run = async () => { setBusy(true); setError(""); try { setAgent((await api.runAgent(token)).agent); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const send = async () => { if (!draft.trim() || busy) return; const text = draft.trim(); setDraft(""); setBusy(true); setError(""); try { const result = await api.sendMessageStream(token, text, setReply); setReply(result.reply); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const toggleRecording = async () => { if (recording) { recorderRef.current?.stop(); setRecording(false); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); const recorder = new MediaRecorder(stream); chunksRef.current = []; recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); }; recorder.onstop = async () => { stream.getTracks().forEach((track) => track.stop()); setBusy(true); try { const file = new File(chunksRef.current, "alter-agent-voice.webm", { type: "audio/webm" }); const result = await api.transcribeAudio(token, file); setDraft((current) => [current, result.text || result.transcript || ""].filter(Boolean).join(" ")); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } }; recorder.start(); recorderRef.current = recorder; setRecording(true); } catch { setError("Не удалось получить доступ к микрофону."); } };
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / АГЕНТ" title="Доведи дело до результата." subtitle="Цель, задачи, зависимости и replan — под контролем, с подтверждением внешних действий." />{error && <div className="error-banner">{error}</div>}{!agent ? <div className="agent-start"><textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Например: подготовить запуск проекта на следующей неделе" /><button className="primary-button" disabled={busy || !goal.trim()} onClick={() => void start()}>{busy ? "Запускаю…" : "Запустить агента →"}</button></div> : <div className="agent-board"><div className="agent-summary"><span className="agent-pulse" /><div><p className="eyebrow">{agent.status || "active"}</p><h2>{agent.goal}</h2></div><button className="primary-button" disabled={busy || agent.status === "completed"} onClick={() => void run()}>{busy ? "Выполняю…" : agent.status === "completed" ? "Шаги завершены" : "Выполнить шаг"}</button></div>{reply && <div className="agent-reply"><MarkdownText text={reply} /></div>}<div className="task-list">{agent.tasks?.map((task) => <article key={task.id} className={`task-${task.status}`}><span>{task.status === "completed" ? "✓" : task.status === "blocked" ? "!" : "·"}</span><div><strong>{task.title}</strong>{task.result && <p>{task.result}</p>}</div><small>{task.status}</small></article>)}</div><div className="agent-composer"><textarea value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="Напиши агенту…" rows={1} /><button className={`agent-voice-button ${recording ? "recording" : ""}`} type="button" onClick={() => void toggleRecording()} aria-label={recording ? "Остановить запись" : "Голосовое сообщение"}>{recording ? "■" : "◖))"}</button><button className="agent-send-button" type="button" disabled={busy || !draft.trim()} onClick={() => void send()} aria-label="Отправить сообщение">{busy ? "■" : "↑"}</button></div></div>}</section>; }
+function AgentPanel({
+  token,
+  agent,
+  setAgent,
+}: {
+  token: string;
+  agent: Agent;
+  setAgent: (agent: Agent) => void;
+}) {
+  const [goal, setGoal] = useState("");
+  const [draft, setDraft] = useState("");
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState("");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const start = async () => {
+    if (!goal.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      setAgent(
+        (
+          await api.startAgent(token, {
+            goal: goal.trim(),
+            horizon_minutes: 60,
+            autonomy_enabled: false,
+          })
+        ).agent,
+      );
+      setGoal("");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const run = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      setAgent((await api.runAgent(token)).agent);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const send = async () => {
+    if (!draft.trim() || busy) return;
+    const text = draft.trim();
+    setDraft("");
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.sendMessageStream(token, text, setReply);
+      setReply(result.reply);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggleRecording = async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setBusy(true);
+        try {
+          const file = new File(chunksRef.current, "alter-agent-voice.webm", {
+            type: "audio/webm",
+          });
+          const result = await api.transcribeAudio(token, file);
+          setDraft((current) =>
+            [current, result.text || result.transcript || ""]
+              .filter(Boolean)
+              .join(" "),
+          );
+        } catch (err) {
+          setError(friendlyError(err));
+        } finally {
+          setBusy(false);
+        }
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      setError("Не удалось получить доступ к микрофону.");
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / АГЕНТ"
+        title="Доведи дело до результата."
+        subtitle="Цель, задачи, зависимости и replan — под контролем, с подтверждением внешних действий."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      {!agent ? (
+        <div className="agent-start">
+          <textarea
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="Например: подготовить запуск проекта на следующей неделе"
+          />
+          <button
+            className="primary-button"
+            disabled={busy || !goal.trim()}
+            onClick={() => void start()}
+          >
+            {busy ? "Запускаю…" : "Запустить агента →"}
+          </button>
+        </div>
+      ) : (
+        <div className="agent-board">
+          <div className="agent-summary">
+            <span className="agent-pulse" />
+            <div>
+              <p className="eyebrow">{agent.status || "active"}</p>
+              <h2>{agent.goal}</h2>
+            </div>
+            <button
+              className="primary-button"
+              disabled={busy || agent.status === "completed"}
+              onClick={() => void run()}
+            >
+              {busy
+                ? "Выполняю…"
+                : agent.status === "completed"
+                  ? "Шаги завершены"
+                  : "Выполнить шаг"}
+            </button>
+          </div>
+          {reply && (
+            <div className="agent-reply">
+              <MarkdownText text={reply} />
+            </div>
+          )}
+          <div className="task-list">
+            {agent.tasks?.map((task) => (
+              <article key={task.id} className={`task-${task.status}`}>
+                <span>
+                  {task.status === "completed"
+                    ? "✓"
+                    : task.status === "blocked"
+                      ? "!"
+                      : "·"}
+                </span>
+                <div>
+                  <strong>{task.title}</strong>
+                  {task.result && <p>{task.result}</p>}
+                </div>
+                <small>{task.status}</small>
+              </article>
+            ))}
+          </div>
+          <div className="agent-composer">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="Напиши агенту…"
+              rows={1}
+            />
+            <button
+              className={`agent-voice-button ${recording ? "recording" : ""}`}
+              type="button"
+              onClick={() => void toggleRecording()}
+              aria-label={
+                recording ? "Остановить запись" : "Голосовое сообщение"
+              }
+            >
+              {recording ? "■" : "◖))"}
+            </button>
+            <button
+              className="agent-send-button"
+              type="button"
+              disabled={busy || !draft.trim()}
+              onClick={() => void send()}
+              aria-label="Отправить сообщение"
+            >
+              {busy ? "■" : "↑"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
-function MediaPanel({ token }: { token: string }) { const [kind, setKind] = useState<"image" | "video">("image"); const [prompt, setPrompt] = useState(""); const [jobs, setJobs] = useState<MediaJob[]>([]); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const refresh = async () => { try { setJobs((await api.mediaHistory(token)).items); } catch (err) { setError(friendlyError(err)); } }; useEffect(() => { void refresh(); const timer = window.setInterval(() => { setJobs((current) => { current.filter((job) => job.status === "queued" || job.status === "running").forEach((job) => { api.mediaJob(token, job.id).then((next) => setJobs((old) => old.map((item) => item.id === next.id ? next : item))).catch(() => undefined); }); return current; }); }, 5000); return () => window.clearInterval(timer); }, [token]); const create = async () => { if (!prompt.trim()) return; setBusy(true); try { const result = await api.createMediaJob(token, kind, prompt.trim()); setJobs((old) => [result, ...old]); setPrompt(""); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } }; const download = async (job: MediaJob) => { try { const full = job.data_base64 ? job : await api.mediaJob(token, job.id); if (!full.data_base64) throw new Error("Результат ещё не готов"); const link = document.createElement("a"); link.href = `data:${full.media_type || "application/octet-stream"};base64,${full.data_base64}`; link.download = full.filename || `alter-${full.kind}`; link.click(); } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / MEDIA LAB" title="Дай идее форму." subtitle="Изображения и видео остаются в общей библиотеке задач." />{error && <div className="error-banner">{error}</div>}<div className="media-create"><div className="segmented"><button className={kind === "image" ? "selected" : ""} onClick={() => setKind("image")}>Изображение</button><button className={kind === "video" ? "selected" : ""} onClick={() => setKind("video")}>Видео</button></div><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Опиши сцену…" /><button className="primary-button" disabled={busy || !prompt.trim()} onClick={() => void create()}>{busy ? "Ставлю в очередь…" : "Создать →"}</button></div><button className="text-button" onClick={() => void refresh()}>Обновить библиотеку</button><div className="job-list">{jobs.map((job) => <article key={job.id}><div><strong>{job.kind === "image" ? "Изображение" : "Видео"}</strong><p>{job.status} · {Math.round(job.progress)}%</p></div><div className="progress"><i style={{ width: `${job.progress}%` }} /></div>{job.status === "completed" && <button className="text-button" onClick={() => void download(job)}>Скачать</button>}{job.error && <small className="error-text">{job.error}</small>}</article>)}</div></section>; }
+function MediaPanel({ token }: { token: string }) {
+  const [kind, setKind] = useState<"image" | "video">("image");
+  const [prompt, setPrompt] = useState("");
+  const [jobs, setJobs] = useState<MediaJob[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const refresh = async () => {
+    try {
+      setJobs((await api.mediaHistory(token)).items);
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => {
+      setJobs((current) => {
+        current
+          .filter((job) => job.status === "queued" || job.status === "running")
+          .forEach((job) => {
+            api
+              .mediaJob(token, job.id)
+              .then((next) =>
+                setJobs((old) =>
+                  old.map((item) => (item.id === next.id ? next : item)),
+                ),
+              )
+              .catch(() => undefined);
+          });
+        return current;
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [token]);
+  const create = async () => {
+    if (!prompt.trim()) return;
+    setBusy(true);
+    try {
+      const result = await api.createMediaJob(token, kind, prompt.trim());
+      setJobs((old) => [result, ...old]);
+      setPrompt("");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const download = async (job: MediaJob) => {
+    try {
+      const full = job.data_base64 ? job : await api.mediaJob(token, job.id);
+      if (!full.data_base64) throw new Error("Результат ещё не готов");
+      const link = document.createElement("a");
+      link.href = `data:${full.media_type || "application/octet-stream"};base64,${full.data_base64}`;
+      link.download = full.filename || `alter-${full.kind}`;
+      link.click();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / MEDIA LAB"
+        title="Дай идее форму."
+        subtitle="Изображения и видео остаются в общей библиотеке задач."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="media-create">
+        <div className="segmented">
+          <button
+            className={kind === "image" ? "selected" : ""}
+            onClick={() => setKind("image")}
+          >
+            Изображение
+          </button>
+          <button
+            className={kind === "video" ? "selected" : ""}
+            onClick={() => setKind("video")}
+          >
+            Видео
+          </button>
+        </div>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Опиши сцену…"
+        />
+        <button
+          className="primary-button"
+          disabled={busy || !prompt.trim()}
+          onClick={() => void create()}
+        >
+          {busy ? "Ставлю в очередь…" : "Создать →"}
+        </button>
+      </div>
+      <button className="text-button" onClick={() => void refresh()}>
+        Обновить библиотеку
+      </button>
+      <div className="job-list">
+        {jobs.map((job) => (
+          <article key={job.id}>
+            <div>
+              <strong>{job.kind === "image" ? "Изображение" : "Видео"}</strong>
+              <p>
+                {job.status} · {Math.round(job.progress)}%
+              </p>
+            </div>
+            <div className="progress">
+              <i style={{ width: `${job.progress}%` }} />
+            </div>
+            {job.status === "completed" && (
+              <button
+                className="text-button"
+                onClick={() => void download(job)}
+              >
+                Скачать
+              </button>
+            )}
+            {job.error && <small className="error-text">{job.error}</small>}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function ToolsPanel({ token }: { token: string }) {
-  const [query, setQuery] = useState(""); const [results, setResults] = useState<{ title: string; url: string; channel?: string }[]>([]);
-  const [voiceText, setVoiceText] = useState(""); const [audioUrl, setAudioUrl] = useState(""); const [voiceDescription, setVoiceDescription] = useState(""); const [capabilities, setCapabilities] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  const search = async () => { if (!query.trim()) return; try { setResults((await api.youtubeSearch(token, query.trim())).results); } catch (err) { setError(friendlyError(err)); } };
-  const speak = async () => { if (!voiceText.trim()) return; try { const result = await api.voiceReply(token, voiceText.trim()); if (result.audio_base64) setAudioUrl(`data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`); } catch (err) { setError(friendlyError(err)); } };
-  const downloadYoutube = async (url: string) => { setBusy(true); try { const blob = await api.youtubeAudio(token, url); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "alter-youtube-audio.mp3"; link.click(); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const createVoice = async () => { if (!voiceDescription.trim() || busy) return; setBusy(true); try { const result = await api.voiceGeneration(token, voiceDescription.trim()); const preview = result.previews?.[0]?.audio_base_64; if (preview) setAudioUrl(`data:audio/mpeg;base64,${preview}`); setVoiceDescription(""); } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } };
-  const loadCapabilities = async () => { try { setCapabilities((await api.capabilities(token)).reply); } catch (err) { setError(friendlyError(err)); } };
-  return <section className="content-panel"><PanelHeader eyebrow="ALTER / ИНСТРУМЕНТЫ" title="ALTER умеет больше, чем чат." subtitle="Поиск, голос и возможности работают через общий backend и entitlement." />{error && <div className="error-banner">{error}</div>}<div className="tool-grid">
-    <article className="tool-card"><p className="eyebrow">YOUTUBE / ПОИСК И АУДИО</p><h2>Найти и изучить</h2><div className="inline-form"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Например: лекции по дизайну" /><button onClick={() => void search()}>→</button></div>{results.map((item) => <div className="search-result" key={item.url}><a href={item.url} target="_blank" rel="noreferrer"><span>↗</span><div><strong>{item.title}</strong><small>{item.channel || "YouTube"}</small></div></a><button onClick={() => void downloadYoutube(item.url)} disabled={busy}>♫</button></div>)}</article>
-    <article className="tool-card"><p className="eyebrow">ГОЛОС ALTER</p><h2>Ответь звучанием</h2><textarea value={voiceText} onChange={(e) => setVoiceText(e.target.value)} placeholder="Текст для озвучки…" /><button className="primary-button" onClick={() => void speak()}>Озвучить →</button>{audioUrl && <audio controls src={audioUrl} />}</article>
-    <article className="tool-card"><p className="eyebrow">СОЗДАНИЕ ГОЛОСА</p><h2>Новый голос</h2><textarea value={voiceDescription} onChange={(e) => setVoiceDescription(e.target.value)} placeholder="Опиши голос для генерации…" /><button className="primary-button" disabled={busy || !voiceDescription.trim()} onClick={() => void createVoice()}>{busy ? "Создаю…" : "Создать голос →"}</button></article>
-    <article className="tool-card"><p className="eyebrow">CAPABILITIES</p><h2>Весь контур ALTER</h2><p className="tool-copy">Память, задачи, документы, vision, изображения, видео, поиск, аудио, погода, календарь и проактивная забота.</p><button className="text-button" onClick={() => void loadCapabilities()}>Показать полный список</button>{capabilities && <pre className="faq-copy">{capabilities}</pre>}</article>
-  </div></section>;
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<
+    { title: string; url: string; channel?: string }[]
+  >([]);
+  const [voiceText, setVoiceText] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [voiceDescription, setVoiceDescription] = useState("");
+  const [capabilities, setCapabilities] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const search = async () => {
+    if (!query.trim()) return;
+    try {
+      setResults((await api.youtubeSearch(token, query.trim())).results);
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const speak = async () => {
+    if (!voiceText.trim()) return;
+    try {
+      const result = await api.voiceReply(token, voiceText.trim());
+      if (result.audio_base64)
+        setAudioUrl(
+          `data:${result.audio_mime || "audio/mpeg"};base64,${result.audio_base64}`,
+        );
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const downloadYoutube = async (url: string) => {
+    setBusy(true);
+    try {
+      const blob = await api.youtubeAudio(token, url);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "alter-youtube-audio.mp3";
+      link.click();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const createVoice = async () => {
+    if (!voiceDescription.trim() || busy) return;
+    setBusy(true);
+    try {
+      const result = await api.voiceGeneration(token, voiceDescription.trim());
+      const preview = result.previews?.[0]?.audio_base_64;
+      if (preview) setAudioUrl(`data:audio/mpeg;base64,${preview}`);
+      setVoiceDescription("");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const loadCapabilities = async () => {
+    try {
+      setCapabilities((await api.capabilities(token)).reply);
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / ИНСТРУМЕНТЫ"
+        title="ALTER умеет больше, чем чат."
+        subtitle="Поиск, голос и возможности работают через общий backend и entitlement."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="tool-grid">
+        <article className="tool-card">
+          <p className="eyebrow">YOUTUBE / ПОИСК И АУДИО</p>
+          <h2>Найти и изучить</h2>
+          <div className="inline-form">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Например: лекции по дизайну"
+            />
+            <button onClick={() => void search()}>→</button>
+          </div>
+          {results.map((item) => (
+            <div className="search-result" key={item.url}>
+              <a href={item.url} target="_blank" rel="noreferrer">
+                <span>↗</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.channel || "YouTube"}</small>
+                </div>
+              </a>
+              <button
+                onClick={() => void downloadYoutube(item.url)}
+                disabled={busy}
+              >
+                ♫
+              </button>
+            </div>
+          ))}
+        </article>
+        <article className="tool-card">
+          <p className="eyebrow">ГОЛОС ALTER</p>
+          <h2>Ответь звучанием</h2>
+          <textarea
+            value={voiceText}
+            onChange={(e) => setVoiceText(e.target.value)}
+            placeholder="Текст для озвучки…"
+          />
+          <button className="primary-button" onClick={() => void speak()}>
+            Озвучить →
+          </button>
+          {audioUrl && <audio controls src={audioUrl} />}
+        </article>
+        <article className="tool-card">
+          <p className="eyebrow">СОЗДАНИЕ ГОЛОСА</p>
+          <h2>Новый голос</h2>
+          <textarea
+            value={voiceDescription}
+            onChange={(e) => setVoiceDescription(e.target.value)}
+            placeholder="Опиши голос для генерации…"
+          />
+          <button
+            className="primary-button"
+            disabled={busy || !voiceDescription.trim()}
+            onClick={() => void createVoice()}
+          >
+            {busy ? "Создаю…" : "Создать голос →"}
+          </button>
+        </article>
+        <article className="tool-card">
+          <p className="eyebrow">CAPABILITIES</p>
+          <h2>Весь контур ALTER</h2>
+          <p className="tool-copy">
+            Память, задачи, документы, vision, изображения, видео, поиск, аудио,
+            погода, календарь и проактивная забота.
+          </p>
+          <button
+            className="text-button"
+            onClick={() => void loadCapabilities()}
+          >
+            Показать полный список
+          </button>
+          {capabilities && <pre className="faq-copy">{capabilities}</pre>}
+        </article>
+      </div>
+    </section>
+  );
 }
 
-function BillingPanel({ token, account, subscription, reload }: { token: string; account: Account | null; subscription: Subscription | null; reload: () => void }) { const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [usage, setUsage] = useState<{ used: number; limit: number; remaining: number; credit_balance: number } | null>(null); useEffect(() => { api.usage(token).then(setUsage).catch(() => undefined); }, [token]); const buy = async (plan: string) => { setBusy(true); try { const result = await api.createPayment(token, plan); window.location.href = result.payment_url; } catch (err) { setError(friendlyError(err)); } finally { setBusy(false); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / ДОСТУП" title={account?.trial_active ? `${account.trial_days || 3} дня, чтобы почувствовать разницу.` : "Подписка без лишнего шума."} subtitle="Один entitlement для web, mobile и Telegram. Оплата проходит через YooKassa." />{error && <div className="error-banner">{error}</div>}<div className="billing-status"><span className="status-dot" /><div><strong>{subscription?.active ? "Доступ активен" : account?.trial_active ? "Trial активен" : "Доступ ограничен"}</strong><p>{subscription?.expires_at ? `До ${new Date(subscription.expires_at).toLocaleDateString("ru-RU")}` : "Память, диалог и общий контекст уже рядом."}</p></div></div>{usage && <><div className="quota-summary"><strong>{usage.credit_balance} AI-кредитов</strong><span>В месячном лимите осталось {usage.remaining} из {usage.limit}</span></div><div className="plan-grid">{subscription?.plans?.map((plan) => <article key={plan.id} className={plan.id === subscription.plan ? "current" : ""}><p className="eyebrow">{plan.name}</p><strong>{plan.price} ₽</strong><span>{plan.credits} AI-кредитов · {subscription.days} дней</span><button className="primary-button" disabled={busy} onClick={() => void buy(plan.id)}>{plan.id === subscription.plan ? "Продлить доступ" : "Выбрать план"}</button></article>)}</div></>}</section>; }
+function BillingPanel({
+  token,
+  account,
+  subscription,
+  reload,
+}: {
+  token: string;
+  account: Account | null;
+  subscription: Subscription | null;
+  reload: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [usage, setUsage] = useState<{
+    used: number;
+    limit: number;
+    remaining: number;
+    credit_balance: number;
+  } | null>(null);
+  useEffect(() => {
+    api
+      .usage(token)
+      .then(setUsage)
+      .catch(() => undefined);
+  }, [token]);
+  const buy = async (plan: string) => {
+    setBusy(true);
+    try {
+      const result = await api.createPayment(token, plan);
+      window.location.href = result.payment_url;
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="content-panel">
+      <button className="back-button" type="button" onClick={() => window.dispatchEvent(new CustomEvent("alter:billing-back"))}>
+        ← Назад в диалог
+      </button>
+      <PanelHeader
+        eyebrow="ALTER / ДОСТУП"
+        title={
+          account?.trial_active
+            ? `${account.trial_days || 3} дня, чтобы почувствовать разницу.`
+            : "Подписка без лишнего шума."
+        }
+        subtitle="Один entitlement для web, mobile и Telegram. Оплата проходит через YooKassa."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="billing-status">
+        <span className="status-dot" />
+        <div>
+          <strong>
+            {subscription?.active
+              ? "Доступ активен"
+              : account?.trial_active
+                ? "Trial активен"
+                : "Доступ ограничен"}
+          </strong>
+          <p>
+            {subscription?.expires_at
+              ? `До ${new Date(subscription.expires_at).toLocaleDateString("ru-RU")}`
+              : "Память, диалог и общий контекст уже рядом."}
+          </p>
+        </div>
+      </div>
+      {usage && (
+        <>
+          <div className="quota-summary">
+            <strong>{usage.credit_balance} AI-кредитов</strong>
+            <span>
+              В месячном лимите осталось {usage.remaining} из {usage.limit}
+            </span>
+          </div>
+          <div className="plan-grid">
+            {subscription?.plans?.map((plan) => (
+              <article
+                key={plan.id}
+                className={plan.id === subscription.plan ? "current" : ""}
+              >
+                <p className="eyebrow">{plan.name}</p>
+                <strong>{plan.price} ₽</strong>
+                <span>
+                  {plan.credits} AI-кредитов · {subscription.days} дней
+                </span>
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={() => void buy(plan.id)}
+                >
+                  {plan.id === subscription.plan
+                    ? "Продлить доступ"
+                    : "Выбрать план"}
+                </button>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
-function LegacySettingsPanel({ token, account, setAccount }: { token: string; account: Account | null; setAccount: (value: Account) => void }) { const [settings, setSettings] = useState<Record<string, unknown>>({}); const [error, setError] = useState(""); useEffect(() => { api.settings(token).then((result) => setSettings(result.settings)).catch((err) => setError(friendlyError(err))); }, [token]); const toggle = async (key: string) => { const next = settings[key] !== true; setSettings({ ...settings, [key]: next }); try { await api.updateSettings(token, { [key]: next }); } catch (err) { setError(friendlyError(err)); setSettings({ ...settings, [key]: !next }); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / НАСТРОЙКИ" title="Твоё пространство." subtitle={account?.email || "Общие настройки ALTER"} />{error && <div className="error-banner">{error}</div>}<div className="settings-list"><button onClick={() => void toggle("proactive_enabled")}><div><strong>Проактивный ALTER</strong><p>Мягкие check-in и важные напоминания, когда это уместно.</p></div><span className={settings.proactive_enabled !== false ? "toggle on" : "toggle"} /></button><button onClick={() => void toggle("voice_replies")}><div><strong>Голосовые ответы</strong><p>Разрешить озвучивать ответы ALTER.</p></div><span className={settings.voice_replies === true ? "toggle on" : "toggle"} /></button><button onClick={() => void toggle("private_mode")}><div><strong>Приватный режим</strong><p>Не сохранять сообщения, память и действия.</p></div><span className={settings.private_mode === true ? "toggle on" : "toggle"} /></button><button onClick={() => void api.startTelegramLink(token).then((result) => { window.location.href = result.url; }).catch((err) => setError(friendlyError(err)))}><div><strong>Связать Telegram</strong><p>{account?.telegram_linked ? "Telegram уже подключён." : "Продолжить разговор в Telegram."}</p></div><span>→</span></button></div></section>; }
+function LegacySettingsPanel({
+  token,
+  account,
+  setAccount,
+}: {
+  token: string;
+  account: Account | null;
+  setAccount: (value: Account) => void;
+}) {
+  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api
+      .settings(token)
+      .then((result) => setSettings(result.settings))
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  const toggle = async (key: string) => {
+    const next = settings[key] !== true;
+    setSettings({ ...settings, [key]: next });
+    try {
+      await api.updateSettings(token, { [key]: next });
+    } catch (err) {
+      setError(friendlyError(err));
+      setSettings({ ...settings, [key]: !next });
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / НАСТРОЙКИ"
+        title="Твоё пространство."
+        subtitle={account?.email || "Общие настройки ALTER"}
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="settings-list">
+        <button onClick={() => void toggle("proactive_enabled")}>
+          <div>
+            <strong>Проактивный ALTER</strong>
+            <p>Мягкие check-in и важные напоминания, когда это уместно.</p>
+          </div>
+          <span
+            className={
+              settings.proactive_enabled !== false ? "toggle on" : "toggle"
+            }
+          />
+        </button>
+        <button onClick={() => void toggle("voice_replies")}>
+          <div>
+            <strong>Голосовые ответы</strong>
+            <p>Разрешить озвучивать ответы ALTER.</p>
+          </div>
+          <span
+            className={settings.voice_replies === true ? "toggle on" : "toggle"}
+          />
+        </button>
+        <button onClick={() => void toggle("private_mode")}>
+          <div>
+            <strong>Приватный режим</strong>
+            <p>Не сохранять сообщения, память и действия.</p>
+          </div>
+          <span
+            className={settings.private_mode === true ? "toggle on" : "toggle"}
+          />
+        </button>
+        <button
+          onClick={() =>
+            void api
+              .startTelegramLink(token)
+              .then((result) => {
+                window.location.href = result.url;
+              })
+              .catch((err) => setError(friendlyError(err)))
+          }
+        >
+          <div>
+            <strong>Связать Telegram</strong>
+            <p>
+              {account?.telegram_linked
+                ? "Telegram уже подключён."
+                : "Продолжить разговор в Telegram."}
+            </p>
+          </div>
+          <span>→</span>
+        </button>
+      </div>
+    </section>
+  );
+}
 
-function CreditPackPanel({ token }: { token: string }) { const [packs, setPacks] = useState<{ id: string; name: string; price: string; credits: number }[]>([]); const [error, setError] = useState(""); useEffect(() => { api.creditPacks(token).then((result) => setPacks(result.packs)).catch((err) => setError(friendlyError(err))); }, [token]); const buy = async (pack: string) => { try { const result = await api.createCreditPackPayment(token, pack); window.location.href = result.payment_url; } catch (err) { setError(friendlyError(err)); } }; return <section className="content-panel"><PanelHeader eyebrow="ALTER / КРЕДИТЫ" title="Пополнить баланс" subtitle="Пакеты суммируются с остатком, не сгорают и не продлевают подписку. Подписка заканчивается через 30 дней." />{error && <div className="error-banner">{error}</div>}<div className="plan-grid">{packs.map((pack) => <article key={pack.id}><p className="eyebrow">{pack.name}</p><strong>{pack.price} ₽</strong><span>{pack.credits} AI-кредитов</span><button className="primary-button" onClick={() => void buy(pack.id)}>Купить пакет</button></article>)}</div></section>; }
+function CreditPackPanel({ token }: { token: string }) {
+  const [packs, setPacks] = useState<
+    { id: string; name: string; price: string; credits: number }[]
+  >([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api
+      .creditPacks(token)
+      .then((result) => setPacks(result.packs))
+      .catch((err) => setError(friendlyError(err)));
+  }, [token]);
+  const buy = async (pack: string) => {
+    try {
+      const result = await api.createCreditPackPayment(token, pack);
+      window.location.href = result.payment_url;
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  return (
+    <section className="content-panel">
+      <PanelHeader
+        eyebrow="ALTER / КРЕДИТЫ"
+        title="Пополнить баланс"
+        subtitle="Пакеты суммируются с остатком, не сгорают и не продлевают подписку. Подписка заканчивается через 30 дней."
+      />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="plan-grid">
+        {packs.map((pack) => (
+          <article key={pack.id}>
+            <p className="eyebrow">{pack.name}</p>
+            <strong>{pack.price} ₽</strong>
+            <span>{pack.credits} AI-кредитов</span>
+            <button
+              className="primary-button"
+              onClick={() => void buy(pack.id)}
+            >
+              Купить пакет
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-export default function App() { const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEY)); const authenticated = (next: string) => { localStorage.setItem(STORAGE_KEY, next); setToken(next); }; const logout = () => { if (token) void api.logout(token).catch(() => undefined); localStorage.removeItem(STORAGE_KEY); setToken(null); }; return token ? <AppShell token={token} onLogout={logout} /> : <AuthScreen onAuthenticated={authenticated} />; }
+export default function App() {
+  const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEY));
+  const authenticated = (next: string) => {
+    localStorage.setItem(STORAGE_KEY, next);
+    setToken(next);
+  };
+  const logout = () => {
+    if (token) void api.logout(token).catch(() => undefined);
+    localStorage.removeItem(STORAGE_KEY);
+    setToken(null);
+  };
+  return token ? (
+    <AppShell token={token} onLogout={logout} />
+  ) : (
+    <AuthScreen onAuthenticated={authenticated} />
+  );
+}
