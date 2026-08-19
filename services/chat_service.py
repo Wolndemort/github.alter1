@@ -531,6 +531,14 @@ class ChatService:
             return
         ephemeral_request = do_not_remember(text)
         new_facts = {} if ephemeral_request else extract_user_facts(text)
+        explicit_fact = None if ephemeral_request else explicit_memory_fact(text)
+        if explicit_fact:
+            preferences = dict(new_facts.get("preferences") or {})
+            explicit_facts = list(preferences.get("explicit_facts") or [])
+            if explicit_fact not in explicit_facts:
+                explicit_facts.append(explicit_fact)
+            preferences["explicit_facts"] = explicit_facts[-20:]
+            new_facts["preferences"] = preferences
         if new_facts and not private_mode:
             user.memory = merge_memory_facts(dict(user.memory or {}), new_facts)
             flag_modified(user, "memory")
