@@ -7,6 +7,11 @@ def test_parse_reminder_rejects_ambiguous_plan():
     assert parse_reminder("завтра иду к барберу") is None
 
 
+def test_ordinary_sentence_with_a_number_is_not_a_reminder_request():
+    text = "мне нужно следующее, максимальный топовый билд в новой игре + в призраке цусимы на 1 удар"
+    assert is_reminder_request(text) is False
+
+
 def test_parse_reminder_parses_explicit_time():
     result = parse_reminder("завтра в 10:30 сходить к барберу")
     assert result is not None

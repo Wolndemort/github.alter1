@@ -516,7 +516,10 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                     await session.commit()
                     reminder_result = f"Хорошо, напомню {remind_at.strftime('%d.%m в %H:%M')}: {pending_reminder['text']}"
             if reminder_result is None:
-                parsed_reminder = parse_reminder(text)
+                # A date/time fragment in an ordinary sentence is not a reminder
+                # request (e.g. "на 1 удар"). Only parse reminders after an
+                # explicit user trigger.
+                parsed_reminder = parse_reminder(text) if is_reminder_request(text) else None
                 if parsed_reminder:
                     remind_at, reminder_text = parsed_reminder
                     from data.models import Reminder
