@@ -23,7 +23,9 @@ docker compose run --rm migrations alembic upgrade head
 docker compose up -d --remove-orphans --build bot media-worker
 test "$(docker inspect -f '{{.State.Health.Status}}' alter_db_container)" = healthy
 test "$(docker inspect -f '{{.State.Status}}' alter_redis_container)" = running
-test "$(docker inspect -f '{{.State.Status}}' alter_nginx)" = running
+nginx_container="$(docker compose ps -q alter-nginx)"
+test -n "$nginx_container"
+test "$(docker inspect -f '{{.State.Status}}' "$nginx_container")" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_bot)" = running
 test "$(docker inspect -f '{{.State.Status}}' alter_media_worker)" = running
 
@@ -53,7 +55,9 @@ done
 # producing 502s through the shared Gym gateway. Recreate it after bot is
 # healthy so its upstream DNS entry is always current.
 docker compose up -d --force-recreate alter-nginx
-test "$(docker inspect -f '{{.State.Status}}' alter_nginx)" = running
+nginx_container="$(docker compose ps -q alter-nginx)"
+test -n "$nginx_container"
+test "$(docker inspect -f '{{.State.Status}}' "$nginx_container")" = running
 docker exec alter_bot python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=5)"
 if ! curl --fail --silent --show-error --max-time 15 https://api.alterai.ru/ready >/dev/null; then
   echo "WARNING: public /ready check failed; container readiness is healthy"
