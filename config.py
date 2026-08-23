@@ -116,7 +116,10 @@ class Setting(BaseSettings):
     # so a normal long reply is not mistaken for a provider failure.
     LUNA_MAX_OUTPUT_TOKENS: int = 4096
     MAX_MEMORY_OUTPUT_TOKENS: int = 250
-    MAX_MEDIA_OUTPUT_TOKENS: int = 300
+    # Vision replies are conversational answers, not one-line captions. Keep
+    # enough room for a conclusion, evidence from the image and a useful next
+    # step while still bounding provider cost.
+    MAX_MEDIA_OUTPUT_TOKENS: int = 700
     MEDIA_MAX_BYTES: int = 20 * 1024 * 1024
     MEDIA_GENERATION_CREDITS: int = 40
     FAL_TEXT_IMAGE_CREDITS: int = 100

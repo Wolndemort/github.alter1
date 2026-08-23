@@ -43,6 +43,8 @@ def test_media_reply_preserves_conversation_context(monkeypatch):
     messages = captured["messages"]
     assert messages[1] == {"role": "user", "content": "Мы обсуждали духи René de Nuit"}
     assert "нишевые ароматы" in messages[0]["content"]
+    assert "Это не запрос на подпись к фотографии" in messages[0]["content"]
+    assert "продолжающегося разговора" in messages[0]["content"]
 
 
 def test_media_reply_includes_search_context(monkeypatch):
