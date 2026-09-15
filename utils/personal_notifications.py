@@ -40,6 +40,7 @@ def quota_reminder_text(user: User, remaining: int, limit: int, level: str) -> s
         f"{name}, чтобы важная задача не оборвалась неожиданно: осталось {remaining} AI-кредитов из {limit}.",
     ))
     if level == "depleted":
+        opening = f"{name}, у тебя осталось {remaining} AI-кредитов из {limit}."
         return f"{opening}\n\nМожно продолжить после обновления доступа или докупить пакет на alterai.ru."
     return f"{opening}\n\nЕсли понадобится, пополнить баланс можно на alterai.ru — остаток пакетов суммируется и не сгорает."
 

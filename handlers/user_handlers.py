@@ -33,7 +33,7 @@ from utils.tts import synthesize_speech
 from utils.vector_memory import recall, remember
 from utils.tasks import process_session
 from utils.intent import explicit_memory_fact, is_youtube_request, youtube_query, should_recall_context
-from utils.capabilities import capabilities_reply, is_capabilities_request
+from utils.capabilities import capabilities_reply, capabilities_response, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.generation_intent import generation_kind
 from utils.memory_facts import extract_user_facts
@@ -490,7 +490,7 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
         buffer = await message.bot.download(message.voice, destination=BytesIO())
         audio_data = buffer.getvalue()
         caption = (message.caption or "").strip()
-        text = caption or await transcribe_voice(audio_data)
+        text = caption or await transcribe_voice(audio_data, "voice.ogg")
         if not text:
             await message.answer("Не смог разобрать голосовое сообщение.")
             return
@@ -501,7 +501,7 @@ async def handle_voice(message: types.Message, db_session: AsyncSession):
             db_session.add(session)
             await db_session.flush()
         if is_capabilities_request(text):
-            reply = capabilities_reply()
+            reply = capabilities_response(text)
             await answer_reply(message, reply, user)
             append_session_message(session, "user", text)
             append_session_message(session, "assistant", reply)
@@ -686,7 +686,7 @@ async def handle_audio_file(message: types.Message, db_session: AsyncSession):
             else:
                 await message.answer("Не удалось выполнить действие с этим аудио. Уточни, что именно изменить.")
             return
-        text = await transcribe_voice(data)
+        text = await transcribe_voice(data, audio.file_name or "audio.m4a")
         if not text:
             await message.answer("Не удалось расшифровать аудио. Попробуй запись покороче или добавь подпись.")
             return
@@ -937,6 +937,13 @@ async def analyze_media_again(callback: types.CallbackQuery):
 @router.callback_query(F.data == "media:edit_generated")
 async def edit_generated_image(callback: types.CallbackQuery, db_session: AsyncSession):
     """Re-edit the generated image without requiring the user to re-upload it."""
+    await callback.answer(
+        "Укажите, что именно изменить: объект или область и действие. "
+        "Например: «замени фон за человеком на ночной город, лицо и одежду не менять». "
+        "Отправьте эту инструкцию вместе с изображением.",
+        show_alert=True,
+    )
+    return
     message = callback.message
     user = await get_telegram_user(callback.from_user.id, db_session) if callback.from_user else None
     if user and not await generation_allowed(user, config.MEDIA_GENERATION_CREDITS):
@@ -965,6 +972,12 @@ async def edit_generated_image(callback: types.CallbackQuery, db_session: AsyncS
 @router.callback_query(F.data == "media:edit_canonical")
 async def edit_canonical_image(callback: types.CallbackQuery):
     """Use the same explicit edit prompt as the mobile media endpoint."""
+    await callback.answer(
+        "Уточните редактирование: что изменить, где именно и что сохранить. "
+        "Например: «убери логотип в правом верхнем углу, остальное не менять».",
+        show_alert=True,
+    )
+    return
     message = callback.message
     if not message or not message.photo:
         await callback.answer("Исходное изображение недоступно.", show_alert=True)

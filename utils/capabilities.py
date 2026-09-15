@@ -95,6 +95,13 @@ DOCUMENT_CAPABILITY_NOTE = """
 CAPABILITIES_PROMPT += DOCUMENT_CAPABILITY_NOTE
 
 
+def capabilities_response(text: str) -> str:
+    value = str(text or "").casefold()
+    if re.search(r"(?:что\s+ты\s+(?:умеешь|можешь)|чем\s+ты\s+можешь\s+помочь|какие\s+у\s+тебя\s+возможност|^/help\b|полный\s+список)", value):
+        return capabilities_reply()
+    return "Да, могу помочь с этим. Опишите конкретную задачу и пришлите нужный текст или файл — начну с неё."
+
+
 def capabilities_reply() -> str:
     return CAPABILITIES_REPLY + "\n" + CAPABILITY_KNOWLEDGE + DOCUMENT_CAPABILITY_NOTE + "\n\nПолный технический каталог:\n" + capability_catalog_text()
 

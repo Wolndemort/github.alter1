@@ -398,8 +398,6 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                 # discarded in favour of Yandex/Serper.
                 if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
                     add_provider("google", lambda: _google_cse(session, query, limit))
-                if config.TWOGIS_API_KEY and is_local_search_request(query):
-                    add_provider("2gis", lambda: _twogis(session, query, limit))
                 provider_results: dict[str, list[dict]] = {}
                 pending = set(tasks)
                 priority_names = {name for name in ("yandex", "serper") if name in tasks}
@@ -431,6 +429,12 @@ async def search_web(query: str, max_results: int = 10) -> list[dict]:
                     for item in provider_results.get(provider, [])
                 ]
                 merged = _annotate_results(_rank_results(_normalize(ordered_items, limit), limit))
+                # 2GIS is a directory fallback for local queries, never a
+                # competing primary provider. Use it only after web providers
+                # produced no usable result.
+                if not merged and config.TWOGIS_API_KEY and is_local_search_request(query):
+                    provider_results["2gis"] = await _twogis(session, query, limit)
+                    merged = _annotate_results(_rank_results(_normalize(provider_results["2gis"], limit), limit))
                 merged = await _verify_sources(session, merged, limit=2)
                 if merged:
                     increment("search.web.success", results=len(merged), providers=len(tasks))

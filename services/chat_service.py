@@ -23,7 +23,7 @@ from utils.vector_memory import recall, remember
 from utils.memory_store import merge_memory_facts
 from utils.memory_facts import extract_user_facts
 from utils.weather import get_weather, is_weather_request, parse_weather_city
-from utils.capabilities import capabilities_reply, is_capabilities_request
+from utils.capabilities import capabilities_reply, capabilities_response, is_capabilities_request
 from utils.calendar_intent import handle_calendar_request
 from utils.reminders import is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, extract_reminder_text, pending_reminder_is_fresh
 from utils.intent import conversation_mode, do_not_remember, explicit_memory_fact, should_recall_context, should_prefetch_web
@@ -34,6 +34,7 @@ from utils.workflow_state import workflow_view
 from utils.agent_engine import agent_view
 from utils.multimodal_context import attachment_context_message
 from utils.web_search import search_web
+from utils.time_context import current_time_context
 from datetime import timedelta
 
 
@@ -237,7 +238,16 @@ def _stream_system_prompt(text: str, memory: dict, *, use_tools: bool = False) -
     # state that must always be visible.
     category_names = {"identity", "health_sport", "food_drinks", "skills_career", "education", "interests_hobbies", "goals_habits", "psycho_vibe", "relationships", "family", "social", "projects", "worldview", "politics", "preferences", "style_clothing", "music", "films_series", "games", "travel", "books", "technology", "finance", "important_events", "open_loops"}
     retrieved_memory = {key: value for key, value in memory.items() if key not in category_names}
-    memory_block = "Релевантная память пользователя:\n<user_memory>\n" + json.dumps(retrieved_memory, ensure_ascii=False) + "\n</user_memory>"
+    durable_memory = {key: memory[key] for key in category_names if memory.get(key)}
+    memory_block = (
+        "CURRENT LOCAL DATE AND TIME (authoritative; use it for today/tomorrow and date answers):\n"
+        + json.dumps(memory.get("current_datetime", {}), ensure_ascii=False)
+        + "\n\nAUTHORITATIVE DURABLE USER MEMORY:\n<durable_user_memory>\n"
+        + json.dumps(durable_memory, ensure_ascii=False)[:6000]
+        + "\n</durable_user_memory>\n\nРелевантная память пользователя:\n<user_memory>\n"
+        + json.dumps(retrieved_memory, ensure_ascii=False)[:4000]
+        + "\n</user_memory>"
+    )
     return "\n\n".join((*parts, memory_block))
 
 
@@ -295,7 +305,7 @@ class ChatService:
                     await db.commit()
                     return ChatResult(reply=reply, session_id=session.id or 0)
         if is_capabilities_request(text):
-            reply = capabilities_reply()
+            reply = capabilities_response(text)
             _append(session, "assistant", reply)
             await db.commit()
             return ChatResult(reply=reply, session_id=session.id or 0)
@@ -328,6 +338,7 @@ class ChatService:
             ).order_by(Reminder.remind_at).limit(12)
         )
         memory = dict(user.memory or {})
+        memory["current_datetime"] = current_time_context(location, user.tech_stack)
         if previous_summary:
             memory["previous_session_summary"] = previous_summary
         feedback = feedback_context(user.tech_stack)
@@ -341,7 +352,7 @@ class ChatService:
             memory["active_agent"] = agent
         if isinstance(location, dict):
             memory["current_location"] = {
-                key: location[key] for key in ("city", "region", "country", "latitude", "longitude")
+                key: location[key] for key in ("city", "region", "country", "latitude", "longitude", "timezone")
                 if location.get(key) not in (None, "")
             }
             settings = dict(user.tech_stack or {})
@@ -485,7 +496,7 @@ class ChatService:
         # well-defined question through a generic streaming model that may
         # answer with a vague "tell me what to do" prompt.
         if is_capabilities_request(text):
-            reply = capabilities_reply()
+            reply = capabilities_response(text)
             _append(session, "assistant", reply)
             if not private_mode:
                 await db.commit()
@@ -554,6 +565,7 @@ class ChatService:
             ).order_by(Reminder.remind_at).limit(12)
         )
         memory = dict(user.memory or {})
+        memory["current_datetime"] = current_time_context(location, user.tech_stack)
         if previous_summary:
             memory["previous_session_summary"] = previous_summary
         feedback = feedback_context(user.tech_stack)
@@ -566,7 +578,7 @@ class ChatService:
         if agent:
             memory["active_agent"] = agent
         if isinstance(location, dict):
-            memory["current_location"] = {key: location[key] for key in ("city", "region", "country") if location.get(key) not in (None, "")}
+            memory["current_location"] = {key: location[key] for key in ("city", "region", "country", "timezone") if location.get(key) not in (None, "")}
             settings = dict(user.tech_stack or {})
             settings["current_location"] = dict(memory["current_location"])
             user.tech_stack = settings

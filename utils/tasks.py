@@ -435,6 +435,15 @@ async def monitor_checkins(bot: Bot):
                     # Сначала возвращаемся к конкретным незавершённым темам и событиям,
                     # а не к общему настроению: так не теряются обещанные follow-up.
                     active_loops = active_open_loops(memory)
+                    # A loop may be useful for a couple of check-ins, but it
+                    # must not become an endless daily notification. Once the
+                    # same topic was surfaced twice, wait for a new explicit
+                    # reminder or a changed topic instead of nagging.
+                    loop_counts = dict(settings.get("checkin_loop_prompts") or {})
+                    active_loops = [
+                        item for item in active_loops
+                        if loop_counts.get(str(item.get("title") if isinstance(item, dict) else item), 0) < 2
+                    ]
                     context = (active_loops or memory.get("health_sport") or
                                memory.get("important_events") or memory.get("goals_habits") or
                                memory.get("skills_career"))
@@ -458,6 +467,12 @@ async def monitor_checkins(bot: Bot):
                     )
                     await _send_checkin_to_telegram(bot, user, question)
                     await send_push(user, "ALTER · Check-in", question)
+                    if active_loops:
+                        loop = active_loops[0]
+                        title = str(loop.get("title") if isinstance(loop, dict) else loop)
+                        loop_counts[title] = int(loop_counts.get(title, 0)) + 1
+                        settings["checkin_loop_prompts"] = dict(list(loop_counts.items())[-100:])
+                        user.tech_stack = settings
                     user.last_checkin_at = now
                 await db.commit()
         except Exception:
@@ -479,7 +494,9 @@ async def monitor_daily_briefs(bot: Bot):
                     if settings.get("proactive_enabled", True) is False or is_quiet_time(user, now):
                         continue
                     memory = user.memory or {}
-                    loops = active_open_loops(memory)
+                    # Long-lived open loops are context, not an automatic daily focus.
+                    # This prevents one old project from being repeated indefinitely.
+                    loops = []
                     location = settings.get("current_location") if isinstance(settings.get("current_location"), dict) else {}
                     city = str(location.get("city") or location.get("region") or "Москва").strip()
                     marker = f"{marker_day}:{local_now.hour}"

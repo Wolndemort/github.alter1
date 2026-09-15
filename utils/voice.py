@@ -25,11 +25,11 @@ async def _normalize_audio(data: bytes) -> bytes:
     return data
 
 
-async def transcribe_voice(data: bytes) -> str:
+async def transcribe_voice(data: bytes, filename: str = "voice.m4a") -> str:
     metric = timer("voice_transcription")
     try:
         normalized = await _normalize_audio(bytes(data))
-        result = await speech_to_text(normalized, "voice.wav" if normalized != bytes(data) else "voice.m4a")
+        result = await speech_to_text(normalized, "voice.wav" if normalized != bytes(data) else filename)
         text = str(result.get("text") or result.get("transcript") or "").strip()
         metric(size=len(data), result="ok")
         increment("voice.transcription.success")
