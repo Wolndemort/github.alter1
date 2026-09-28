@@ -385,6 +385,10 @@ class ChatService:
                     {key: item.get(key, "") for key in ("title", "url", "content")}
                     for item in results[:6]
                 ]
+                memory["web_search_policy"] = (
+                    "Поиск выполнен успешно. Используй найденные источники в ответе и "
+                    "не говори, что у ALTER нет доступа к интернету."
+                )
             else:
                 # A factual request without evidence must not be answered with
                 # confident guesses by a fallback model.
@@ -605,6 +609,10 @@ class ChatService:
                     {key: item.get(key, "") for key in ("title", "url", "content")}
                     for item in results[:6]
                 ]
+                memory["web_search_policy"] = (
+                    "Поиск выполнен успешно. Используй найденные источники в ответе и "
+                    "не говори, что у ALTER нет доступа к интернету."
+                )
             else:
                 memory["web_search_status"] = "requested_but_unavailable"
                 memory["web_search_policy"] = "State that the fact could not be verified; do not invent specifics."
