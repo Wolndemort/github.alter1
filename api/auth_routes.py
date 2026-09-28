@@ -278,7 +278,8 @@ async def update_loop_route(request: web.Request) -> web.Response:
     async with async_session() as session:
         from data.models import User
         user = await session.get(User, user_id)
-        loops = list((user.memory or {}).get("open_loops") or []) if user else []
+        raw_loops = (user.memory or {}).get("open_loops") or {} if user else {}
+        loops = [raw_loops] if isinstance(raw_loops, dict) else list(raw_loops) if isinstance(raw_loops, list) else []
         if user is None or index < 0 or index >= len(loops):
             raise web.HTTPNotFound(text="open loop not found")
         item = dict(loops[index]) if isinstance(loops[index], dict) else {"title": str(loops[index])}

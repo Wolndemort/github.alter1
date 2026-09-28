@@ -290,3 +290,5 @@ button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
 
 /* Keep navigation independent from the chat stream height. */
 .sidebar { position:sticky; top:0; align-self:flex-start; height:100vh; box-sizing:border-box; overflow-y:auto; }
+/* Chat composer: keep enough room for multi-line prompts. */
+.composer textarea { min-height:66px; max-height:220px; overflow-y:auto; }

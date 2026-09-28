@@ -391,7 +391,7 @@ class ChatService:
                 memory["web_search_status"] = "requested_but_unavailable"
                 memory["web_search_policy"] = "State that the fact could not be verified; do not invent specifics."
 
-        parsed_reminder = parse_reminder(text)
+        parsed_reminder = parse_reminder(text) if is_reminder_request(text) else None
         if parsed_reminder:
             remind_at, reminder_text = parsed_reminder
             if private_mode:
@@ -519,7 +519,7 @@ class ChatService:
                     for index in range(0, len(reply), 96):
                         yield reply[index:index + 96]
                     return
-        parsed_reminder = parse_reminder(text)
+        parsed_reminder = parse_reminder(text) if is_reminder_request(text) else None
         if parsed_reminder or is_reminder_request(text):
             if parsed_reminder and not private_mode:
                 remind_at, reminder_text = parsed_reminder

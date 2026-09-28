@@ -84,7 +84,16 @@ def should_prefetch_web(text: str) -> bool:
     # Keep this explicit as a safety net: these terms are frequently used in
     # short game questions where the broader knowledge classifier misses the
     # inflected form. Such answers must be grounded in current sources.
-    return bool(re.search(r"\b(?:билд\w*|гайд\w*|сборк\w*|оберег\w*|оружи\w*|патч\w*|верси\w*)\b", value))
+    if re.search(r"\b(?:билд\w*|гайд\w*|сборк\w*|оберег\w*|оружи\w*|патч\w*|верси\w*)\b", value):
+        return True
+    # Naturally phrased factual questions should be grounded online without
+    # requiring the user to repeat "найди в интернете".
+    return bool(re.search(
+        r"\b(?:сколько\s+стоит|какая\s+цена|курс\w*|расписани\w*|срок\w*|доступн\w*"
+        r"|вышел\w*|вышла\w*|обновил\w*|релиз\w*|сравни\w*|отличи\w*"
+        r"|последн\w*|сейчас|сегодня|на\s+данный\s+момент|официальн\w*)\b",
+        value,
+    ))
 
 
 def is_local_search_request(text: str) -> bool:

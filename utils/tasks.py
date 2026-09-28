@@ -391,6 +391,10 @@ async def monitor_checkins(bot: Bot):
                 # user row locks open while doing that work.
                 await db.commit()
                 for user in users:
+                    # Keep per-user proactive state available for all branches.
+                    # Previously it was initialized only for trial onboarding,
+                    # so regular check-ins crashed when reading loop counters.
+                    settings = dict(user.tech_stack or {})
                     onboarding = trial_onboarding_stage(user, now)
                     if onboarding and not is_quiet_time(user, now):
                         session_result = await db.execute(select(Session).where(

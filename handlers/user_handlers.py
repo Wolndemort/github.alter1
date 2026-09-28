@@ -1774,7 +1774,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             await message.answer(f"Не смог разобрать время. Напиши, например: 18:30 или через 2 часа.")
             return
 
-    parsed_reminder = parse_reminder(message.text)
+    parsed_reminder = parse_reminder(message.text) if is_reminder_request(message.text) else None
     if parsed_reminder:
         remind_at, reminder_text = parsed_reminder
         db_session.add(Reminder(user_id=user.id, remind_at=remind_at, follow_up_at=remind_at + timedelta(hours=2), text=reminder_text[:500]))
@@ -1893,4 +1893,3 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         await db_session.refresh(session)
     except Exception as e:
         logging.exception("Failed to save Telegram session user_id=%s session_id=%s", user.id, session.id)
-

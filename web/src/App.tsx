@@ -1410,6 +1410,7 @@ function ChatPanel({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onInput={(e) => { const field = e.currentTarget; field.style.height = "auto"; field.style.height = `${Math.min(field.scrollHeight, 220)}px`; }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -1417,7 +1418,7 @@ function ChatPanel({
             }
           }}
           placeholder="Напиши ALTER…"
-          rows={1}
+          rows={2}
         />
         <button
           className={`voice-button ${recording ? "recording" : ""}`}
@@ -2432,13 +2433,6 @@ function NotificationLauncher({ token }: { token: string }) {
             className="notification-drawer"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              className="notification-close"
-              aria-label="Закрыть уведомления"
-              onClick={() => setOpen(false)}
-            >
-              ×
-            </button>
             <NotificationsPanel
               token={token}
               items={items}
