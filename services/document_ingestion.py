@@ -127,18 +127,39 @@ def create_document(filename: str, text: str, media_type: str = "") -> EditedDoc
     else:  # PDF
         try:
             from reportlab.lib.pagesizes import A4
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
             from reportlab.pdfbase.pdfmetrics import stringWidth
             from reportlab.pdfgen.canvas import Canvas
+            # Helvetica has no Cyrillic glyphs and ReportLab silently emits
+            # black squares. Prefer a system Unicode font, with a bundled
+            # DejaVu fallback for Linux containers.
+            font_name = "Helvetica"
+            font_candidates = (
+                Path("C:/Windows/Fonts/arial.ttf"),
+                Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+                Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+            )
+            for font_path in font_candidates:
+                if font_path.exists():
+                    font_name = "ALTERUnicode"
+                    try:
+                        pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+                    except (OSError, TypeError):
+                        font_name = "Helvetica"
+                    break
             buffer = io.BytesIO(); canvas = Canvas(buffer, pagesize=A4)
             width, height = A4; x, y = 48, height - 56
+            canvas.setFont(font_name, 11)
             for line in content.splitlines() or [content]:
                 words = line.split() or [""]; current = ""
                 for word in words:
                     candidate = f"{current} {word}".strip()
-                    if stringWidth(candidate, "Helvetica", 11) > width - 96 and current:
+                    if stringWidth(candidate, font_name, 11) > width - 96 and current:
                         canvas.drawString(x, y, current); y -= 16; current = word
                     else: current = candidate
                     if y < 48: canvas.showPage(); y = height - 56
+                canvas.setFont(font_name, 11)
                 canvas.drawString(x, y, current); y -= 16
             canvas.save(); output = buffer.getvalue()
         except ImportError as exc:

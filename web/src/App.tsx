@@ -3050,6 +3050,7 @@ function ToolsPanel({ token }: { token: string }) {
   const [voiceText, setVoiceText] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [voiceDescription, setVoiceDescription] = useState("");
+  const [soundPrompt, setSoundPrompt] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3101,6 +3102,16 @@ function ToolsPanel({ token }: { token: string }) {
       setBusy(false);
     }
   };
+  const createSound = async () => {
+    if (!soundPrompt.trim() || busy) return;
+    setBusy(true);
+    try {
+      const blob = await api.soundEffect(token, soundPrompt.trim());
+      setAudioUrl(URL.createObjectURL(blob));
+      setSoundPrompt("");
+    } catch (err) { setError(friendlyError(err)); }
+    finally { setBusy(false); }
+  };
   const loadCapabilities = async () => {
     try {
       setCapabilities((await api.capabilities(token)).reply);
@@ -3145,6 +3156,15 @@ function ToolsPanel({ token }: { token: string }) {
               </button>
             </div>
           ))}
+        </article>
+        <article className="tool-card">
+          <p className="eyebrow">SOUND DESIGN</p>
+          <h2>Создать звук</h2>
+          <textarea value={soundPrompt} onChange={(e) => setSoundPrompt(e.target.value)} placeholder="Например: звук дождя по крыше" />
+          <button className="primary-button" disabled={busy || !soundPrompt.trim()} onClick={() => void createSound()}>
+            {busy ? "Создаю…" : "Создать звук →"}
+          </button>
+          {audioUrl && <audio controls src={audioUrl} />}
         </article>
         <article className="tool-card">
           <p className="eyebrow">ГОЛОС ALTER</p>
