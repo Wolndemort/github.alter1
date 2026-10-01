@@ -159,6 +159,19 @@ _CREATE_FORMATS = {
 def document_creation_format(prompt: str) -> tuple[str, str] | None:
     """Return a default filename and MIME type for a create-file command."""
     value = _text(prompt).casefold()
+    # Robust UTF-8 path for real chat requests; legacy mojibake patterns
+    # below remain for backward compatibility.
+    ru_create = ("создай", "создать", "сделай", "подготовь", "сформируй", "собери", "оформи", "напиши", "экспортируй", "преврати")
+    ru_document = ("документ", "файл", "отчёт", "отчет", "договор", "таблиц", "презентац", "акт", "счёт", "счет", "резюме", "письмо")
+    if any(word in value for word in ru_create) and (any(word in value for word in ru_document) or re.search(r"\.(?:docx?|pdf|xlsx?|pptx?|odt|rtf|txt|md|csv|json)\b", value)):
+        if "pptx" in value or "презентац" in value or "powerpoint" in value:
+            return _CREATE_FORMATS["pptx"]
+        if "pdf" in value or "пдф" in value:
+            return _CREATE_FORMATS["pdf"]
+        if "xlsx" in value or "excel" in value or "таблиц" in value:
+            return _CREATE_FORMATS["xlsx"]
+        if "docx" in value or "word" in value:
+            return _CREATE_FORMATS["docx"]
     if not re.search(r"\b(?:создай|создать|сделай|подготовь|сформируй|сгенерируй|собери|оформи|напиши|сверстай|экспортируй|выгрузи|сохрани|преврати|generate|create|make|prepare|build|export|draft|write|turn)\b", value):
         return None
     if not re.search(r"(?:\b(?:документ\w*|файл\w*|отч[её]т\w*|договор\w*|таблиц\w*|презентац\w*|шаблон\w*|акт\w*|счет\w*|резюме|письмо|document|file|report|contract|table|presentation|template|invoice|resume|letter)\b|\.(?:docx?|pdf|xlsx?|pptx?|odt|rtf|txt|md|csv|json)\b|\b(?:docx?|pdf|xlsx?|pptx?|odt|rtf|txt|md|csv|json|markdown|word|excel|powerpoint|ворд|пдф|эксель|таблица|презентация)\b)", value):
