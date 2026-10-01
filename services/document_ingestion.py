@@ -577,6 +577,9 @@ def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, 
     except ImportError as exc:
         raise ValueError("PDF layout editing is not installed") from exc
     def search_rects(page, phrase: str) -> list[object]:
+        direct = page.search_for(phrase)
+        if direct:
+            return direct
         wanted = re.findall(r"\w+", phrase.casefold(), flags=re.UNICODE)
         if not wanted:
             return []
