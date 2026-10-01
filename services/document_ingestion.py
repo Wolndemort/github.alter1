@@ -603,6 +603,17 @@ def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, 
                 matches.append(rect)
         return matches
 
+    # Rebuild the extracted text with the same Unicode PDF serializer used by
+    # creation. PyMuPDF redaction annotations can visually show replacement
+    # glyphs while leaving an unusable text map for Cyrillic extraction.
+    document = extract_document(filename, data, media_type)
+    text = document.text
+    for old, new in replacements:
+        text, count = _replace_document_text(text, old, new)
+        if count == 0:
+            raise ValueError("PDF text was not found; scanned PDFs require OCR before editing")
+    return create_document(filename, text, media_type)
+
     try:
         source = fitz.open(stream=bytes(data), filetype="pdf")
         changed = 0
