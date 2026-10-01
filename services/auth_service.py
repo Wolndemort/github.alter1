@@ -23,12 +23,18 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7
 VERIFICATION_TTL = timedelta(minutes=10)
 MAX_VERIFICATION_ATTEMPTS = 5
+DISPOSABLE_EMAIL_DOMAINS = {
+    "10minutemail.com", "guerrillamail.com", "mailinator.com", "tempmail.com",
+    "yopmail.com", "dropmail.me", "moakt.com", "getnada.com", "sharklasers.com",
+}
 
 
 def normalize_email(email: str) -> str:
     value = email.strip().casefold()
     if not EMAIL_RE.fullmatch(value):
         raise ValueError("invalid email")
+    if value.rsplit("@", 1)[-1] in DISPOSABLE_EMAIL_DOMAINS:
+        raise ValueError("temporary email addresses are not supported")
     return value
 
 

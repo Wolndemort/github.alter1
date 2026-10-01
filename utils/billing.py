@@ -252,7 +252,10 @@ async def check_and_activate(session: AsyncSession, payment_key: str) -> bool:
     if payment_type == "credit_pack":
         user.credit_balance = int(user.credit_balance or 0) + int(pack_info(pack)["credits"])
     else:
-        base = user.subscription_expires_at if has_active_subscription(user) else now
+        # A trial makes ``has_active_subscription`` true, but does not populate
+        # subscription_expires_at. A paid plan bought during trial must start
+        # immediately instead of attempting ``None + timedelta``.
+        base = user.subscription_expires_at if user.subscription_expires_at and user.subscription_expires_at > now else now
         user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
         settings = dict(user.tech_stack or {})
         settings["subscription_plan"] = plan
@@ -323,7 +326,7 @@ async def charge_recurring_payment(session: AsyncSession, user: User) -> str:
         await session.commit()
         return "pending"
     now = datetime.now(timezone.utc)
-    base = user.subscription_expires_at if has_active_subscription(user) else now
+    base = user.subscription_expires_at if user.subscription_expires_at and user.subscription_expires_at > now else now
     user.subscription_expires_at = base + timedelta(days=config.SUBSCRIPTION_DAYS)
     user.next_charge_at = user.subscription_expires_at
     user.payment_method_id = str((data.get("payment_method") or {}).get("id") or user.payment_method_id)

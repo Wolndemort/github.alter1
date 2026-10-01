@@ -161,6 +161,20 @@ def test_check_and_activate_verifies_provider_and_saves_card(configured_yookassa
     assert user.next_charge_at == user.subscription_expires_at
 
 
+def test_paid_subscription_can_be_activated_during_trial(configured_yookassa):
+    user = User(id=7, first_name="Test", memory={}, tech_stack={"trial_started_at": datetime.now(timezone.utc).isoformat()})
+    payment = Payment(user_id=7, provider_payment_id="trial-pay", idempotence_key="trial-key", amount_rub="990.00", status="pending")
+    session = Session(payment=payment, user=user)
+    FakeClient.response = FakeResponse(200, {
+        "status": "succeeded", "paid": True,
+        "amount": {"value": "990.00", "currency": "RUB"},
+        "metadata": {"payment_key": "trial-key", "user_id": "7"},
+    })
+    assert run(check_and_activate(session, "trial-key")) is True
+    assert user.subscription_expires_at is not None
+    assert user.subscription_expires_at > datetime.now(timezone.utc)
+
+
 def test_ego_payment_uses_ego_amount_and_persists_plan(configured_yookassa):
     user = User(id=7, first_name="Test", memory={}, tech_stack={})
     session = Session(user=user)

@@ -36,6 +36,11 @@ def test_token_rejects_tampering():
         verify_token(("A" if body[0] != "A" else "B") + body[1:] + "." + signature, "test-secret")
 
 
+def test_disposable_email_is_rejected_for_trial_registration():
+    with pytest.raises(ValueError, match="temporary email"):
+        normalize_email("new-user@mailinator.com")
+
+
 def test_verification_code_is_six_digits_and_hashed(monkeypatch):
     monkeypatch.setattr(auth_service.config, "APP_AUTH_SECRET", type("Secret", (), {"get_secret_value": lambda self: "test-secret"})())
     code = generate_verification_code()

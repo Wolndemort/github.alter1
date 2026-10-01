@@ -63,6 +63,13 @@ async def main():
             # client-controlled X-Forwarded-For chain here.
             remote = request.headers.get("X-Real-IP") or request.remote or "unknown"
             try:
+                if request.path == "/api/v1/auth/register" and not await allow_http_request(
+                    redis,
+                    f"trial-register:{remote}",
+                    config.TRIAL_REGISTRATION_LIMIT,
+                    config.TRIAL_REGISTRATION_WINDOW_SECONDS,
+                ):
+                    raise web.HTTPTooManyRequests(text="trial registration limit reached")
                 if not await allow_http_request(redis, remote, config.HTTP_RATE_LIMIT, config.HTTP_RATE_WINDOW_SECONDS):
                     raise web.HTTPTooManyRequests(text="too many requests")
             except web.HTTPTooManyRequests:
