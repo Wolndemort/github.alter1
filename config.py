@@ -20,8 +20,8 @@ class Setting(BaseSettings):
     OPENROUTER_FREE_MODEL_5: str = "nvidia/nemotron-3-nano-30b-a3b:free"
     OPENROUTER_FREE_VISION_MODEL: str = "google/gemma-4-31b-it:free"
     OPENROUTER_FREE_VISION_MODEL_2: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-    OPENROUTER_REASONING_MODEL: str = "inclusionai/ling-2.6-1t"
-    OPENROUTER_FALLBACK_MODEL: str = "inclusionai/ling-2.6-flash"
+    OPENROUTER_REASONING_MODEL: str = "openai/gpt-5.6-luna"
+    OPENROUTER_FALLBACK_MODEL: str = "openai/gpt-5.6-luna"
     OPENROUTER_FALLBACK_MODEL_2: str = "openai/gpt-oss-120b"
     # Safety switch: never spend money unless this is explicitly enabled.
     OPENROUTER_ALLOW_PAID_FALLBACK: bool = True

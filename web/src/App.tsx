@@ -2058,6 +2058,7 @@ function LegacyAppShell({
     setMobileNav(false);
     setError("");
   };
+  const backToChat = () => choose("chat");
   if (panel === "notifications")
     return (
       <div className="app-shell">
@@ -2070,6 +2071,7 @@ function LegacyAppShell({
           </button>
         </aside>
         <main className="main-area">
+          <BackToChat onClick={backToChat} />
           <NotificationsPage token={token} />
         </main>
       </div>
@@ -2086,6 +2088,7 @@ function LegacyAppShell({
           </button>
         </aside>
         <main className="main-area">
+          <BackToChat onClick={backToChat} />
           <ScenariosPanel token={token} />
         </main>
       </div>
@@ -2102,6 +2105,7 @@ function LegacyAppShell({
           </button>
         </aside>
         <main className="main-area">
+          <BackToChat onClick={backToChat} />
           <ActionLogPanel token={token} />
         </main>
       </div>
@@ -2183,6 +2187,9 @@ function LegacyAppShell({
             <button onClick={() => setError("")}>×</button>
           </div>
         )}
+        {panel !== "chat" && panel !== "billing" && (
+          <BackToChat onClick={backToChat} />
+        )}
         {panel === "chat" && (
           <ChatPanel
             token={token}
@@ -2239,6 +2246,14 @@ function LegacyAppShell({
         )}
       </main>
     </div>
+  );
+}
+
+function BackToChat({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="back-button panel-back-button" type="button" onClick={onClick}>
+      ← Назад в диалог
+    </button>
   );
 }
 
