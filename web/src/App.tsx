@@ -1410,6 +1410,19 @@ function ChatPanel({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={(e) => {
+            const images = Array.from(e.clipboardData.items)
+              .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => Boolean(file));
+            if (!images.length) return;
+            e.preventDefault();
+            setFiles((current) => [
+              ...current,
+              ...images.map((file, index) => new File([file], file.name || `alter-screenshot-${Date.now()}-${index + 1}.png`, { type: file.type || "image/png" })),
+            ].slice(0, 10));
+            setError("");
+          }}
           onInput={(e) => { const field = e.currentTarget; field.style.height = "auto"; field.style.height = `${Math.min(field.scrollHeight, 220)}px`; }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -1435,7 +1448,7 @@ function ChatPanel({
         </button>
       </div>
       <p className="composer-hint">
-        До 10 изображений · Enter — отправить · Shift + Enter — новая строка
+        До 10 изображений · Ctrl/Cmd + V — вставить скриншот · Enter — отправить · Shift + Enter — новая строка
       </p>
     </section>
   );
