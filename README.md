@@ -2,7 +2,7 @@
 
 ## Current verified status
 
-The full audit is documented in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md). Current checks: backend `520 passed, 2 skipped`, mobile `27/27`, web `7 passed`, TypeScript clean, quality benchmark `7/7`. Production verification also covers 64-step ordinary-agent execution and TXT/searchable-PDF artifact roundtrips.
+The full audit is documented in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md). The current verification baseline is backend `573 passed`, web `9 passed` with a successful production build, and mobile TypeScript plus `18 passed`. Production verification covers streaming, memory, reminders, media, documents, PDF Unicode editing and PPTX image embedding. Operational status is summarized in [docs/CURRENT_STATUS_2026-10-01.md](docs/CURRENT_STATUS_2026-10-01.md).
 
 Payment and quota rules, refunds, idempotency and unit economics are documented in [docs/QUOTAS_AND_UNIT_ECONOMICS.md](docs/QUOTAS_AND_UNIT_ECONOMICS.md).
 
@@ -11,7 +11,7 @@ Payment and quota rules, refunds, idempotency and unit economics are documented 
 Универсальный durable-agent, его executor, автономный scheduler, tool registry
 и локальный benchmark описаны в [docs/AGENT_EXECUTION.md](docs/AGENT_EXECUTION.md).
 
-## Актуальный production baseline (2026-08-08)
+## Актуальный production baseline (2026-10-01)
 
 - Backend: 476 тестов проходят локально; mobile TypeScript и тесты проходят.
 - Тарифы: ALTER Personal — 990 ₽/30 дней; ALTER Ego — 2990 ₽/30 дней.
@@ -44,7 +44,11 @@ Parity checks: `/new_session` and the mobile New Chat action persist summaries; 
 - fal.ai configuration uses `MEDIA_PROVIDER=fal`, `FAL_BASE_URL=https://fal.run`, `fal-ai/flux-pro/kontext/max` for image editing, and `fal-ai/kling-video/v2.1/master/image-to-video` for video. Keep the API key only in `.env` on the server.
 - The Telegram/app identity merge avoids lazy SQLAlchemy relationship IO; notification monitors never send an app database id as a Telegram chat id.
 
-Latest verification baseline: `476` backend tests, `23/23` mobile tests, mobile TypeScript check, Python compilation, and `git diff --check` pass. Expo Go push limitations are expected; production remote push requires a development build/TestFlight.
+- Redis production memory is capped at 256 MB with `noeviction`; Docker log rotation is configured.
+- External content is untrusted and native Russian prompt-injection phrases are detected.
+- The physical-device roadmap starts with a Raspberry Pi voice client; see [ALTER_PHYSICAL_VOICE_PROTOTYPE.md](ALTER_PHYSICAL_VOICE_PROTOTYPE.md).
+
+An older local verification snapshot recorded `476` backend tests and `23/23` mobile tests. The latest recorded baseline is documented in `docs/FINAL_AUDIT.md`; Expo Go push limitations are expected, and production remote push requires a development build/TestFlight.
 
 ### Metro / Expo quick start
 

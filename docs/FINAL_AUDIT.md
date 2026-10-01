@@ -1,6 +1,6 @@
 # ALTER final audit
 
-Updated: 2026-08-15
+Updated: 2026-10-01
 
 ## Product surfaces
 
@@ -43,8 +43,9 @@ These are observed production samples, not a universal guarantee; provider load 
 
 ## Verification baseline
 
-- Backend: `529 passed, 2 skipped`.
-- Mobile: `27/27` tests.
+- Backend: `573 passed`.
+- Mobile: TypeScript clean and `18` tests passed in the CI test set.
+- Web: `9` tests passed and production build successful.
 - Mobile TypeScript: clean.
 - Web production build: successful.
 - Deterministic quality benchmark: `7/7`.
@@ -57,11 +58,26 @@ These are observed production samples, not a universal guarantee; provider load 
   provider `401` and is not advertised by the capability catalog.
 - Non-billing availability load check: 50 requests at concurrency 10, 0 failures, p50 `84.8 ms`, p95 `688.3 ms`.
 
+## Operational verification
+
+- YooKassa is connected and real payments have been completed successfully.
+- Daily PostgreSQL backups are uploaded to Yandex Object Storage.
+- Restore drill was completed twice during the last week; both restores succeeded
+  on a separate test database.
+- These operational checks are confirmed by the project owner and complement the
+  automated test baseline above.
+
 ## Remaining operational work
+
+- Redis is capped at 256 MB with `noeviction`; Docker logs use bounded rotation.
+- Native Russian prompt-injection patterns are covered by regression tests.
+- Web preserves a partial streamed response after a transport interruption.
+- Physical-device planning is documented in `ALTER_PHYSICAL_VOICE_PROTOTYPE.md`.
 
 1. Repeat production smoke after every deployment.
 2. Track p50/p95/p99 by auth, quota, DB, model first token, full reply and TTS stages.
 3. Reconcile YooKassa payment records periodically with the provider.
+4. Keep the daily Yandex Object Storage backup and weekly restore-drill cadence.
 
 The bounded public load check is safe to run without a user token:
 

@@ -20,7 +20,7 @@ The mobile application is a parallel client. Telegram polling and `handlers/`
 remain separate; shared behavior lives in `services/`, HTTP adapters in `api/`,
 and the future React Native client in `mobile/`.
 
-Add this server-side variable before enabling application login:
+Application login is enabled in production. These are the required server-side variables:
 
 ```dotenv
 APP_AUTH_SECRET=replace-with-a-long-random-value
