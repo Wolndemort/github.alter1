@@ -241,9 +241,14 @@ button, input, textarea, select,
   box-shadow: none;
 }
 
-button:focus, button:focus-visible, input:focus, textarea:focus, select:focus {
+button:focus, input:focus, textarea:focus, select:focus {
   outline: 0;
   box-shadow: none;
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .auth-card { background:#0b0b0b; }
