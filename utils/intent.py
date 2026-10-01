@@ -136,7 +136,9 @@ def conversation_mode(text: str) -> str:
 
 def explicit_memory_fact(text):
     match = re.search(r"(?:\u0437\u0430\u043f\u043e\u043c\u043d\u0438|\u0437\u0430\u043f\u0438\u0448\u0438|\u0441\u043e\u0445\u0440\u0430\u043d\u0438)\s*(?:[,!:;-]\s*)?(?:\u0447\u0442\u043e\s+)?(.+)", text or "", re.I)
-    return match.group(1).strip(" .,!\\n") if match else None
+    # Do not use a literal ``\\n`` character class here: it removes the
+    # letter ``n`` from words such as ``Python``.
+    return match.group(1).strip(" .,!").strip() if match else None
 
 
 def do_not_remember(text: str) -> bool:
