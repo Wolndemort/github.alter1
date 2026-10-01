@@ -1092,7 +1092,13 @@ function ChatPanel({
       }
     } catch (err) {
       setError(friendlyError(err));
-      setItems((old) => old.filter((item) => item.id !== pendingId));
+      setItems((old) => old.flatMap((item) => {
+        if (item.id !== pendingId) return [item];
+        if (item.text.trim()) {
+          return [{ ...item, streaming: false, actionNotice: "Ответ прервался — можно нажать «Продолжить»." }];
+        }
+        return [];
+      }));
     } finally {
       setBusy(false);
       abortRef.current = null;
