@@ -242,6 +242,10 @@ def _extract_rtf(data: bytes) -> str:
             if codepoint < 0:
                 codepoint += 65536
             result.append(chr(codepoint))
+            # RTF Unicode escapes conventionally include an ANSI fallback
+            # character ("?") which must not become part of extracted text.
+            if index < len(value) and value[index] == "?":
+                index += 1
         elif word in {"fonttbl", "colortbl", "stylesheet", "info", "pict", "object"}:
             skip_destination += 1
     return "".join(result)
