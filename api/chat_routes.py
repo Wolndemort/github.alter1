@@ -134,6 +134,18 @@ async def chat_route(request: web.Request) -> web.Response:
                     "audio_filename": "alter-sound.mp3",
                     "audio_mime": "audio/mpeg",
                 })
+        creation = document_creation_format(message_text)
+        if creation:
+            filename, media_type = creation
+            try:
+                result = await ChatService().reply(session, user_id, payload.get("message", ""))
+                artifact = create_document(filename, result.reply, media_type)
+                artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
+            except ValueError as exc:
+                raise web.HTTPBadRequest(text=str(exc))
+            if not artifact_id:
+                raise web.HTTPServiceUnavailable(text="document artifact could not be saved")
+            return web.json_response({"reply": f"Готово — создал файл {artifact.filename}.", "session_id": result.session_id, "artifact_id": artifact_id, "media_filename": artifact.filename, "media_mime": artifact.media_type})
         try:
             location = payload.get("location")
             result = await ChatService().reply(session, user_id, payload.get("message", ""), location) if location else await ChatService().reply(session, user_id, payload.get("message", ""))
