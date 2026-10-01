@@ -108,6 +108,13 @@ def test_text_document_edit_is_explicit_and_exportable():
     assert result.data == b"new value"
 
 
+def test_native_russian_document_commands_are_intuitive():
+    assert document_creation_format("сделай презентацию с картинками") [0].endswith(".pptx")
+    from utils.document_commands import document_edit_instruction, is_document_edit_request
+    assert is_document_edit_request("замени черновик на опубликовано")
+    assert document_edit_instruction("замени черновик на опубликовано") == "черновик => опубликовано"
+
+
 def test_json_document_edit_preserves_valid_json():
     result = edit_document("data.json", b'{"status": "draft"}', '"draft" => "ready"')
     assert b'"ready"' in result.data

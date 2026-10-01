@@ -69,6 +69,14 @@ def document_edit_instruction(prompt: str) -> str:
     reviewable and safe.
     """
     value = _text(prompt).strip()
+    # Natural Russian edit requests, kept as escapes so matching is immune to
+    # the legacy mojibake literals elsewhere in this module.
+    native = re.match(r"^\s*(?:\u0437\u0430\u043c\u0435\u043d\u0438|\u0438\u0437\u043c\u0435\u043d\u0438|\u0438\u0441\u043f\u0440\u0430\u0432\u044c)\s+(.+?)\s+\u043d\u0430\s+(.+?)\s*$", value, flags=re.I)
+    if native:
+        return f"{native.group(1).strip()} => {native.group(2).strip()}"
+    native_remove = re.match(r"^\s*(?:\u0443\u0434\u0430\u043b\u0438|\u0443\u0431\u0435\u0440\u0438)\s+(.+?)\s*$", value, flags=re.I)
+    if native_remove:
+        return f"{native_remove.group(1).strip()} =>"
     value = re.sub(r"^\s*alter\s*[:,-]?\s*", "", value, flags=re.I)
     value = re.sub(r"^\s*/edit\s*", "", value, flags=re.I)
     value = _clean(value)
@@ -107,6 +115,8 @@ def document_edit_instruction(prompt: str) -> str:
 
 def is_document_edit_request(prompt: str) -> bool:
     value = _text(prompt).strip()
+    if re.match(r"^\s*(?:\u0437\u0430\u043c\u0435\u043d\u0438|\u0438\u0437\u043c\u0435\u043d\u0438|\u0438\u0441\u043f\u0440\u0430\u0432\u044c|\u0443\u0434\u0430\u043b\u0438|\u0443\u0431\u0435\u0440\u0438)\b", value, flags=re.I):
+        return True
     value = re.sub(r"^\s*alter\s*[:,-]?\s*", "", value, flags=re.I)
     value = re.sub(r"^\s*(?:please|можешь|можно|could you)\s*[, :]?\s*", "", value, flags=re.I)
     value = " ".join(value.casefold().split())

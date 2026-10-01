@@ -69,6 +69,18 @@ _CAPABILITY_PATTERNS = (
 
 def is_capabilities_request(text: str) -> bool:
     value = (text or "").casefold()
+    # Native UTF-8 Russian phrases must be recognized before the legacy
+    # mojibake compatibility patterns below.
+    intuitive = (
+        "\u0447\u0442\u043e \u0442\u044b \u0443\u043c\u0435\u0435\u0448\u044c",
+        "\u0447\u0442\u043e \u0442\u044b \u043c\u043e\u0436\u0435\u0448\u044c",
+        "\u043a\u0430\u043a\u0438\u0435 \u0444\u0443\u043d\u043a\u0446\u0438\u0438",
+        "\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u0438",
+        "\u043a\u0430\u043a \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c\u0441\u044f",
+        "\u043f\u043e\u043a\u0430\u0436\u0438 \u043a\u043e\u043c\u0430\u043d\u0434\u044b",
+    )
+    if any(phrase in value for phrase in intuitive) or value.strip() == "/help":
+        return True
     if re.search(r"\bчто\s+(?:умеет|может)\b", value):
         return True
     if re.search(r"\b(?:может ли|умеет ли|умеешь ли|можно ли)\b", value) and re.search(
