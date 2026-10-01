@@ -139,7 +139,16 @@ async def chat_route(request: web.Request) -> web.Response:
             filename, media_type = creation
             try:
                 result = await ChatService().reply(session, user_id, payload.get("message", ""))
-                artifact = create_document(filename, result.reply, media_type)
+                images = []
+                if filename.endswith(".pptx") and any(marker in message_text.casefold() for marker in ("image", "picture", "photo", "\u043a\u0430\u0440\u0442\u0438\u043d", "\u0444\u043e\u0442\u043e", "\u0438\u0437\u043e\u0431\u0440\u0430\u0436")):
+                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\u044e?", "", message_text, flags=re.I).strip()
+                    for candidate in await search_images(query, limit=4):
+                        downloaded = await download_image(candidate.get("url", ""))
+                        if downloaded:
+                            images.append((downloaded[0], downloaded[1]))
+                        if len(images) >= 4:
+                            break
+                artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             except ValueError as exc:
                 raise web.HTTPBadRequest(text=str(exc))
@@ -459,7 +468,16 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 filename, media_type = creation
                 await response.write(("data: " + json.dumps({"type": "status", "status": "creating_document", "format": filename.rsplit(".", 1)[-1]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 result = await ChatService().reply(session, user_id, text)
-                artifact = create_document(filename, result.reply, media_type)
+                images = []
+                if filename.endswith(".pptx") and any(marker in text.casefold() for marker in ("image", "picture", "photo", "\u043a\u0430\u0440\u0442\u0438\u043d", "\u0444\u043e\u0442\u043e", "\u0438\u0437\u043e\u0431\u0440\u0430\u0436")):
+                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\u044e?", "", text, flags=re.I).strip()
+                    for candidate in await search_images(query, limit=4):
+                        downloaded = await download_image(candidate.get("url", ""))
+                        if downloaded:
+                            images.append((downloaded[0], downloaded[1]))
+                        if len(images) >= 4:
+                            break
+                artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
                 if not artifact_id:
                     raise web.HTTPServiceUnavailable(text="Не удалось сохранить созданный документ")

@@ -56,7 +56,7 @@ class EditedDocument:
     data: bytes
 
 
-def create_document(filename: str, text: str, media_type: str = "") -> EditedDocument:
+def create_document(filename: str, text: str, media_type: str = "", images: list[tuple[bytes, str]] | None = None) -> EditedDocument:
     """Create a real document from bounded plain text.
 
     The content is intentionally text-first: the assistant produces the
@@ -103,6 +103,7 @@ def create_document(filename: str, text: str, media_type: str = "") -> EditedDoc
             from pptx import Presentation
             from pptx.util import Inches
             presentation = Presentation()
+            image_items = list(images or [])
             for index, paragraph in enumerate(re.split(r"\n\s*\n", content)):
                 slide = presentation.slides.add_slide(presentation.slide_layouts[1 if index == 0 else 5])
                 if index == 0:
@@ -111,6 +112,9 @@ def create_document(filename: str, text: str, media_type: str = "") -> EditedDoc
                 else:
                     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(5))
                     box.text_frame.text = paragraph
+                if image_items and index < len(image_items):
+                    image_data, _ = image_items[index]
+                    slide.shapes.add_picture(io.BytesIO(image_data), Inches(9), Inches(1.4), width=Inches(3.5))
             buffer = io.BytesIO(); presentation.save(buffer); output = buffer.getvalue()
         except ImportError as exc:
             raise ValueError("PPTX support is not installed") from exc
