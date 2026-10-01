@@ -623,7 +623,7 @@ def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, 
                     changed += 1
             page.apply_redactions()
             for rect, new, font_size in pending_text:
-                kwargs = {"fontsize": font_size, "align": 0, "color": (0, 0, 0)}
+                kwargs = {"fontsize": font_size, "color": (0, 0, 0)}
                 if font_path:
                     kwargs["fontfile"] = str(font_path)
                 # A replacement can be wider than the original phrase. Draw
