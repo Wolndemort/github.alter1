@@ -134,6 +134,21 @@ def test_pdf_edit_matches_case_and_whitespace_and_returns_real_pdf():
     assert result.media_type == "application/pdf"
 
 
+def test_pdf_edit_preserves_cyrillic_replacement_text():
+    fitz = pytest.importorskip("fitz")
+    source = fitz.open()
+    page = source.new_page()
+    page.insert_text((72, 72), "Статус: черновик")
+    raw = source.tobytes()
+    source.close()
+    result = edit_document("report.pdf", raw, "черновик => опубликовано", "application/pdf")
+    edited = fitz.open(stream=result.data, filetype="pdf")
+    text = "\n".join(page.get_text() for page in edited)
+    edited.close()
+    assert "опубликовано" in text
+    assert "черновик" not in text
+
+
 def test_scanned_pdf_reports_ocr_requirement_without_fake_success():
     fitz = pytest.importorskip("fitz")
     source = fitz.open()

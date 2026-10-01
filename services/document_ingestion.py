@@ -603,12 +603,27 @@ def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, 
     try:
         source = fitz.open(stream=bytes(data), filetype="pdf")
         changed = 0
+        font_candidates = (
+            Path("C:/Windows/Fonts/arial.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+        )
+        font_path = next((path for path in font_candidates if path.exists()), None)
         for page in source:
+            pending_text: list[tuple[object, str, float]] = []
             for old, new in replacements:
                 for rect in search_rects(page, old):
-                    page.add_redact_annot(rect, text=new, fontname="helv", fontsize=max(6, min(18, rect.height * 0.8)), align=0)
+                    font_size = max(6, min(18, rect.height * 0.8))
+                    page.add_redact_annot(rect, text="", fill=(1, 1, 1))
+                    if new.strip():
+                        pending_text.append((rect, new, font_size))
                     changed += 1
             page.apply_redactions()
+            for rect, new, font_size in pending_text:
+                kwargs = {"fontsize": font_size, "align": 0, "color": (0, 0, 0)}
+                if font_path:
+                    kwargs["fontfile"] = str(font_path)
+                page.insert_textbox(rect, new, **kwargs)
         if not changed:
             source.close()
             raise ValueError("PDF text was not found; scanned PDFs require OCR before editing")
