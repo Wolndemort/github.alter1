@@ -354,7 +354,10 @@ def _response_token_budget(messages, requested: int | None, task: str | None) ->
         "faq", "capabilities", "list", "all items", "in detail",
     )
     if task not in {"reasoning", "planning"} and len(text) < 240 and not any(marker in text for marker in long_reply_markers):
-        return min(config.MAX_OUTPUT_TOKENS, 320)
+        # 320 tokens is too small for natural Russian replies: a model can
+        # reach the limit while still answering a simple question. Keep the
+        # fast path, but leave enough room for a complete thought.
+        return max(config.MAX_OUTPUT_TOKENS, 800)
     if len(text) >= 240 or any(marker in text for marker in long_reply_markers):
         return max(config.MAX_OUTPUT_TOKENS, config.LONG_REPLY_MAX_OUTPUT_TOKENS)
     return config.MAX_OUTPUT_TOKENS

@@ -147,7 +147,7 @@ class Setting(BaseSettings):
     # Keep free-model failures bounded during testing. A long sequential
     # fallback chain otherwise looks like the bot stopped responding.
     AI_TIMEOUT_SECONDS: int = 15
-    AI_STREAM_MODEL_TIMEOUT_SECONDS: int = 10
+    AI_STREAM_MODEL_TIMEOUT_SECONDS: int = 30
     AI_STREAM_MAX_MODELS: int = 2
     # Temporarily move models that return transient provider errors to the end
     # of the fallback route instead of retrying them on every new message.
