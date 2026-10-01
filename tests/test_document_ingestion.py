@@ -135,7 +135,7 @@ def test_pdf_edit_matches_case_and_whitespace_and_returns_real_pdf():
 
 
 def test_pdf_edit_preserves_cyrillic_replacement_text():
-    pytest.importorskip("fitz")
+    fitz = pytest.importorskip("fitz")
     raw = create_document("source.pdf", "Статус: черновик", "application/pdf").data
     result = edit_document("report.pdf", raw, "черновик => опубликовано", "application/pdf")
     edited = fitz.open(stream=result.data, filetype="pdf")
