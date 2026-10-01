@@ -623,7 +623,11 @@ def edit_pdf_document(filename: str, data: bytes, replacements: list[tuple[str, 
                 kwargs = {"fontsize": font_size, "align": 0, "color": (0, 0, 0)}
                 if font_path:
                     kwargs["fontfile"] = str(font_path)
-                page.insert_textbox(rect, new, **kwargs)
+                # A replacement can be wider than the original phrase. Draw
+                # from the original baseline instead of constraining it to
+                # the old rectangle, otherwise PyMuPDF may silently return
+                # a negative textbox result and insert nothing.
+                page.insert_text((rect.x0, rect.y1 - 1), new, **kwargs)
         if not changed:
             source.close()
             raise ValueError("PDF text was not found; scanned PDFs require OCR before editing")
