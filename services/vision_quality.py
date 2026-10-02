@@ -6,6 +6,7 @@ compared and scored before it reaches an agent or an export route.
 from __future__ import annotations
 
 import re
+import difflib
 from dataclasses import dataclass
 
 
@@ -31,11 +32,22 @@ def normalize_findings(items: list[dict] | None, *, source: str = "vision") -> l
 
 
 def compare_documents(before: str, after: str) -> dict:
-    """Return line-level additions/removals for contract/version review."""
+    """Return an ordered, duplicate-safe line diff for version review."""
     old, new = before.splitlines(), after.splitlines()
-    removed = [line for line in old if line not in new]
-    added = [line for line in new if line not in old]
-    return {"changed": bool(removed or added), "added": added[:200], "removed": removed[:200], "change_count": len(added) + len(removed)}
+    added: list[str] = []
+    removed: list[str] = []
+    opcodes = difflib.SequenceMatcher(a=old, b=new, autojunk=False).get_opcodes()
+    for tag, old_start, old_end, new_start, new_end in opcodes:
+        if tag in {"delete", "replace"}:
+            removed.extend(old[old_start:old_end])
+        if tag in {"insert", "replace"}:
+            added.extend(new[new_start:new_end])
+    return {
+        "changed": bool(added or removed),
+        "added": added[:200],
+        "removed": removed[:200],
+        "change_count": len(added) + len(removed),
+    }
 
 
 def layout_edit_plan(text: str, replacements: list[dict]) -> dict:

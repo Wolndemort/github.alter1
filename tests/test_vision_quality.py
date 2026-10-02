@@ -12,6 +12,12 @@ def test_document_diff_finds_contract_changes():
     assert result["change_count"] == 2
 
 
+def test_document_diff_preserves_duplicate_rows_and_order():
+    result = compare_documents("Item\nItem\nTotal", "Item\nChanged\nItem\nTotal")
+    assert result["added"] == ["Changed"]
+    assert result["removed"] == []
+
+
 def test_geometry_is_normalized():
     assert object_geometry(50, 25, 100, 50, 200, 100) == {"x": .25, "y": .25, "width": .5, "height": .5}
 
