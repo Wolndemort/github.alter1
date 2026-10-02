@@ -85,6 +85,7 @@ jobs:
           APP_AUTH_SECRET: ci-only-test-secret
           APP_EMAIL_MODE: console
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/alter_project_db
+          REDIS_URL: redis://localhost:6379/0
         run: python -m pytest -q
 
       - name: Run mobile checks
