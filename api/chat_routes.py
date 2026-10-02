@@ -148,6 +148,12 @@ async def chat_route(request: web.Request) -> web.Response:
                             images.append((downloaded[0], downloaded[1]))
                         if len(images) >= 4:
                             break
+                    if not images:
+                        try:
+                            generated = await generate_image(query or message_text)
+                            images.append((generated.data, generated.media_type))
+                        except Exception:
+                            logging.exception("presentation image fallback failed")
                 artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             except ValueError as exc:
@@ -477,6 +483,12 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                             images.append((downloaded[0], downloaded[1]))
                         if len(images) >= 4:
                             break
+                    if not images:
+                        try:
+                            generated = await generate_image(query or text)
+                            images.append((generated.data, generated.media_type))
+                        except Exception:
+                            logging.exception("presentation image fallback failed")
                 artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
                 if not artifact_id:

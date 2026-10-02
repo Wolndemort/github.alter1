@@ -178,11 +178,14 @@ def _presentation_paragraphs(content: str) -> list[str]:
     # Models commonly return Markdown slide headings. Treat each heading as
     # one slide instead of turning every paragraph/list item into a slide.
     heading_matches = list(re.finditer(r"(?im)^\s*#{1,3}\s*slide\s+\d+\s*[—:-]?\s*", normalized))
+    if not heading_matches:
+        heading_matches = list(re.finditer(r"(?i)#+\s*slide\s+\d+\s*[—:-]?\s*[^\n]*", normalized))
     if heading_matches:
         blocks = []
         for index, match in enumerate(heading_matches):
             end = heading_matches[index + 1].start() if index + 1 < len(heading_matches) else len(normalized)
-            heading = re.sub(r"^\s*#{1,3}\s*", "", match.group(0)).strip(" —:-")
+            heading_text = match.group(0) or normalized[match.start():].splitlines()[0]
+            heading = re.sub(r"^\s*#{1,3}\s*", "", heading_text).strip(" —:-")
             body = normalized[match.end():end].strip(" \n-_")
             blocks.append("\n".join(part for part in (heading, body) if part).strip())
     else:
