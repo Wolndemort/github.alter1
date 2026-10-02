@@ -2,6 +2,7 @@
 
 import base64
 import asyncio
+import io
 import json
 import logging
 import re
@@ -33,6 +34,26 @@ from utils.audio_search import download_audio, remove_audio
 from utils.video_search import download_video, remove_video
 from utils.image_search import download_image, search_images
 from utils.web_search import search_web
+
+
+def _presentation_fallback_image(label: str) -> tuple[bytes, str]:
+    """Create a small branded illustration when external image providers fail."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", (1280, 720), (18, 22, 31))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((70, 70, 1210, 650), radius=36, fill=(31, 72, 83), outline=(231, 190, 91), width=6)
+    draw.ellipse((180, 180, 540, 540), fill=(231, 190, 91))
+    draw.ellipse((740, 180, 1100, 540), fill=(224, 91, 76))
+    draw.line((360, 360, 920, 360), fill=(245, 245, 238), width=22)
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 54)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((100, 570), str(label or "ALTER presentation")[:42], fill=(245, 245, 238), font=font)
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue(), "image/png"
 from utils.youtube_search import search_youtube
 from utils.capabilities import capabilities_reply, is_capabilities_request
 from utils.reminders import extract_reminder_text, is_reminder_request, parse_reminder, parse_time_answer, looks_like_time_answer, pending_reminder_is_fresh
@@ -154,6 +175,7 @@ async def chat_route(request: web.Request) -> web.Response:
                             images.append((generated.data, generated.media_type))
                         except Exception:
                             logging.exception("presentation image fallback failed")
+                            images.append(_presentation_fallback_image(query or message_text))
                 artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             except ValueError as exc:
@@ -489,6 +511,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                             images.append((generated.data, generated.media_type))
                         except Exception:
                             logging.exception("presentation image fallback failed")
+                            images.append(_presentation_fallback_image(query or text))
                 artifact = create_document(filename, result.reply, media_type, images=images)
                 artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
                 if not artifact_id:
