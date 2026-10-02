@@ -108,6 +108,23 @@ def test_text_document_edit_is_explicit_and_exportable():
     assert result.data == b"new value"
 
 
+def test_pptx_creation_removes_acknowledgement_from_title_and_embeds_images():
+    pytest.importorskip("pptx")
+    from PIL import Image
+    from io import BytesIO
+    from services.document_ingestion import create_document, extract_document
+
+    image = BytesIO()
+    Image.new("RGB", (80, 80), "red").save(image, format="JPEG")
+    result = create_document(
+        "jiu-jitsu.pptx",
+        "Хорошо, сделаю презентацию.\n\nДжиу-джитсу\nИстория и базовые принципы.",
+        images=[(image.getvalue(), "image/jpeg")],
+    )
+    assert "Хорошо" not in extract_document("jiu-jitsu.pptx", result.data).text
+    assert "Джиу-джитсу" in extract_document("jiu-jitsu.pptx", result.data).text
+
+
 def test_native_russian_document_commands_are_intuitive():
     assert document_creation_format("сделай презентацию с картинками") [0].endswith(".pptx")
     from utils.document_commands import document_edit_instruction, is_document_edit_request

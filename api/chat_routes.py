@@ -140,8 +140,8 @@ async def chat_route(request: web.Request) -> web.Response:
             try:
                 result = await ChatService().reply(session, user_id, payload.get("message", ""))
                 images = []
-                if filename.endswith(".pptx") and any(marker in message_text.casefold() for marker in ("image", "picture", "photo", "\u043a\u0430\u0440\u0442\u0438\u043d", "\u0444\u043e\u0442\u043e", "\u0438\u0437\u043e\u0431\u0440\u0430\u0436")):
-                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\u044e?", "", message_text, flags=re.I).strip()
+                if filename.endswith(".pptx"):
+                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", message_text, flags=re.I).strip()
                     for candidate in await search_images(query, limit=4):
                         downloaded = await download_image(candidate.get("url", ""))
                         if downloaded:
@@ -469,8 +469,8 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "creating_document", "format": filename.rsplit(".", 1)[-1]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 result = await ChatService().reply(session, user_id, text)
                 images = []
-                if filename.endswith(".pptx") and any(marker in text.casefold() for marker in ("image", "picture", "photo", "\u043a\u0430\u0440\u0442\u0438\u043d", "\u0444\u043e\u0442\u043e", "\u0438\u0437\u043e\u0431\u0440\u0430\u0436")):
-                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\u044e?", "", text, flags=re.I).strip()
+                if filename.endswith(".pptx"):
+                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", text, flags=re.I).strip()
                     for candidate in await search_images(query, limit=4):
                         downloaded = await download_image(candidate.get("url", ""))
                         if downloaded:

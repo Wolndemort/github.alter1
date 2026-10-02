@@ -104,11 +104,12 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
             from pptx.util import Inches
             presentation = Presentation()
             image_items = list(images or [])
-            for index, paragraph in enumerate(re.split(r"\n\s*\n", content)):
+            for index, paragraph in enumerate(_presentation_paragraphs(content)):
                 slide = presentation.slides.add_slide(presentation.slide_layouts[1 if index == 0 else 5])
                 if index == 0:
-                    slide.shapes.title.text = paragraph[:180]
-                    slide.placeholders[1].text = paragraph
+                    lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+                    slide.shapes.title.text = (lines[0] if lines else paragraph)[:180]
+                    slide.placeholders[1].text = "\n".join(lines[1:]) or paragraph
                 else:
                     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(5))
                     box.text_frame.text = paragraph
@@ -169,6 +170,19 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
         except ImportError as exc:
             raise ValueError("PDF support is not installed") from exc
     return EditedDocument(safe_name, _media_type(extension, media_type), output)
+
+
+def _presentation_paragraphs(content: str) -> list[str]:
+    """Turn model output into slide blocks without assistant acknowledgements."""
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", content) if block.strip()]
+    if blocks and re.match(r"^(?:хорошо|конечно|с удовольствием|готово|вот)\b", blocks[0], re.I):
+        blocks.pop(0)
+    cleaned = []
+    for block in blocks:
+        block = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", block, flags=re.I).strip()
+        if block:
+            cleaned.append(block)
+    return cleaned or ["Презентация ALTER"]
 
 
 def _clean(text: str) -> str:
