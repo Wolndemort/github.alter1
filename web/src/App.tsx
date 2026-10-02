@@ -2770,6 +2770,12 @@ function AgentPanel({
   const [error, setError] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null);
+  const voicePreview = useMemo(
+    () => (voiceFile ? URL.createObjectURL(voiceFile) : ""),
+    [voiceFile],
+  );
+  useEffect(() => () => { if (voicePreview) URL.revokeObjectURL(voicePreview); }, [voicePreview]);
   const start = async () => {
     if (!goal.trim()) return;
     setBusy(true);
@@ -2837,12 +2843,14 @@ function AgentPanel({
           const file = new File(chunksRef.current, "alter-agent-voice.webm", {
             type: "audio/webm",
           });
+          setVoiceFile(file);
           const result = await api.transcribeAudio(token, file);
           setDraft((current) =>
             [current, result.text || result.transcript || ""]
               .filter(Boolean)
               .join(" "),
           );
+          setVoiceFile(null);
         } catch (err) {
           setError(friendlyError(err));
         } finally {
@@ -2923,6 +2931,36 @@ function AgentPanel({
             ))}
           </div>
           <div className="agent-composer">
+            {voiceFile && (
+              <div className="agent-voice-retry">
+                <audio controls src={voicePreview} />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        const result = await api.transcribeAudio(token, voiceFile);
+                        setDraft((current) =>
+                          [current, result.text || result.transcript || ""]
+                            .filter(Boolean)
+                            .join(" "),
+                        );
+                        setVoiceFile(null);
+                      } catch (err) {
+                        setError(friendlyError(err));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  Повторить расшифровку
+                </button>
+              </div>
+            )}
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
