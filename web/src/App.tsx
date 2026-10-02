@@ -964,6 +964,13 @@ function ChatPanel({
           mime: file.type,
           name: file.name,
         })),
+      ...(currentFiles.length === 1 && currentFiles[0].type.startsWith("audio/")
+        ? {
+            audioUrl: URL.createObjectURL(currentFiles[0]),
+            audioMime: currentFiles[0].type,
+            filename: currentFiles[0].name,
+          }
+        : {}),
     };
     const pendingId = `${Date.now()}-a`;
     setItems((old) => [
@@ -1092,12 +1099,16 @@ function ChatPanel({
       }
     } catch (err) {
       setError(friendlyError(err));
+      // Keep the original blob available after a network/API failure. The
+      // user can inspect it and press Send again instead of losing the voice
+      // message when the composer is reset before the request completes.
+      setFiles(currentFiles);
       setItems((old) => old.flatMap((item) => {
         if (item.id !== pendingId) return [item];
         if (item.text.trim()) {
           return [{ ...item, streaming: false, actionNotice: "Ответ прервался — можно нажать «Продолжить»." }];
         }
-        return [];
+        return [{ ...item, streaming: false, actionNotice: "Не удалось отправить. Голосовое сохранено — нажмите «Отправить» ещё раз." }];
       }));
     } finally {
       setBusy(false);
