@@ -92,8 +92,13 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
         try:
             from openpyxl import Workbook
             workbook = Workbook(); sheet = workbook.active; sheet.title = "ALTER"
-            for row_index, line in enumerate(content.splitlines() or [content], 1):
-                for column_index, value in enumerate(line.split(","), 1):
+            table_lines = [line.strip() for line in content.splitlines() if line.strip().startswith("|") and line.strip().endswith("|")]
+            if table_lines:
+                rows = [line.strip("|").split("|") for line in table_lines if not re.match(r"^\|?\s*:?-{2,}", line)]
+            else:
+                rows = [line.split(",") for line in content.splitlines() or [content]]
+            for row_index, row in enumerate(rows, 1):
+                for column_index, value in enumerate(row, 1):
                     sheet.cell(row=row_index, column=column_index, value=value.strip())
             buffer = io.BytesIO(); workbook.save(buffer); output = buffer.getvalue()
         except ImportError as exc:

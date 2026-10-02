@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 
 import pytest
 
@@ -123,6 +124,15 @@ def test_pptx_creation_removes_acknowledgement_from_title_and_embeds_images():
     )
     assert "Хорошо" not in extract_document("jiu-jitsu.pptx", result.data).text
     assert "Джиу-джитсу" in extract_document("jiu-jitsu.pptx", result.data).text
+
+
+def test_xlsx_creation_parses_markdown_tables():
+    openpyxl = pytest.importorskip("openpyxl")
+    from services.document_ingestion import create_document
+    result = create_document("budget.xlsx", "| Item | Planned | Actual |\n| --- | ---: | ---: |\n| Travel | 100 | 80 |", "")
+    workbook = openpyxl.load_workbook(BytesIO(result.data), read_only=True)
+    rows = list(workbook.active.iter_rows(values_only=True))
+    assert rows == [("Item", "Planned", "Actual"), ("Travel", "100", "80")]
 
 
 def test_native_russian_document_commands_are_intuitive():
