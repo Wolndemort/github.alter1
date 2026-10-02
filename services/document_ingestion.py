@@ -174,12 +174,26 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
 
 def _presentation_paragraphs(content: str) -> list[str]:
     """Turn model output into slide blocks without assistant acknowledgements."""
-    blocks = [block.strip() for block in re.split(r"\n\s*\n", content) if block.strip()]
+    normalized = content.replace("\r\n", "\n").strip()
+    # Models commonly return Markdown slide headings. Treat each heading as
+    # one slide instead of turning every paragraph/list item into a slide.
+    heading_matches = list(re.finditer(r"(?im)^\s*#{1,3}\s*slide\s+\d+\s*[—:-]?\s*", normalized))
+    if heading_matches:
+        blocks = []
+        for index, match in enumerate(heading_matches):
+            end = heading_matches[index + 1].start() if index + 1 < len(heading_matches) else len(normalized)
+            heading = re.sub(r"^\s*#{1,3}\s*", "", match.group(0)).strip(" —:-")
+            body = normalized[match.end():end].strip(" \n-_")
+            blocks.append("\n".join(part for part in (heading, body) if part).strip())
+    else:
+        blocks = [block.strip() for block in re.split(r"\n\s*\n", normalized) if block.strip()]
     if blocks and re.match(r"^(?:хорошо|конечно|с удовольствием|готово|вот)\b", blocks[0], re.I):
+        blocks.pop(0)
+    if blocks and re.match(r"^(?:i can[’']t|я не могу)\b", blocks[0], re.I):
         blocks.pop(0)
     cleaned = []
     for block in blocks:
-        block = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", block, flags=re.I).strip()
+        block = re.sub(r"^```(?:text|markdown)?\s*|\s*```$|^---+$", "", block, flags=re.I | re.M).strip()
         if block:
             cleaned.append(block)
     return cleaned or ["Презентация ALTER"]

@@ -141,7 +141,7 @@ async def chat_route(request: web.Request) -> web.Response:
                 result = await ChatService().reply(session, user_id, payload.get("message", ""))
                 images = []
                 if filename.endswith(".pptx"):
-                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", message_text, flags=re.I).strip()
+                    query = re.sub(r"\b(?:create|make|prepare|build|presentation|pptx|slide|slides|with|relevant|pictures?|picture|images?)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*|\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", message_text, flags=re.I).strip(" ,.-")
                     for candidate in await search_images(query, limit=4):
                         downloaded = await download_image(candidate.get("url", ""))
                         if downloaded:
@@ -470,7 +470,7 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 result = await ChatService().reply(session, user_id, text)
                 images = []
                 if filename.endswith(".pptx"):
-                    query = re.sub(r"\b(?:create|make|prepare|build)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", text, flags=re.I).strip()
+                    query = re.sub(r"\b(?:create|make|prepare|build|presentation|pptx|slide|slides|with|relevant|pictures?|picture|images?)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*|\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", text, flags=re.I).strip(" ,.-")
                     for candidate in await search_images(query, limit=4):
                         downloaded = await download_image(candidate.get("url", ""))
                         if downloaded:
