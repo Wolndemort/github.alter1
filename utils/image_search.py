@@ -46,8 +46,14 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
             params = {"q": query, "limit": limit}
             async with session.get("https://commons.wikimedia.org/w/rest.php/v1/search/page", params=params, headers={"User-Agent": "ALTER/1.0"}) as response:
                 pages = (await response.json()).get("pages", []) if response.status == 200 else []
-        public = [{"title": item.get("title", ""), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
-                  for item in pages if (item.get("thumbnail") or {}).get("url")]
+        public = []
+        for item in pages:
+            title = str(item.get("title", ""))
+            thumb = (item.get("thumbnail") or {}).get("url", "")
+            if not thumb or title.casefold().endswith(".pdf") or "/page1-" in thumb:
+                continue
+            thumb = thumb.replace("/60px-", "/800px-")
+            public.append({"title": title, "url": thumb, "mime": (item.get("thumbnail") or {}).get("mimetype", "")})
         if public:
             return public + yandex
     except Exception:
