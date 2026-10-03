@@ -111,3 +111,18 @@ async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[b
                     return None
     except Exception:
         return None
+
+
+async def search_presentation_images(slides: list[str], topic: str) -> list[tuple[bytes, str]]:
+    """Find public images for slides; never invokes paid image generation."""
+    images: list[tuple[bytes, str]] = []
+    for slide in slides:
+        query = " ".join((slide.splitlines()[0] if slide.splitlines() else slide).split())
+        candidates = await search_images(f"{topic} {query}", limit=5)
+        for candidate in candidates:
+            downloaded = await download_image(candidate.get("url", ""))
+            if downloaded:
+                data, mime, _ = downloaded
+                images.append((data, mime))
+                break
+    return images

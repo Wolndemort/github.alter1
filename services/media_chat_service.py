@@ -19,6 +19,7 @@ from services.media_generation import generate_image, generate_video
 from utils.vector_memory import recall, remember
 from services.elevenlabs_media import ElevenLabsError, design_voice, speech_to_speech
 from services.document_ingestion import create_document, presentation_paragraphs
+from utils.image_search import search_presentation_images
 from services.voice_commands import is_voice_change_request, is_voice_generation_request, requested_voice_id, voice_description
 from utils.feedback_memory import feedback_context
 from utils.quality import sanitize_public_reply
@@ -138,17 +139,7 @@ async def reply(db: AsyncSession, user_id: int, prompt: str, content_type: str, 
             content = await ChatService().reply(db, user_id, prompt)
             images = []
             if filename.casefold().endswith(".pptx") and re.search(r"(?:фото|фотограф|картин|изображ|иллюстрац|picture|image|photo)", prompt, re.I):
-                for slide in presentation_paragraphs(content.reply):
-                    try:
-                        visual = await generate_image(
-                            f"Создай качественную иллюстрацию для слайда презентации. "
-                            f"Тема запроса: {prompt}. Содержание слайда: {slide}. "
-                            "Без текста, логотипов и водяных знаков."
-                        )
-                        images.append((visual.data, visual.media_type))
-                    except Exception:
-                        import logging
-                        logging.exception("Voice presentation slide image generation failed")
+                images = await search_presentation_images(presentation_paragraphs(content.reply), prompt)
             artifact = create_document(filename, content.reply, media_type, images=images)
             artifact_id = await save_artifact(user_id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             reply = f"Готово — создал {artifact.filename} по голосовой команде. Файл можно скачать из чата."

@@ -22,7 +22,7 @@ from io import BytesIO
 from utils.youtube_search import search_youtube
 from utils.audio_search import download_audio, remove_audio
 from utils.video_search import download_video, remove_video
-from utils.image_search import download_image, search_images
+from utils.image_search import download_image, search_images, search_presentation_images
 from utils.weather import get_weather, is_weather_request, parse_weather_city
 from utils.marketplace_links import format_marketplace_links
 from utils.keyboards import memory_keyboard, memory_categories_keyboard, settings_keyboard, cabinet_keyboard, voice_keyboard, media_actions_keyboard, SETTINGS_BACK_BUTTON, SETTINGS_BUTTON, VOICE_BUTTON, VOICE_ON_BUTTON, VOICE_OFF_BUTTON, BUY_SUBSCRIPTION_BUTTON, CABINET_BUTTON, SUPPORT_BUTTON, BACK_BUTTON, AUTO_RENEW_ON_BUTTON, AUTO_RENEW_OFF_BUTTON, UNLINK_CARD_BUTTON
@@ -1648,18 +1648,7 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
             result = await ChatService().reply(db_session, user.id, message.text)
             images = []
             if filename.casefold().endswith(".pptx") and re.search(r"(?:фото|фотограф|картин|изображ|иллюстрац|picture|image|photo)", message.text, re.I):
-                # Generate visuals from the actual slide blocks and embed their
-                # bytes in the presentation; do not send them as loose chat media.
-                for slide in presentation_paragraphs(result.reply):
-                    try:
-                        visual = await generate_image(
-                            f"Создай качественную иллюстрацию для слайда презентации. "
-                            f"Тема запроса: {message.text}. Содержание слайда: {slide}. "
-                            "Без текста, логотипов и водяных знаков."
-                        )
-                        images.append((visual.data, visual.media_type))
-                    except Exception:
-                        logging.exception("Presentation slide image generation failed")
+                images = await search_presentation_images(presentation_paragraphs(result.reply), message.text)
             artifact = create_document(filename, result.reply, media_type, images=images)
             artifact_id = await save_artifact(user.id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             await db_session.commit()
