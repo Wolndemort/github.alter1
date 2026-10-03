@@ -55,7 +55,7 @@ from utils.keyboards import generated_image_keyboard
 from utils.keyboards import VOICE_CREATE_BUTTON, VOICE_LIST_BUTTON
 from utils.metrics import increment
 from utils.quality import sanitize_public_reply
-from services.document_ingestion import create_document, edit_document, extract_document, document_profile
+from services.document_ingestion import create_document, edit_document, extract_document, document_profile, presentation_paragraphs
 from services.chat_service import ChatService
 from services.artifact_store import latest_artifact, save_artifact
 from services.chat_service import record_document_turn
@@ -1646,7 +1646,21 @@ async def handle_any_message(message: types.Message, db_session: AsyncSession, b
         try:
             filename, media_type = creation
             result = await ChatService().reply(db_session, user.id, message.text)
-            artifact = create_document(filename, result.reply, media_type)
+            images = []
+            if filename.casefold().endswith(".pptx") and re.search(r"(?:фото|фотограф|картин|изображ|иллюстрац|picture|image|photo)", message.text, re.I):
+                # Generate visuals from the actual slide blocks and embed their
+                # bytes in the presentation; do not send them as loose chat media.
+                for slide in presentation_paragraphs(result.reply):
+                    try:
+                        visual = await generate_image(
+                            f"Создай качественную иллюстрацию для слайда презентации. "
+                            f"Тема запроса: {message.text}. Содержание слайда: {slide}. "
+                            "Без текста, логотипов и водяных знаков."
+                        )
+                        images.append((visual.data, visual.media_type))
+                    except Exception:
+                        logging.exception("Presentation slide image generation failed")
+            artifact = create_document(filename, result.reply, media_type, images=images)
             artifact_id = await save_artifact(user.id, artifact.data, artifact.filename, artifact.media_type, kind="document", operation="document_creation")
             await db_session.commit()
             await message.answer_document(BufferedInputFile(artifact.data, filename=artifact.filename), caption=f"Готово — создал {artifact.filename}. Можно скачать и продолжить редактирование.")

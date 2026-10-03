@@ -109,7 +109,7 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
             from pptx.util import Inches
             presentation = Presentation()
             image_items = list(images or [])
-            for index, paragraph in enumerate(_presentation_paragraphs(content)):
+            for index, paragraph in enumerate(presentation_paragraphs(content)):
                 slide = presentation.slides.add_slide(presentation.slide_layouts[1 if index == 0 else 5])
                 if index == 0:
                     lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
@@ -177,7 +177,7 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
     return EditedDocument(safe_name, _media_type(extension, media_type), output)
 
 
-def _presentation_paragraphs(content: str) -> list[str]:
+def presentation_paragraphs(content: str) -> list[str]:
     """Turn model output into slide blocks without assistant acknowledgements."""
     normalized = content.replace("\r\n", "\n").strip()
     # Models commonly return Markdown slide headings. Treat each heading as
@@ -205,6 +205,9 @@ def _presentation_paragraphs(content: str) -> list[str]:
         if block:
             cleaned.append(block)
     return cleaned or ["Презентация ALTER"]
+
+
+_presentation_paragraphs = presentation_paragraphs
 
 
 def _clean(text: str) -> str:
