@@ -132,11 +132,20 @@ async def search_presentation_images(slides: list[str], topic: str) -> list[tupl
     images: list[tuple[bytes, str]] = []
     for slide in slides:
         query = " ".join((slide.splitlines()[0] if slide.splitlines() else slide).split())
-        candidates = await search_images(f"{topic} {query}", limit=5)
-        for candidate in candidates:
-            downloaded = await download_image(candidate.get("url", ""))
-            if downloaded:
-                data, mime, _ = downloaded
-                images.append((data, mime))
+        topic_words = " ".join(topic.split()[-5:])
+        queries = [query, topic_words, f"Brazilian jiu-jitsu {query}"]
+        found = False
+        for search_query in queries:
+            if not search_query:
+                continue
+            candidates = await search_images(search_query, limit=5)
+            for candidate in candidates:
+                downloaded = await download_image(candidate.get("url", ""))
+                if downloaded:
+                    data, mime, _ = downloaded
+                    images.append((data, mime))
+                    found = True
+                    break
+            if found:
                 break
     return images
