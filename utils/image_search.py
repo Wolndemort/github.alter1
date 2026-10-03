@@ -49,7 +49,7 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
         public = [{"title": item.get("title", ""), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
                   for item in pages if (item.get("thumbnail") or {}).get("url")]
         if public:
-            return yandex + public
+            return public + yandex
     except Exception:
         pass
     if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
@@ -133,10 +133,11 @@ async def search_presentation_images(slides: list[str], topic: str) -> list[tupl
     for slide in slides:
         query = " ".join((slide.splitlines()[0] if slide.splitlines() else slide).split())
         topic_words = " ".join(topic.split()[-5:])
-        queries = [query, topic_words, f"Brazilian jiu-jitsu {query}"]
         lowered = f"{topic} {query}".casefold()
         if "джиу" in lowered or "jiu" in lowered:
-            queries.extend(["джиу-джитсу", "Brazilian jiu jitsu"])
+            queries = [f"Brazilian jiu-jitsu training {query}", "Brazilian jiu-jitsu training", "jiu-jitsu guard position"]
+        else:
+            queries = [query, topic_words, f"Brazilian jiu-jitsu {query}"]
         found = False
         for search_query in queries:
             if not search_query:
