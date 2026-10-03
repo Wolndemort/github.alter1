@@ -104,13 +104,13 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
         return yandex
 
 
-async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[bytes, str, str] | None:
+async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024, *, min_width: int = 1, min_height: int = 1, min_bytes: int = 1) -> tuple[bytes, str, str] | None:
     try:
         safe_url = validate_public_url(url)
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15), headers={"User-Agent": "ALTER/1.0 (media fetch)"}) as session:
             async with session.get(safe_url, allow_redirects=True) as response:
                 mime = (response.headers.get("Content-Type") or "").split(";", 1)[0].casefold()
-                if response.status != 200 or not mime.startswith("image/"):
+                if response.status != 200:
                     return None
                 data = await response.content.read(max_bytes + 1)
                 if len(data) > max_bytes:
@@ -124,7 +124,7 @@ async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[b
 
                     with Image.open(BytesIO(data)) as image:
                         image.load()
-                        if image.width < 400 or image.height < 300 or len(data) < 10_000:
+                        if image.width < min_width or image.height < min_height or len(data) < min_bytes:
                             return None
                         normalized = BytesIO()
                         image.convert("RGB").save(normalized, format="JPEG", quality=92, optimize=True)
@@ -152,7 +152,7 @@ async def search_presentation_images(slides: list[str], topic: str) -> list[tupl
                 continue
             candidates = await search_images(search_query, limit=5)
             for candidate in candidates:
-                downloaded = await download_image(candidate.get("url", ""))
+                downloaded = await download_image(candidate.get("url", ""), min_width=400, min_height=300, min_bytes=10_000)
                 if downloaded:
                     data, mime, _ = downloaded
                     images.append((data, mime))
