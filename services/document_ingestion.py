@@ -177,7 +177,7 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
     return EditedDocument(safe_name, _media_type(extension, media_type), output)
 
 
-def presentation_paragraphs(content: str) -> list[str]:
+def _raw_presentation_paragraphs(content: str) -> list[str]:
     """Turn model output into slide blocks without assistant acknowledgements."""
     normalized = content.replace("\r\n", "\n").strip()
     # Models commonly return Markdown slide headings. Treat each heading as
@@ -205,6 +205,11 @@ def presentation_paragraphs(content: str) -> list[str]:
         if block:
             cleaned.append(block)
     return cleaned or ["Презентация ALTER"]
+
+def presentation_paragraphs(content: str) -> list[str]:
+    blocks = _raw_presentation_paragraphs(content)
+    numbered = [block for block in blocks if re.match(r"^\s*\d+[.)]\s+", block)]
+    return numbered if len(numbered) >= 2 else blocks
 
 
 _presentation_paragraphs = presentation_paragraphs
