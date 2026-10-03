@@ -56,7 +56,7 @@ class EditedDocument:
     data: bytes
 
 
-def create_document(filename: str, text: str, media_type: str = "", images: list[tuple[bytes, str]] | None = None) -> EditedDocument:
+def create_document(filename: str, text: str, media_type: str = "", images: list[tuple[bytes, str]] | None = None, expected_slides: int | None = None) -> EditedDocument:
     """Create a real document from bounded plain text.
 
     The content is intentionally text-first: the assistant produces the
@@ -109,7 +109,7 @@ def create_document(filename: str, text: str, media_type: str = "", images: list
             from pptx.util import Inches
             presentation = Presentation()
             image_items = list(images or [])
-            for index, paragraph in enumerate(presentation_paragraphs(content)):
+            for index, paragraph in enumerate(presentation_paragraphs(content, expected_slides)):
                 slide = presentation.slides.add_slide(presentation.slide_layouts[1 if index == 0 else 5])
                 if index == 0:
                     lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
@@ -206,10 +206,15 @@ def _raw_presentation_paragraphs(content: str) -> list[str]:
             cleaned.append(block)
     return cleaned or ["Презентация ALTER"]
 
-def presentation_paragraphs(content: str) -> list[str]:
+def presentation_paragraphs(content: str, expected_slides: int | None = None) -> list[str]:
     blocks = _raw_presentation_paragraphs(content)
     numbered = [block for block in blocks if re.match(r"^\s*\d+[.)]\s+", block)]
-    return numbered if len(numbered) >= 2 else blocks
+    result = numbered if len(numbered) >= 2 else blocks
+    if expected_slides and expected_slides > 0:
+        result = result[:expected_slides]
+        while len(result) < expected_slides:
+            result.append(f"Слайд {len(result) + 1}\nДополнительный материал по теме презентации.")
+    return result
 
 
 _presentation_paragraphs = presentation_paragraphs
