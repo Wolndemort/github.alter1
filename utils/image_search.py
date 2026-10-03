@@ -138,7 +138,8 @@ async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024, *, min_wid
 async def search_presentation_images(slides: list[str], topic: str) -> list[tuple[bytes, str]]:
     """Find public images for slides; never invokes paid image generation."""
     images: list[tuple[bytes, str]] = []
-    for slide in slides:
+    used: set[str] = set()
+    for index, slide in enumerate(slides):
         query = " ".join((slide.splitlines()[0] if slide.splitlines() else slide).split())
         topic_words = " ".join(topic.split()[-5:])
         lowered = f"{topic} {query}".casefold()
@@ -150,12 +151,19 @@ async def search_presentation_images(slides: list[str], topic: str) -> list[tupl
         for search_query in queries:
             if not search_query:
                 continue
+            if "jiu" in search_query.casefold():
+                specific = ["Brazilian jiu-jitsu history", "Brazilian jiu-jitsu guard position", "Brazilian jiu-jitsu safety training"][min(index, 2)]
+                search_query = specific
             candidates = await search_images(search_query, limit=5)
             for candidate in candidates:
-                downloaded = await download_image(candidate.get("url", ""), min_width=400, min_height=300, min_bytes=10_000)
+                url = candidate.get("url", "")
+                if url in used:
+                    continue
+                downloaded = await download_image(url, min_width=400, min_height=300, min_bytes=10_000)
                 if downloaded:
                     data, mime, _ = downloaded
                     images.append((data, mime))
+                    used.add(url)
                     found = True
                     break
             if found:
