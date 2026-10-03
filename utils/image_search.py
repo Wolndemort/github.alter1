@@ -134,6 +134,9 @@ async def search_presentation_images(slides: list[str], topic: str) -> list[tupl
         query = " ".join((slide.splitlines()[0] if slide.splitlines() else slide).split())
         topic_words = " ".join(topic.split()[-5:])
         queries = [query, topic_words, f"Brazilian jiu-jitsu {query}"]
+        lowered = f"{topic} {query}".casefold()
+        if "джиу" in lowered or "jiu" in lowered:
+            queries.extend(["джиу-джитсу", "Brazilian jiu jitsu"])
         found = False
         for search_query in queries:
             if not search_query:
