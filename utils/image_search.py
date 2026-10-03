@@ -38,6 +38,20 @@ async def search_images(query: str, limit: int = 5) -> list[dict]:
     yandex = await _yandex_images(query, limit)
     # Do not stop at Yandex: its result URLs can be preview pages or expire
     # before download. Keep them as candidates and continue to public fallbacks.
+    # Prefer a keyless public source before provider preview URLs. This makes
+    # the subsequent download step deterministic instead of returning only
+    # hotlink/preview URLs that commonly fail with 403.
+    try:
+        async with aiohttp.ClientSession() as session:
+            params = {"q": query, "limit": limit}
+            async with session.get("https://commons.wikimedia.org/w/rest.php/v1/search/page", params=params, headers={"User-Agent": "ALTER/1.0"}) as response:
+                pages = (await response.json()).get("pages", []) if response.status == 200 else []
+        public = [{"title": item.get("title", ""), "url": (item.get("thumbnail") or {}).get("url", ""), "mime": (item.get("thumbnail") or {}).get("mimetype", "")}
+                  for item in pages if (item.get("thumbnail") or {}).get("url")]
+        if public:
+            return yandex + public
+    except Exception:
+        pass
     if config.GOOGLE_CSE_API_KEY and config.GOOGLE_CSE_ID:
         try:
             async with aiohttp.ClientSession() as session:
