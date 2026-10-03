@@ -124,6 +124,8 @@ async def download_image(url: str, max_bytes: int = 20 * 1024 * 1024) -> tuple[b
 
                     with Image.open(BytesIO(data)) as image:
                         image.load()
+                        if image.width < 400 or image.height < 300 or len(data) < 10_000:
+                            return None
                         normalized = BytesIO()
                         image.convert("RGB").save(normalized, format="JPEG", quality=92, optimize=True)
                     return normalized.getvalue(), "image/jpeg", "alter-image.jpg"
