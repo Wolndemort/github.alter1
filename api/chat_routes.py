@@ -159,7 +159,10 @@ async def chat_route(request: web.Request) -> web.Response:
         if creation:
             filename, media_type = creation
             try:
-                result = await ChatService().reply(session, user_id, payload.get("message", ""))
+                model_prompt = payload.get("message", "")
+                if filename.endswith(".pptx"):
+                    model_prompt += "\n\nДля PPTX верни ровно 3 слайда. Каждый начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
+                result = await ChatService().reply(session, user_id, model_prompt)
                 images = []
                 if filename.endswith(".pptx"):
                     from services.document_ingestion import presentation_paragraphs
@@ -483,7 +486,10 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
             if creation:
                 filename, media_type = creation
                 await response.write(("data: " + json.dumps({"type": "status", "status": "creating_document", "format": filename.rsplit(".", 1)[-1]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
-                result = await ChatService().reply(session, user_id, text)
+                model_prompt = text
+                if filename.endswith(".pptx"):
+                    model_prompt += "\n\nДля PPTX верни ровно 3 слайда. Каждый начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
+                result = await ChatService().reply(session, user_id, model_prompt)
                 images = []
                 if filename.endswith(".pptx"):
                     query = re.sub(r"\b(?:create|make|prepare|build|presentation|pptx|slide|slides|with|relevant|pictures?|picture|images?)\b|\u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0438\w*|\u0441\u0434\u0435\u043b\u0430\u0439|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u043b\u0430\u0439\u0434\w*|\u0441\u0020\u043a\u0430\u0440\u0442\u0438\u043d\w*|\u043a\u0430\u0440\u0442\u0438\u043d\w*", "", text, flags=re.I).strip(" ,.-")
