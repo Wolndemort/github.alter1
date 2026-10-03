@@ -71,6 +71,17 @@ from services.artifact_store import get_artifact, latest_artifact, save_artifact
 from utils.artifact_intent import reuses_previous_artifact
 
 
+def _requested_slide_count(prompt: str) -> int | None:
+    value = str(prompt or '').casefold()
+    match = re.search(r'\b(\d{1,2})\s*(?:слайд\w*|slide\w*)\b', value)
+    if match:
+        return max(1, min(30, int(match.group(1))))
+    words = {'один': 1, 'два': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6,
+             'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10}
+    match = re.search(r'\b(' + '|'.join(words) + r')\s+слайд\w*\b', value)
+    return words.get(match.group(1)) if match else None
+
+
 def _voice_generation_summary(generated: object) -> object:
     """Keep chat/SSE responses small; preview audio belongs to media APIs."""
     if not isinstance(generated, dict):
@@ -161,7 +172,9 @@ async def chat_route(request: web.Request) -> web.Response:
             try:
                 model_prompt = payload.get("message", "")
                 if filename.endswith(".pptx"):
-                    model_prompt += "\n\nДля PPTX верни ровно 3 слайда. Каждый начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
+                    count = _requested_slide_count(str(model_prompt))
+                    structure = f"ровно {count} слайда" if count else "столько слайдов, сколько уместно для раскрытия задачи"
+                    model_prompt += f"\n\nДля PPTX верни {structure}. Каждый слайд начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
                 result = await ChatService().reply(session, user_id, model_prompt)
                 images = []
                 if filename.endswith(".pptx"):
@@ -488,7 +501,9 @@ async def chat_stream_route(request: web.Request) -> web.StreamResponse:
                 await response.write(("data: " + json.dumps({"type": "status", "status": "creating_document", "format": filename.rsplit(".", 1)[-1]}, ensure_ascii=False) + "\n\n").encode("utf-8"))
                 model_prompt = text
                 if filename.endswith(".pptx"):
-                    model_prompt += "\n\nДля PPTX верни ровно 3 слайда. Каждый начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
+                    count = _requested_slide_count(text)
+                    structure = f"ровно {count} слайда" if count else "столько слайдов, сколько уместно для раскрытия задачи"
+                    model_prompt += f"\n\nДля PPTX верни {structure}. Каждый слайд начинай отдельной строкой '# Slide N — заголовок'. Не пиши вступление, подтверждение или заключение вне слайдов."
                 result = await ChatService().reply(session, user_id, model_prompt)
                 images = []
                 if filename.endswith(".pptx"):
